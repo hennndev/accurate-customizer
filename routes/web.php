@@ -3,6 +3,7 @@
 use App\Http\Controllers\DataMigrateController;
 use App\Http\Controllers\ModulesController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\SystemLogsController;
 use App\Http\Controllers\UsersController;
 use Illuminate\Support\Facades\Route;
@@ -36,17 +37,14 @@ Route::middleware('auth')->group(function () {
 
 
   Route::controller(ModulesController::class)->prefix('modules')->group(function () {
-    // tampilan modules
     Route::get('/', 'index')->name('modules.index');
-    // capture module data
-    // switch database connection
   });
   Route::controller(DataMigrateController::class)->prefix('migrate')->group(function () {
-    // tampilan migrate
     Route::get('/', 'index')->name('migrate.index');
+    Route::delete('/{transaction}', 'destroy')->name('migrate.destroy');
+    Route::delete('/', 'destroyMultiple')->name('migrate.destroyMultiple');
   });
   Route::controller(SystemLogsController::class)->prefix('system-logs')->group(function () {
-    // tampilan system logs
     Route::get('/', 'index')->name('system-logs.index');  
   });
   Route::controller(UsersController::class)->middleware('can:manage_users')->prefix('users')->group(function () {
@@ -54,5 +52,9 @@ Route::middleware('auth')->group(function () {
     Route::post('/', 'store')->name('users.store');
     Route::put('/{user}', 'update')->name('users.update');
     Route::delete('/{user}', 'destroy')->name('users.destroy');
+  });
+
+  Route::controller(SettingsController::class)->prefix('configuration')->group(function () {
+    Route::get('/', 'index')->name('configuration.index'); 
   });
 });

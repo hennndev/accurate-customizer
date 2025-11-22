@@ -301,7 +301,7 @@
                     $colors = $colorClasses[$module['color']];
                 @endphp
                 <div
-                    class="rounded-xl min-h-[280px] md:min-h-[320px] shadow-xl bg-white flex flex-col justify-between flex-1 px-5 md:px-7 py-4 md:py-5">
+                    class="rounded-xl border border-gray-200 min-h-[280px] md:min-h-[320px] shadow-xl bg-white flex flex-col justify-between flex-1 px-5 md:px-7 py-4 md:py-5">
                     <div class="flex flex-col gap-5">
                         <div class="flex items-center justify-center {{ $colors['bg'] }} w-[60px] h-[60px] md:w-[70px] md:h-[70px] rounded-xl">
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#FFF"
