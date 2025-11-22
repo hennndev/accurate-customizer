@@ -1,90 +1,5 @@
 @php
-    $modules = [
-        [
-            'name' => 'General Ledger',
-            'description' => 'Chart of accounts, journal entries',
-            'icon' => 'general-ledger-icon.svg',
-            'status' => 'not_captured',
-            'color' => 'blue',
-        ],
-        [
-            'name' => 'Accounts Payable',
-            'description' => 'Vendors, bills, payments',
-            'icon' => 'accounts-payable-icon.svg',
-            'status' => 'captured',
-            'color' => 'purple',
-        ],
-        [
-            'name' => 'Accounts Receivable',
-            'description' => 'Customers, invoices, payments',
-            'icon' => 'accounts-receivable-icon.svg',
-            'status' => 'not_captured',
-            'color' => 'pink',
-        ],
-        [
-            'name' => 'Inventory',
-            'description' => 'Products, stock levels, adjustments',
-            'icon' => 'inventory-icon.svg',
-            'status' => 'captured',
-            'color' => 'green',
-        ],
-        [
-            'name' => 'Payroll',
-            'description' => 'Employee salaries, taxes, deductions',
-            'icon' => 'payroll-icon.svg',
-            'status' => 'not_captured',
-            'color' => 'orange',
-        ],
-        [
-            'name' => 'Fixed Assets',
-            'description' => 'Asset tracking, depreciation schedules',
-            'icon' => 'fixed-assets-icon.svg',
-            'status' => 'not_captured',
-            'color' => 'red',
-        ],
-        [
-            'name' => 'Purchasing',
-            'description' => 'Purchase orders, vendor management',
-            'icon' => 'purchasing-icon.svg',
-            'status' => 'not_captured',
-            'color' => 'teal',
-        ],
-        [
-            'name' => 'Sales',
-            'description' => 'Sales orders, customer management',
-            'icon' => 'sales-icon.svg',
-            'status' => 'not_captured',
-            'color' => 'indigo',
-        ],
-        [
-            'name' => 'Banking',
-            'description' => 'Bank accounts, transactions, reconciliations',
-            'icon' => 'banking-icon.svg',
-            'status' => 'not_captured',
-            'color' => 'cyan',
-        ],
-        [
-            'name' => 'Projects',
-            'description' => 'Project tracking, billing, expenses',
-            'icon' => 'projects-icon.svg',
-            'status' => 'not_captured',
-            'color' => 'violet',
-        ],
-        [
-            'name' => 'Manufacturing',
-            'description' => 'Production orders, BOMs, work centers',
-            'icon' => 'manufacturing-icon.svg',
-            'status' => 'not_captured',
-            'color' => 'amber',
-        ],
-        [
-            'name' => 'Reporting',
-            'description' => 'Financial reports, custom reports',
-            'icon' => 'reporting-icon.svg',
-            'status' => 'not_captured',
-            'color' => 'emerald',
-        ],
-    ];
+    $errorCount = $failedCount + $warningCount;
 @endphp
 
 <x-app-layout>
@@ -127,11 +42,11 @@
             <div class="flex flex-row items-center justify-between sm:justify-start gap-6 sm:gap-8 md:gap-10 w-full lg:w-auto">
                 <div class="flex flex-col gap-1">
                     <p class="text-white font-medium text-xs md:text-sm">Total Events</p>
-                    <p class="text-2xl md:text-3xl font-bold text-white self-end">9</p>
+                    <p class="text-2xl md:text-3xl font-bold text-white self-end">{{ $totalEvents }}</p>
                 </div>
                 <div class="flex flex-col">
                     <p class="text-white font-medium text-xs md:text-sm">Success Rate</p>
-                    <p class="text-2xl md:text-3xl font-bold text-white self-end">67 %</p>
+                    <p class="text-2xl md:text-3xl font-bold text-white self-end">{{ $successRate }} %</p>
                 </div>
             </div>
         </div>
@@ -140,7 +55,7 @@
             <div class="flex min-h-[120px] md:min-h-[150px] items-center justify-between shadow-md rounded-xl bg-white p-5 md:p-7 md:pt-10">
                 <div class="flex flex-col gap-1">
                     <p class="text-gray-500 text-sm md:text-base">Total Events</p>
-                    <p class="text-black text-2xl md:text-3xl font-medium">9</p>
+                    <p class="text-black text-2xl md:text-3xl font-medium">{{ $totalEvents }}</p>
                 </div>
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
                     stroke="currentColor" class="w-8 h-8 md:w-10 md:h-10 text-gray-300">
@@ -151,7 +66,7 @@
             <div class="flex min-h-[120px] md:min-h-[150px] items-center justify-between shadow-md rounded-xl bg-white p-5 md:p-7 md:pt-10">
                 <div class="flex flex-col gap-1">
                     <p class="text-gray-500 text-sm md:text-base">Success</p>
-                    <p class="text-green-600 text-2xl md:text-3xl font-medium">5</p>
+                    <p class="text-green-600 text-2xl md:text-3xl font-medium">{{ $successCount }}</p>
                 </div>
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
                     stroke="currentColor" class="w-8 h-8 md:w-10 md:h-10 text-green-300">
@@ -162,7 +77,7 @@
             <div class="flex min-h-[120px] md:min-h-[150px] items-center justify-between shadow-md rounded-xl bg-white p-5 md:p-7 md:pt-10">
                 <div class="flex flex-col gap-1">
                     <p class="text-gray-500 text-sm md:text-base">Errors</p>
-                    <p class="text-orange-600 text-2xl md:text-3xl font-medium">2</p>
+                    <p class="text-orange-600 text-2xl md:text-3xl font-medium">{{ $errorCount }}</p>
                 </div>
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
                     stroke="currentColor" class="w-8 h-8 md:w-10 md:h-10 text-red-300">
@@ -173,7 +88,7 @@
             <div class="flex min-h-[120px] md:min-h-[150px] items-center justify-between shadow-md rounded-xl bg-white p-5 md:p-7 md:pt-10">
                 <div class="flex flex-col gap-1">
                     <p class="text-gray-500 text-sm md:text-base">Info</p>
-                    <p class="text-blue-600 text-2xl md:text-3xl font-medium">2</p>
+                    <p class="text-blue-600 text-2xl md:text-3xl font-medium">{{ $infoCount }}</p>
                 </div>
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
                     stroke="currentColor" class="w-8 h-8 md:w-10 md:h-10 text-blue-300">
@@ -198,12 +113,14 @@
                 </p>
             </div>
 
-            <div class="w-full rounded-xl bg-gray-50 p-3 md:p-4 border border-gray-200 flex flex-col md:flex-row items-stretch md:items-center gap-2 md:gap-3">
-                <input type="text" placeholder="Search transactions..."
+            <form method="GET" action="{{ route('system-logs.index') }}" class="w-full rounded-xl bg-gray-50 p-3 md:p-4 border border-gray-200 flex flex-col md:flex-row items-stretch md:items-center gap-2 md:gap-3">
+                <input type="text" name="search" placeholder="Search logs..." value="{{ request('search') }}"
+                    @keyup.enter="$el.form.submit()" @blur="$el.form.submit()"
                     class="bg-white rounded-md py-2 px-3 md:px-4 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs md:text-sm w-full md:flex-1 lg:w-[500px] font-medium">
 
 
-                <div x-data="{ open: false, selected: 'All Types' }" class="relative w-full md:flex-1">
+                <div x-data="{ open: false, selected: '{{ request('event_type', 'All Types') }}' }" class="relative w-full md:flex-1">
+                    <input type="hidden" name="event_type" :value="selected !== 'All Types' ? selected : ''">
                     <button @click="open = !open" type="button"
                         class="bg-white w-full border border-gray-200 text-gray-700 text-xs md:text-sm rounded-md py-2 px-3 md:px-4 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center gap-2 whitespace-nowrap">
                         <span x-text="selected" class="font-medium"></span>
@@ -213,14 +130,14 @@
                             <path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
                         </svg>
                     </button>
-                    <div x-show="open" @click.away="open = false"
+                    <div x-show="open" @click.away="open = false" x-cloak
                         x-transition:enter="transition ease-out duration-200"
                         x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
                         x-transition:leave="transition ease-in duration-150"
                         x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
                         class="absolute z-10 mt-2 bg-white border border-gray-200 rounded-md shadow-lg overflow-hidden w-full">
                         <ul class="py-1">
-                            <li @click="selected = 'All Database'; open = false"
+                            <li @click="selected = 'All Types'; $nextTick(() => $el.closest('form').submit())"
                                 :class="selected === 'All Types' ? 'bg-blue-50' : ''"
                                 class="px-4 py-2 text-gray-700 text-sm hover:bg-gray-100 cursor-pointer transition font-medium flex items-center justify-between">
                                 <span>All Types</span>
@@ -230,51 +147,41 @@
                                     <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
                                 </svg>
                             </li>
-                            <li @click="selected = 'Capture'; open = false"
-                                :class="selected === 'Capture' ? 'bg-blue-50' : ''"
+                            <li @click="selected = 'delete'; $nextTick(() => $el.closest('form').submit())"
+                                :class="selected === 'delete' ? 'bg-blue-50' : ''"
                                 class="px-4 py-2 text-gray-700 text-sm hover:bg-gray-100 cursor-pointer transition font-medium flex items-center justify-between">
-                                <span>Capture</span>
-                                <svg x-show="selected === 'Capture'" xmlns="http://www.w3.org/2000/svg"
+                                <span>Delete</span>
+                                <svg x-show="selected === 'delete'" xmlns="http://www.w3.org/2000/svg"
                                     fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"
                                     class="size-4 text-blue-600">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
                                 </svg>
                             </li>
-                            <li @click="selected = 'Migrate'; open = false"
-                                :class="selected === 'Migrate' ? 'bg-blue-50' : ''"
+                            <li @click="selected = 'mass delete'; $nextTick(() => $el.closest('form').submit())"
+                                :class="selected === 'mass delete' ? 'bg-blue-50' : ''"
+                                class="px-4 py-2 text-gray-700 text-sm hover:bg-gray-100 cursor-pointer transition font-medium flex items-center justify-between">
+                                <span>Mass Delete</span>
+                                <svg x-show="selected === 'mass delete'" xmlns="http://www.w3.org/2000/svg"
+                                    fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"
+                                    class="size-4 text-blue-600">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                                </svg>
+                            </li>
+                            <li @click="selected = 'migrate'; $nextTick(() => $el.closest('form').submit())"
+                                :class="selected === 'migrate' ? 'bg-blue-50' : ''"
                                 class="px-4 py-2 text-gray-700 text-sm hover:bg-gray-100 cursor-pointer transition font-medium flex items-center justify-between">
                                 <span>Migrate</span>
-                                <svg x-show="selected === 'Migrate'" xmlns="http://www.w3.org/2000/svg"
+                                <svg x-show="selected === 'migrate'" xmlns="http://www.w3.org/2000/svg"
                                     fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"
                                     class="size-4 text-blue-600">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
                                 </svg>
                             </li>
-                            <li @click="selected = 'Connection'; open = false"
-                                :class="selected === 'Connection' ? 'bg-blue-50' : ''"
+                            <li @click="selected = 'capture'; $nextTick(() => $el.closest('form').submit())"
+                                :class="selected === 'capture' ? 'bg-blue-50' : ''"
                                 class="px-4 py-2 text-gray-700 text-sm hover:bg-gray-100 cursor-pointer transition font-medium flex items-center justify-between">
-                                <span>Connection</span>
-                                <svg x-show="selected === 'Connection'" xmlns="http://www.w3.org/2000/svg"
-                                    fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"
-                                    class="size-4 text-blue-600">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                                </svg>
-                            </li>
-                            <li @click="selected = 'User'; open = false"
-                                :class="selected === 'User' ? 'bg-blue-50' : ''"
-                                class="px-4 py-2 text-gray-700 text-sm hover:bg-gray-100 cursor-pointer transition font-medium flex items-center justify-between">
-                                <span>User</span>
-                                <svg x-show="selected === 'User'" xmlns="http://www.w3.org/2000/svg" fill="none"
-                                    viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"
-                                    class="size-4 text-blue-600">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                                </svg>
-                            </li>
-                            <li @click="selected = 'Configuration'; open = false"
-                                :class="selected === 'Configuration' ? 'bg-blue-50' : ''"
-                                class="px-4 py-2 text-gray-700 text-sm hover:bg-gray-100 cursor-pointer transition font-medium flex items-center justify-between">
-                                <span>Configuration</span>
-                                <svg x-show="selected === 'Configuration'" xmlns="http://www.w3.org/2000/svg"
+                                <span>Capture</span>
+                                <svg x-show="selected === 'capture'" xmlns="http://www.w3.org/2000/svg"
                                     fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"
                                     class="size-4 text-blue-600">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
@@ -284,7 +191,8 @@
                     </div>
                 </div>
 
-                <div x-data="{ open: false, selected: 'All Status' }" class="relative w-full md:flex-1">
+                <div x-data="{ open: false, selected: '{{ request('status', 'All Status') }}' }" class="relative w-full md:flex-1">
+                    <input type="hidden" name="status" :value="selected !== 'All Status' ? selected : ''">
                     <button @click="open = !open" type="button"
                         class="bg-white w-full border border-gray-200 text-gray-700 text-xs md:text-sm rounded-md py-2 px-3 md:px-4 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center gap-2 whitespace-nowrap">
                         <span x-text="selected" class="font-medium"></span>
@@ -294,14 +202,14 @@
                             <path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
                         </svg>
                     </button>
-                    <div x-show="open" @click.away="open = false"
+                    <div x-show="open" @click.away="open = false" x-cloak
                         x-transition:enter="transition ease-out duration-200"
                         x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
                         x-transition:leave="transition ease-in duration-150"
                         x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
                         class="absolute z-10 mt-2 bg-white border border-gray-200 rounded-md shadow-lg overflow-hidden w-full">
                         <ul class="py-1">
-                            <li @click="selected = 'All Status'; open = false"
+                            <li @click="selected = 'All Status'; $nextTick(() => $el.closest('form').submit())"
                                 :class="selected === 'All Status' ? 'bg-blue-50' : ''"
                                 class="px-4 py-2 text-gray-700 text-sm hover:bg-gray-100 cursor-pointer transition font-medium flex items-center justify-between">
                                 <span>All Status</span>
@@ -311,31 +219,41 @@
                                     <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
                                 </svg>
                             </li>
-                            <li @click="selected = 'Success'; open = false"
-                                :class="selected === 'Success' ? 'bg-blue-50' : ''"
+                            <li @click="selected = 'success'; $nextTick(() => $el.closest('form').submit())"
+                                :class="selected === 'success' ? 'bg-blue-50' : ''"
                                 class="px-4 py-2 text-gray-700 text-sm hover:bg-gray-100 cursor-pointer transition font-medium flex items-center justify-between">
                                 <span>Success</span>
-                                <svg x-show="selected === 'Success'" xmlns="http://www.w3.org/2000/svg"
+                                <svg x-show="selected === 'success'" xmlns="http://www.w3.org/2000/svg"
                                     fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"
                                     class="size-4 text-blue-600">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
                                 </svg>
                             </li>
-                            <li @click="selected = 'Error'; open = false"
-                                :class="selected === 'Error' ? 'bg-blue-50' : ''"
+                            <li @click="selected = 'failed'; $nextTick(() => $el.closest('form').submit())"
+                                :class="selected === 'failed' ? 'bg-blue-50' : ''"
                                 class="px-4 py-2 text-gray-700 text-sm hover:bg-gray-100 cursor-pointer transition font-medium flex items-center justify-between">
-                                <span>Error</span>
-                                <svg x-show="selected === 'Error'" xmlns="http://www.w3.org/2000/svg" fill="none"
+                                <span>Failed</span>
+                                <svg x-show="selected === 'failed'" xmlns="http://www.w3.org/2000/svg" fill="none"
                                     viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"
                                     class="size-4 text-blue-600">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
                                 </svg>
                             </li>
-                            <li @click="selected = 'Info'; open = false"
-                                :class="selected === 'Info' ? 'bg-blue-50' : ''"
+                            <li @click="selected = 'info'; $nextTick(() => $el.closest('form').submit())"
+                                :class="selected === 'info' ? 'bg-blue-50' : ''"
                                 class="px-4 py-2 text-gray-700 text-sm hover:bg-gray-100 cursor-pointer transition font-medium flex items-center justify-between">
                                 <span>Info</span>
-                                <svg x-show="selected === 'Info'" xmlns="http://www.w3.org/2000/svg" fill="none"
+                                <svg x-show="selected === 'info'" xmlns="http://www.w3.org/2000/svg" fill="none"
+                                    viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"
+                                    class="size-4 text-blue-600">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                                </svg>
+                            </li>
+                            <li @click="selected = 'warning'; $nextTick(() => $el.closest('form').submit())"
+                                :class="selected === 'warning' ? 'bg-blue-50' : ''"
+                                class="px-4 py-2 text-gray-700 text-sm hover:bg-gray-100 cursor-pointer transition font-medium flex items-center justify-between">
+                                <span>Warning</span>
+                                <svg x-show="selected === 'warning'" xmlns="http://www.w3.org/2000/svg" fill="none"
                                     viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"
                                     class="size-4 text-blue-600">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
@@ -344,135 +262,84 @@
                         </ul>
                     </div>
                 </div>
-            </div>
+            </form>
 
-            <div class="flex flex-col gap-2 md:gap-3">
-                <div
-                    class="flex flex-col sm:flex-row justify-between rounded-2xl border border-gray-200 cursor-default hover:shadow-md p-3 md:p-4 lg:p-5 gap-3 sm:gap-0">
-                    <div class="flex gap-3 md:gap-4 lg:gap-5">
-                        <div class="bg-gray-50 w-6 h-6 md:w-7 md:h-7 rounded-lg flex items-center justify-center flex-shrink-0">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                                stroke-width="1.5" stroke="currentColor" class="w-4 h-4 md:w-5 md:h-5 text-green-600">
-                                <path stroke-linecap="round" stroke-linejoin="round"
-                                    d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                            </svg>
-                        </div>
-                        <div class="flex flex-col gap-1">
-                            <div class="rounded-lg bg-blue-50 border border-blue-200 px-2 py-1  w-max">
-                                <p class="text-blue-600 text-xs md:text-sm font-medium">Migrate</p>
+            <div class="flex flex-col gap-3 md:gap-4">
+                @forelse($logs as $log)
+                    <div
+                        class="flex flex-col sm:flex-row justify-between rounded-2xl border border-gray-200 cursor-default hover:shadow-md p-3 md:p-4 lg:p-5 gap-3 sm:gap-0">
+                        <div class="flex gap-3 md:gap-4 lg:gap-5">
+                            <div class="bg-gray-50 w-6 h-6 md:w-7 md:h-7 rounded-lg flex items-center justify-center flex-shrink-0">
+                                @if($log->status === 'success')
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                        stroke-width="1.5" stroke="currentColor" class="w-4 h-4 md:w-5 md:h-5 text-green-600">
+                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                            d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                                    </svg>
+                                @elseif($log->status === 'failed')
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                        stroke-width="1.5" stroke="currentColor" class="w-4 h-4 md:w-5 md:h-5 text-red-500">
+                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                            d="m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                                    </svg>
+                                @elseif($log->status === 'info')
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                        stroke-width="1.5" stroke="currentColor" class="w-4 h-4 md:w-5 md:h-5 text-blue-600">
+                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                            d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" />
+                                    </svg>
+                                @elseif($log->status === 'warning')
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                        stroke-width="1.5" stroke="currentColor" class="w-4 h-4 md:w-5 md:h-5 text-yellow-600">
+                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                            d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+                                    </svg>
+                                @endif
                             </div>
-                            <p class="text-black font-medium text-sm md:text-base">Migration completed: 2 successful, 0 failed</p>
-                            <p class="text-xs text-gray-600">11/21/2025, 1:40:37 AM</p>
-                        </div>
-                    </div>
-                    <div class="rounded-lg bg-green-50 border border-green-200 px-2 py-1 h-max w-max">
-                        <p class="text-green-600 text-xs md:text-sm font-medium">Success</p>
-                    </div>
-                </div>
-                <div
-                    class="flex flex-col sm:flex-row justify-between rounded-2xl border border-gray-200 cursor-default hover:shadow-md p-3 md:p-4 lg:p-5 gap-3 sm:gap-0">
-                    <div class="flex gap-3 md:gap-4 lg:gap-5">
-                        <div class="bg-gray-50 w-6 h-6 md:w-7 md:h-7 rounded-lg flex items-center justify-center flex-shrink-0">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                                stroke-width="1.5" stroke="currentColor" class="w-4 h-4 md:w-5 md:h-5 text-red-500">
-                                <path stroke-linecap="round" stroke-linejoin="round"
-                                    d="m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                            </svg>
-
-                        </div>
-                        <div class="flex flex-col gap-1">
-                            <div class="rounded-lg bg-blue-50 border border-blue-200 px-2 py-1  w-max">
-                                <p class="text-blue-600 text-xs md:text-sm font-medium">Migrate</p>
-                            </div>
-                            <p class="text-black font-medium text-sm md:text-base">Migration completed: 2 successful, 0 failed</p>
-                            <p class="text-xs text-gray-600">11/21/2025, 1:40:37 AM</p>
-                        </div>
-                    </div>
-                    <div class="rounded-lg bg-red-50 border border-red-200 px-2 py-1 h-max w-max">
-                        <p class="text-red-600 text-xs md:text-sm font-medium">Failed</p>
-                    </div>
-                </div>
-                <div
-                    class="flex flex-col sm:flex-row justify-between rounded-2xl border border-gray-200 cursor-default hover:shadow-md p-3 md:p-4 lg:p-5 gap-3 sm:gap-0">
-                    <div class="flex gap-3 md:gap-4 lg:gap-5">
-                        <div class="bg-gray-50 w-6 h-6 md:w-7 md:h-7 rounded-lg flex items-center justify-center flex-shrink-0">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                                stroke-width="1.5" stroke="currentColor" class="w-4 h-4 md:w-5 md:h-5 text-green-600">
-                                <path stroke-linecap="round" stroke-linejoin="round"
-                                    d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                            </svg>
-
-                        </div>
-                        <div class="flex flex-col gap-1">
-                            <div class="flex items-center gap-2 flex-wrap">
-                                <div class="rounded-lg bg-violet-50 border border-violet-200 px-2 py-1  w-max">
-                                    <p class="text-violet-600 text-xs md:text-sm font-medium">Captured</p>
+                            <div class="flex flex-col gap-1">
+                                <div class="flex items-center gap-2 flex-wrap">
+                                    <div class="rounded-lg 
+                                        {{ $log->event_type === 'delete' || $log->event_type === 'mass delete' ? 'bg-red-50 border-red-200' : '' }}
+                                        {{ $log->event_type === 'migrate' ? 'bg-blue-50 border-blue-200' : '' }}
+                                        {{ $log->event_type === 'capture' ? 'bg-violet-50 border-violet-200' : '' }}
+                                        border px-2 py-1 w-max">
+                                        <p class="
+                                            {{ $log->event_type === 'delete' || $log->event_type === 'mass delete' ? 'text-red-600' : '' }}
+                                            {{ $log->event_type === 'migrate' ? 'text-blue-600' : '' }}
+                                            {{ $log->event_type === 'capture' ? 'text-violet-600' : '' }}
+                                            text-xs md:text-sm font-medium">{{ ucfirst($log->event_type) }}</p>
+                                    </div>
+                                    @if($log->module)
+                                        <span class="font-bold hidden sm:inline">&#183;</span>
+                                        <p class="text-gray-600 text-xs md:text-sm font-medium">{{ $log->module }}</p>
+                                    @endif
                                 </div>
-                                <span class="font-bold hidden sm:inline">&#183;</span>
-                                <p class="text-gray-600 text-xs md:text-sm font-medium">General Ledger</p>
+                                <p class="text-black font-medium text-sm md:text-base">{{ $log->message }}</p>
+                                <p class="text-xs text-gray-600">{{ $log->created_at->format('m/d/Y, g:i:s A') }}</p>
                             </div>
-                            <p class="text-black font-medium text-sm md:text-base">Migration completed: 2 successful, 0 failed</p>
-                            <p class="text-xs text-gray-600">11/21/2025, 1:40:37 AM</p>
+                        </div>
+                        <div class="flex min-w-[200px] items-end flex-col gap-1">
+                          <div class="rounded-lg 
+                              {{ $log->status === 'success' ? 'bg-green-50 border-green-200 text-green-600' : '' }}
+                              {{ $log->status === 'failed' ? 'bg-red-50 border-red-200 text-red-600' : '' }}
+                              {{ $log->status === 'info' ? 'bg-blue-50 border-blue-200 text-blue-600' : '' }}
+                              {{ $log->status === 'warning' ? 'bg-yellow-50 border-yellow-200 text-yellow-600' : '' }}
+                              border px-2 py-1 h-max w-max">
+                              <p class="text-xs md:text-sm font-medium">{{ ucfirst($log->status) }}</p>
+                          </div>
+                          <p class="text-gray-500 max-sm:text-xs text-sm">Dilakukan oleh: {{ $log->user->name }}</p>
                         </div>
                     </div>
-                    <div class="rounded-lg bg-green-50 border border-green-200 px-2 py-1 h-max w-max">
-                        <p class="text-green-600 text-xs md:text-sm font-medium">Success</p>
+                @empty
+                    <div class="text-center py-12">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                            stroke-width="1.5" stroke="currentColor" class="size-12 mx-auto text-gray-400 mb-3">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                        </svg>
+                        <p class="text-gray-500 text-sm">No logs found matching your filters.</p>
                     </div>
-                </div>
-                <div
-                    class="flex flex-col sm:flex-row justify-between rounded-2xl border border-gray-200 cursor-default hover:shadow-md p-3 md:p-4 lg:p-5 gap-3 sm:gap-0">
-                    <div class="flex gap-3 md:gap-4 lg:gap-5">
-                        <div class="bg-gray-50 w-6 h-6 md:w-7 md:h-7 rounded-lg flex items-center justify-center flex-shrink-0">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                                stroke-width="1.5" stroke="currentColor" class="w-4 h-4 md:w-5 md:h-5 text-green-600">
-                                <path stroke-linecap="round" stroke-linejoin="round"
-                                    d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                            </svg>
-
-                        </div>
-                        <div class="flex flex-col gap-1">
-                            <div class="flex items-center gap-2 flex-wrap">
-                                <div class="rounded-lg bg-violet-50 border border-violet-200 px-2 py-1  w-max">
-                                    <p class="text-violet-600 text-xs md:text-sm font-medium">Captured</p>
-                                </div>
-                                <span class="font-bold hidden sm:inline">&#183;</span>
-                                <p class="text-gray-600 text-xs md:text-sm font-medium">Sales</p>
-                            </div>
-                            <p class="text-black font-medium text-sm md:text-base">Migration completed: 2 successful, 0 failed</p>
-                            <p class="text-xs text-gray-600">11/21/2025, 1:40:37 AM</p>
-                        </div>
-                    </div>
-                    <div class="rounded-lg bg-green-50 border border-green-200 px-2 py-1 h-max w-max">
-                        <p class="text-green-600 text-xs md:text-sm font-medium">Success</p>
-                    </div>
-                </div>
-                <div
-                    class="flex flex-col sm:flex-row justify-between rounded-2xl border border-gray-200 cursor-default hover:shadow-md p-3 md:p-4 lg:p-5 gap-3 sm:gap-0">
-                    <div class="flex gap-3 md:gap-4 lg:gap-5">
-                        <div class="bg-gray-50 w-6 h-6 md:w-7 md:h-7 rounded-lg flex items-center justify-center flex-shrink-0">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                                stroke-width="1.5" stroke="currentColor" class="w-4 h-4 md:w-5 md:h-5 text-green-600">
-                                <path stroke-linecap="round" stroke-linejoin="round"
-                                    d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                            </svg>
-
-                        </div>
-                        <div class="flex flex-col gap-1">
-                            <div class="flex items-center gap-2 flex-wrap">
-                                <div class="rounded-lg bg-violet-50 border border-violet-200 px-2 py-1  w-max">
-                                    <p class="text-violet-600 text-xs md:text-sm font-medium">Captured</p>
-                                </div>
-                                <span class="font-bold hidden sm:inline">&#183;</span>
-                                <p class="text-gray-600 text-xs md:text-sm font-medium">Inventory</p>
-                            </div>
-                            <p class="text-black font-medium text-sm md:text-base">Migration completed: 2 successful, 0 failed</p>
-                            <p class="text-xs text-gray-600">11/21/2025, 1:40:37 AM</p>
-                        </div>
-                    </div>
-                    <div class="rounded-lg bg-green-50 border border-green-200 px-2 py-1 h-max w-max">
-                        <p class="text-green-600 text-xs md:text-sm font-medium">Success</p>
-                    </div>
-                </div>
+                @endforelse
             </div>
         </div>
 </x-app-layout>
