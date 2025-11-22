@@ -159,15 +159,17 @@
                     <div class="flex flex-col gap-3">
                         <p class="text-[12px] text-gray-600 font-medium leading-4 sidebar-section-title">SETTINGS</p>
                         <div class="flex flex-col">
-                            {{-- <a href="{{ route('modules.index') }}"
-                                class="menu-item sidebar-link flex items-center gap-3 {{ request()->routeIs('configuration.*') ? 'active' : '' }}">
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                                    stroke-width="1.5" stroke="currentColor" class="size-5 flex-shrink-0">
-                                    <path stroke-linecap="round" stroke-linejoin="round"
-                                        d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75" />
-                                </svg>
-                                <p class="text-sm sidebar-text font-medium text-black">Configuration</p>
-                            </a> --}}
+                            @can('manage_settings')
+                                <a href="{{ route('configuration.index') }}"
+                                    class="menu-item sidebar-link flex items-center gap-3 {{ request()->routeIs('configuration.*') ? 'active' : '' }}">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                        stroke-width="1.5" stroke="currentColor" class="size-5 flex-shrink-0">
+                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                            d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75" />
+                                    </svg>
+                                    <p class="text-sm sidebar-text font-medium text-black">Configuration</p>
+                                </a>
+                            @endcan
                             @can('manage_users')
                                 <a href="{{ route('users.index') }}"
                                     class="menu-item sidebar-link flex items-center gap-3 {{ request()->routeIs('users.*') ? 'active' : '' }}">
@@ -204,8 +206,8 @@
                             <button onclick="toggleDropdown()"
                                 class="flex items-center text-sm font-medium text-gray-500 hover:text-gray-700 focus:outline-none transition duration-150 ease-in-out">
                                 <img class="h-8 w-8 rounded-full object-cover"
-                                        src="https://ui-avatars.com/api/?name={{ urlencode(Auth::user()->name) }}&background=4F46E5&color=fff"
-                                        alt="{{ Auth::user()->name }}">
+                                    src="https://ui-avatars.com/api/?name={{ urlencode(Auth::user()->name) }}&background=4F46E5&color=fff"
+                                    alt="{{ Auth::user()->name }}">
                             </button>
                             <div id="dropdown"
                                 class="hidden absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50">

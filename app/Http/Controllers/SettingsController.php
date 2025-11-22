@@ -6,5 +6,11 @@ use Illuminate\Http\Request;
 
 class SettingsController extends Controller
 {
-    protected $guarded = [];
+    public function index(Request $request) {
+        return view('configuration.index');
+    }
+
+    public function update() {
+      
+    }
 }

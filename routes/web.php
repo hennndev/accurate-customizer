@@ -54,7 +54,8 @@ Route::middleware('auth')->group(function () {
     Route::delete('/{user}', 'destroy')->name('users.destroy');
   });
 
-  Route::controller(SettingsController::class)->prefix('configuration')->group(function () {
+  Route::controller(SettingsController::class)->middleware('can:manage_settings')->prefix('configuration')->group(function () {
     Route::get('/', 'index')->name('configuration.index'); 
+    Route::put('/', 'update')->name('configuration.update'); 
   });
 });

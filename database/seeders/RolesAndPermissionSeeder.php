@@ -16,6 +16,7 @@ class RolesAndPermissionSeeder extends Seeder
         $permissions = [
           'manage_modules',
           'manage_users',
+          'manage_settings',
           'manage_data_migrate',
           'view_logs',
         ];

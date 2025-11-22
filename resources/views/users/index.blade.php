@@ -128,7 +128,7 @@
             </div>
         </div>
 
-        <div class="flex flex-col gap-4 md:gap-5 rounded-xl bg-white shadow-lg p-4 md:p-5 border border-gray-100">
+        <div class="flex border border-gray-200 flex-col gap-4 md:gap-5 rounded-xl bg-white shadow-lg p-4 md:p-5">
             <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 sm:gap-0">
                 <div class="flex flex-col gap-1">
                     <div class="flex items-center gap-2">
