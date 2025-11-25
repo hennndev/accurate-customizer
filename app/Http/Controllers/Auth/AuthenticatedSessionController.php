@@ -13,7 +13,7 @@ use Illuminate\View\View;
 class AuthenticatedSessionController extends Controller
 {
     /**
-     * Display the login view.
+     * Menampilkan halaman login.
      */
     public function create(): View
     {
@@ -21,28 +21,27 @@ class AuthenticatedSessionController extends Controller
     }
 
     /**
-     * Handle an incoming authentication request.
+     * Menangani permintaan autentikasi yang masuk.
      */
-    public function store(LoginRequest $request): RedirectResponse
-    {
-        $request->authenticate();
+public function store(LoginRequest $request): RedirectResponse
+{
+    $request->authenticate();
+    $request->session()->regenerate();
 
-        $request->session()->regenerate();
+    // Hapus session Accurate lama jika ada
+    $request->session()->forget(['accurate_access_token', 'accurate_refresh_token', 'accurate_database']);
 
-        return redirect()->intended(RouteServiceProvider::HOME);
-    }
-
+    // Selalu arahkan ke halaman "HOME" (dashboard atau log Anda)
+    return redirect()->intended(RouteServiceProvider::HOME);
+}
     /**
-     * Destroy an authenticated session.
+     * Menghancurkan sesi terautentikasi.
      */
     public function destroy(Request $request): RedirectResponse
     {
         Auth::guard('web')->logout();
-
         $request->session()->invalidate();
-
         $request->session()->regenerateToken();
-
         return redirect('/');
     }
 }

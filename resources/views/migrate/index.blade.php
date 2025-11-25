@@ -25,25 +25,6 @@
         </div>
     </x-slot>
 
-    @if (session('success'))
-        <div x-data="{ show: true }" x-show="show" x-init="setTimeout(() => show = false, 5000)"
-            class="mb-4 bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg flex items-center justify-between">
-            <div class="flex items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2"
-                    stroke="currentColor" class="w-5 h-5">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                </svg>
-                <span class="font-medium">{{ session('success') }}</span>
-            </div>
-            <button @click="show = false" class="text-green-600 hover:text-green-800">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2"
-                    stroke="currentColor" class="w-5 h-5">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
-                </svg>
-            </button>
-        </div>
-    @endif
-
     <div class="flex flex-col gap-6 md:gap-8 lg:gap-10" x-data="{
         selectAll: false,
         selected: [],
@@ -93,75 +74,63 @@
                     </svg>
                     <div class="flex flex-col">
                         <p class="text-white font-normal text-xs md:text-sm tracking-wide">Source Database</p>
-                        <p class="text-white text-sm md:text-base lg:text-lg font-semibold">Select database to capture
-                            data from</p>
+                        <p class="text-white text-sm md:text-base lg:text-lg font-semibold">Select database to migrate from</p>
                     </div>
                 </div>
 
                 <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                    <div x-data="{ open: false, selected: 'COMPANY 2024' }" class="relative w-full">
-                        <button @click="open = !open" type="button"
-                            class="bg-white/20 backdrop-blur-md border border-white/30 text-white text-xs md:text-sm rounded-lg focus:ring-white/50 focus:border-white/50 w-full p-2 md:p-2.5 text-left flex items-center justify-between">
-                            <span x-text="selected"></span>
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                                stroke-width="1.5" stroke="currentColor" class="size-5 transition-transform"
-                                :class="{ 'rotate-180': open }">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
-                            </svg>
-                        </button>
+                    <form id="dbSelectForm" action="{{ route('database.select') }}" method="POST" class="w-full flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                        @csrf
+                        <input type="hidden" name="selected_db_json" id="selectedDbInput">
+                        
+                        <div x-data="{ 
+                            open: false, 
+                            selected: @js($current_database_name ?? 'Select Database'),
+                            selectDb(dbId, dbAlias, dbData) {
+                                this.selected = dbAlias;
+                                this.open = false;
+                                document.getElementById('selectedDbInput').value = JSON.stringify(dbData);
+                                document.getElementById('dbSelectForm').submit();
+                            }
+                        }" class="relative w-full">
+                            <button @click="open = !open" type="button"
+                                class="bg-white/20 backdrop-blur-md border border-white/30 text-white text-xs md:text-sm rounded-lg focus:ring-white/50 focus:border-white/50 w-full p-2 md:p-2.5 text-left flex items-center justify-between">
+                                <span x-text="selected"></span>
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                    stroke-width="1.5" stroke="currentColor" class="size-5 transition-transform"
+                                    :class="{ 'rotate-180': open }">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+                                </svg>
+                            </button>
 
-                        <div x-show="open" @click.away="open = false"
-                            x-transition:enter="transition ease-out duration-200"
-                            x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
-                            x-transition:leave="transition ease-in duration-150"
-                            x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
-                            class="absolute z-10 w-full mt-2 bg-white border border-white/30 rounded-lg shadow-lg overflow-hidden">
-                            <ul class="py-1">
-                                <li @click="selected = 'COMPANY 2024'; open = false"
-                                    :class="selected === 'COMPANY 2024' ? 'bg-blue-50' : ''"
-                                    class="px-4 py-2 text-black text-sm hover:bg-gray-100 cursor-pointer transition font-medium flex items-center justify-between">
-                                    <span>COMPANY 2024</span>
-                                    <svg x-show="selected === 'COMPANY 2024'" xmlns="http://www.w3.org/2000/svg"
-                                        fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"
-                                        class="size-5 text-blue-600">
-                                        <path stroke-linecap="round" stroke-linejoin="round"
-                                            d="m4.5 12.75 6 6 9-13.5" />
-                                    </svg>
-                                </li>
-                                <li @click="selected = 'COMPANY 2025'; open = false"
-                                    :class="selected === 'COMPANY 2025' ? 'bg-blue-50' : ''"
-                                    class="px-4 py-2 text-black text-sm hover:bg-gray-100 cursor-pointer transition font-medium flex items-center justify-between">
-                                    <span>COMPANY 2025</span>
-                                    <svg x-show="selected === 'COMPANY 2025'" xmlns="http://www.w3.org/2000/svg"
-                                        fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"
-                                        class="size-5 text-blue-600">
-                                        <path stroke-linecap="round" stroke-linejoin="round"
-                                            d="m4.5 12.75 6 6 9-13.5" />
-                                    </svg>
-                                </li>
-                                <li @click="selected = 'COMPANY 2026'; open = false"
-                                    :class="selected === 'COMPANY 2026' ? 'bg-blue-50' : ''"
-                                    class="px-4 py-2 text-black text-sm hover:bg-gray-100 cursor-pointer transition font-medium flex items-center justify-between">
-                                    <span>COMPANY 2026</span>
-                                    <svg x-show="selected === 'COMPANY 2026'" xmlns="http://www.w3.org/2000/svg"
-                                        fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"
-                                        class="size-5 text-blue-600">
-                                        <path stroke-linecap="round" stroke-linejoin="round"
-                                            d="m4.5 12.75 6 6 9-13.5" />
-                                    </svg>
-                                </li>
-                            </ul>
+                            <div x-show="open" @click.away="open = false" x-cloak
+                                x-transition:enter="transition ease-out duration-200"
+                                x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
+                                x-transition:leave="transition ease-in duration-150"
+                                x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
+                                class="absolute z-[999] w-full mt-2 bg-white border border-white/30 rounded-lg shadow-lg overflow-hidden max-h-60 overflow-y-auto">
+                                <ul class="py-1">
+                                    @forelse($databases as $db)
+                                    <li @click="selectDb({{ $db['id'] }}, '{{ $db['alias'] }}', {{ json_encode($db) }})"
+                                        :class="selected === '{{ $db['alias'] }}' ? 'bg-blue-50' : ''"
+                                        class="px-4 py-2 text-black text-sm hover:bg-gray-100 cursor-pointer transition font-medium flex items-center justify-between">
+                                        <span>{{ $db['alias'] }}</span>
+                                        <svg x-show="selected === '{{ $db['alias'] }}'" xmlns="http://www.w3.org/2000/svg"
+                                            fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"
+                                            class="size-5 text-blue-600">
+                                            <path stroke-linecap="round" stroke-linejoin="round"
+                                                d="m4.5 12.75 6 6 9-13.5" />
+                                        </svg>
+                                    </li>
+                                    @empty
+                                    <li class="px-4 py-3 text-gray-500 text-sm text-center">
+                                        No databases available
+                                    </li>
+                                    @endforelse
+                                </ul>
+                            </div>
                         </div>
-                    </div>
-                    <button
-                        class="flex items-center bg-white/20 backdrop-blur-md border border-white/30 text-white font-semibold px-4 py-2 rounded-lg hover:bg-white/30 transition whitespace-nowrap w-full sm:w-auto text-sm md:text-base">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
-                            stroke="currentColor" class="size-5 text-white mr-1">
-                            <path stroke-linecap="round" stroke-linejoin="round"
-                                d="m3.75 13.5 10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75Z" />
-                        </svg>
-                        Connect
-                    </button>
+                    </form>
                 </div>
             </div>
 
@@ -177,6 +146,40 @@
                 </div>
             </div>
         </div>
+
+        @if (session('success'))
+            <div x-data="{ show: true }" x-show="show" x-init="setTimeout(() => show = false, 5000)"
+                class="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2"
+                        stroke="currentColor" class="w-5 h-5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                    </svg>
+                    <span class="font-medium">{{ session('success') }}</span>
+                </div>
+                <button @click="show = false" class="text-green-600 hover:text-green-800">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2"
+                        stroke="currentColor" class="w-5 h-5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+        @elseif($current_database_name)
+            <div class="bg-green-50 border border-green-200 flex flex-col sm:flex-row gap-3 p-4 rounded-lg">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="green" class="size-6 flex-shrink-0">
+                    <path fill-rule="evenodd"
+                        d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12Zm13.36-1.814a.75.75 0 1 0-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 0 0-1.06 1.06l2.25 2.25a.75.75 0 0 0 1.14-.094l3.75-5.25Z"
+                        clip-rule="evenodd" />
+                </svg>
+                <div class="flex flex-col gap-1">
+                    <p class="text-base text-green-800 font-medium">Connected to</p>
+                    <p class="text-lg text-green-800 font-bold">{{ $current_database_name }}</p>
+                    <p class="text-green-800 font-normal text-sm">
+                        Showing transactions from this database.
+                    </p>
+                </div>
+            </div>
+        @endif
 
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5 lg:gap-7">
             <div
@@ -247,7 +250,7 @@
                     </div>
                     <p class="text-xs md:text-sm lg:text-base text-gray-500 font-normal">Select and migrate
                         transactions to
-                        <span class="font-semibold">COMPANY 2024</span>
+                        <span class="font-semibold">{{ $current_database_name }}</span>
                     </p>
                 </div>
 
@@ -369,7 +372,7 @@
                                     <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
                                 </svg>
                             </li>
-                            @foreach ($databases as $db)
+                            @foreach ($filter_databases as $db)
                                 <li @click="selected = '{{ $db }}'; $nextTick(() => $el.closest('form').submit())"
                                     :class="selected === '{{ $db }}' ? 'bg-blue-50' : ''"
                                     class="px-4 py-2 text-gray-700 text-sm hover:bg-gray-100 cursor-pointer transition font-medium flex items-center justify-between">
@@ -542,9 +545,9 @@
                                     <td class="p-2 md:p-4 text-xs md:text-sm font-medium text-gray-900">
                                         {{ $transaction->transaction_no }}</td>
                                     <td class="p-2 md:p-4 text-xs md:text-sm text-gray-600">
-                                        {{ $transaction->source_db }}</td>
+                                        {{ $transaction->accurateDatabase?->db_name ?? 'N/A' }}</td>
                                     <td class="p-2 md:p-4 text-xs md:text-sm text-gray-600">
-                                        {{ $transaction->module }}</td>
+                                        {{ $transaction->module?->name ?? 'N/A' }}</td>
                                     <td class="p-2 md:p-4 text-xs md:text-sm text-gray-600 max-w-xs truncate">
                                         {{ $transaction->description }}</td>
                                     <td class="p-2 md:p-4 text-xs md:text-sm text-gray-600">
