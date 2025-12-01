@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AccurateController;
+use App\Http\Controllers\ConfigurationController;
 use App\Http\Controllers\DatabaseSelectionController;
 use App\Http\Controllers\DataMigrateController;
 use App\Http\Controllers\ModulesController;
@@ -11,7 +12,7 @@ use App\Http\Controllers\UsersController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
-
+use PSpell\Config;
 
 Route::get('/', function () {
   return redirect()->route('login');
@@ -77,6 +78,7 @@ Route::middleware('auth')->group(function () {
     });
     Route::controller(DataMigrateController::class)->prefix('migrate')->group(function () {
       Route::get('/', 'index')->name('migrate.index');
+      Route::post('/migrate-to-accurate', 'migrateToAccurate')->name('migrate.toAccurate');
       Route::delete('/{transaction}', 'destroy')->name('migrate.destroy');
       Route::delete('/', 'destroyMultiple')->name('migrate.destroyMultiple');
     });
@@ -90,11 +92,16 @@ Route::middleware('auth')->group(function () {
       Route::delete('/{user}', 'destroy')->name('users.destroy');
     });
 
-    Route::controller(SettingsController::class)->middleware('can:manage_settings')->prefix('configuration')->group(function () {
+    Route::controller(SettingsController::class)->prefix('settings')->group(function () {
+      Route::get('/', 'index')->name('settings.index');
+      Route::put('/', 'update')->name('settings.update');
+    });
+
+    Route::controller(ConfigurationController::class)->middleware('can:manage_settings')->prefix('configuration')->group(function () {
       Route::get('/', 'index')->name('configuration.index');
       Route::put('/', 'update')->name('configuration.update');
     });
-  });
+});
 });
 
 
@@ -106,7 +113,7 @@ Route::get('/accurate/auth', function (Request $request) {
     'client_id' => $clientId,
     'response_type' => 'code',
     'redirect_uri' => route('accurate.callback'),
-    'scope' => 'item_view item_save customer_save customer_view sales_order_save job_order_save sales_order_view job_order_view roll_over_save purchase_order_view',
+    'scope' => 'bank_transfer_view bank_transfer_save bill_of_material_view bill_of_material_save branch_view branch_save currency_view currency_save customer_save customer_view customer_category_view customer_category_save customer_claim_view customer_claim_save data_classification_view data_classification_save delivery_order_view delivery_order_save department_view department_save employee_view employee_save exchange_invoice_view exchange_invoice_save expense_accrual_view expense_accrual_save fob_view fob_save glaccount_view glaccount_save item_view item_save item_adjustment_view item_adjustment_save item_category_view item_category_save item_transfer_view item_transfer_save job_order_view job_order_save journal_voucher_view journal_voucher_save material_adjustment_view material_adjustment_save price_category_view price_category_save project_view project_save purchase_invoice_view purchase_invoice_save purchase_order_save purchase_order_view purchase_payment_view purchase_payment_save purchase_requisition_view purchase_requisition_save purchase_return_view purchase_return_save receive_item_view receive_item_save roll_over_view roll_over_save sales_invoice_view sales_invoice_save sales_order_save sales_order_view sales_quotation_view sales_quotation_save sales_receipt_view sales_receipt_save sales_return_view sales_return_save shipment_view shipment_save stock_opname_order_view stock_opname_order_save stock_opname_result_view stock_opname_result_save tax_view tax_save unit_view unit_save vendor_view vendor_save vendor_category_view vendor_category_save vendor_claim_view vendor_claim_save vendor_price_view vendor_price_save warehouse_view warehouse_save work_order_view work_order_save',
     'state' => $state,
   ]);
 
