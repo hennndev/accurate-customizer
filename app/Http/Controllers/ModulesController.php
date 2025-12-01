@@ -49,11 +49,12 @@ class ModulesController extends Controller
     {
         // Mapping module slug ke Accurate API endpoint
         $moduleMapping = [
+            // Transaction Modules
             'sales-order' => [
                 'name' => 'Sales Order',
                 'list_endpoint' => '/api/sales-order/list.do',
                 'detail_endpoint' => '/api/sales-order/detail.do',
-                'identifier_field' => 'number', // field untuk unique identifier
+                'identifier_field' => 'number',
                 'type' => 'transaction',
             ],
             'purchase-order' => [
@@ -91,67 +92,307 @@ class ModulesController extends Controller
                 'identifier_field' => 'number',
                 'type' => 'transaction',
             ],
+
+            // Sales Related
+            'sales-quotation' => [
+                'name' => 'Sales Quotation',
+                'list_endpoint' => '/api/sales-quotation/list.do',
+                'detail_endpoint' => '/api/sales-quotation/detail.do',
+                'identifier_field' => 'number',
+                'type' => 'transaction',
+            ],
+            'sales-return' => [
+                'name' => 'Sales Return',
+                'list_endpoint' => '/api/sales-return/list.do',
+                'detail_endpoint' => '/api/sales-return/detail.do',
+                'identifier_field' => 'number',
+                'type' => 'transaction',
+            ],
+            'sales-receipt' => [
+                'name' => 'Sales Receipt',
+                'list_endpoint' => '/api/sales-receipt/list.do',
+                'detail_endpoint' => '/api/sales-receipt/detail.do',
+                'identifier_field' => 'number',
+                'type' => 'transaction',
+            ],
+
+            // Purchase Related
+            'purchase-return' => [
+                'name' => 'Purchase Return',
+                'list_endpoint' => '/api/purchase-return/list.do',
+                'detail_endpoint' => '/api/purchase-return/detail.do',
+                'identifier_field' => 'number',
+                'type' => 'transaction',
+            ],
+            'purchase-payment' => [
+                'name' => 'Purchase Payment',
+                'list_endpoint' => '/api/purchase-payment/list.do',
+                'detail_endpoint' => '/api/purchase-payment/detail.do',
+                'identifier_field' => 'number',
+                'type' => 'transaction',
+            ],
+            'purchase-requisition' => [
+                'name' => 'Purchase Requisition',
+                'list_endpoint' => '/api/purchase-requisition/list.do',
+                'detail_endpoint' => '/api/purchase-requisition/detail.do',
+                'identifier_field' => 'number',
+                'type' => 'transaction',
+            ],
+
+            // Inventory & Production
+            'item-transfer' => [
+                'name' => 'Item Transfer',
+                'list_endpoint' => '/api/item-transfer/list.do',
+                'detail_endpoint' => '/api/item-transfer/detail.do',
+                'identifier_field' => 'number',
+                'type' => 'transaction',
+            ],
+            'item-adjustment' => [
+                'name' => 'Item Adjustment',
+                'list_endpoint' => '/api/item-adjustment/list.do',
+                'detail_endpoint' => '/api/item-adjustment/detail.do',
+                'identifier_field' => 'number',
+                'type' => 'transaction',
+            ],
+            'stock-opname-order' => [
+                'name' => 'Stock Opname Order',
+                'list_endpoint' => '/api/stock-opname-order/list.do',
+                'detail_endpoint' => '/api/stock-opname-order/detail.do',
+                'identifier_field' => 'number',
+                'type' => 'transaction',
+            ],
+            'stock-opname-result' => [
+                'name' => 'Stock Opname Result',
+                'list_endpoint' => '/api/stock-opname-result/list.do',
+                'detail_endpoint' => '/api/stock-opname-result/detail.do',
+                'identifier_field' => 'number',
+                'type' => 'transaction',
+            ],
+            'work-order' => [
+                'name' => 'Work Order',
+                'list_endpoint' => '/api/work-order/list.do',
+                'detail_endpoint' => '/api/work-order/detail.do',
+                'identifier_field' => 'number',
+                'type' => 'transaction',
+            ],
+            'job-order' => [
+                'name' => 'Job Order',
+                'list_endpoint' => '/api/job-order/list.do',
+                'detail_endpoint' => '/api/job-order/detail.do',
+                'identifier_field' => 'number',
+                'type' => 'transaction',
+            ],
+            'bill-of-material' => [
+                'name' => 'Bill of Material',
+                'list_endpoint' => '/api/bill-of-material/list.do',
+                'detail_endpoint' => '/api/bill-of-material/detail.do',
+                'identifier_field' => 'name',
+                'type' => 'master',
+            ],
+            'material-adjustment' => [
+                'name' => 'Material Adjustment',
+                'list_endpoint' => '/api/material-adjustment/list.do',
+                'detail_endpoint' => '/api/material-adjustment/detail.do',
+                'identifier_field' => 'number',
+                'type' => 'transaction',
+            ],
+
+            // Financial
+            'journal-voucher' => [
+                'name' => 'Journal Voucher',
+                'list_endpoint' => '/api/journal-voucher/list.do',
+                'detail_endpoint' => '/api/journal-voucher/detail.do',
+                'identifier_field' => 'number',
+                'type' => 'transaction',
+            ],
+            'bank-transfer' => [
+                'name' => 'Bank Transfer',
+                'list_endpoint' => '/api/bank-transfer/list.do',
+                'detail_endpoint' => '/api/bank-transfer/detail.do',
+                'identifier_field' => 'number',
+                'type' => 'transaction',
+            ],
+            'exchange-invoice' => [
+                'name' => 'Exchange Invoice',
+                'list_endpoint' => '/api/exchange-invoice/list.do',
+                'detail_endpoint' => '/api/exchange-invoice/detail.do',
+                'identifier_field' => 'number',
+                'type' => 'transaction',
+            ],
+            'expense-accrual' => [
+                'name' => 'Expense Accrual',
+                'list_endpoint' => '/api/expense-accrual/list.do',
+                'detail_endpoint' => '/api/expense-accrual/detail.do',
+                'identifier_field' => 'number',
+                'type' => 'transaction',
+            ],
+            'roll-over' => [
+                'name' => 'Roll Over',
+                'list_endpoint' => '/api/roll-over/list.do',
+                'detail_endpoint' => '/api/roll-over/detail.do',
+                'identifier_field' => 'number',
+                'type' => 'transaction',
+            ],
+
+            // Master Data
             'customer' => [
                 'name' => 'Customer',
                 'list_endpoint' => '/api/customer/list.do',
                 'detail_endpoint' => '/api/customer/detail.do',
-                'identifier_field' => 'customerNo', // Customer pakai customerNo
-                'type' => 'master',
-            ],
-            'item' => [
-                'name' => 'Item',
-                'list_endpoint' => '/api/item/list.do',
-                'detail_endpoint' => '/api/item/detail.do',
-                'identifier_field' => 'itemNo', // Item pakai itemNo
-                'type' => 'master',
-            ],
-            'branch' => [
-                'name' => 'Branch',
-                'list_endpoint' => '/api/branch/list.do',
-                'detail_endpoint' => '/api/branch/detail.do',
-                'identifier_field' => 'name', // Branch pakai name
-                'type' => 'master',
-            ],
-            'department' => [
-                'name' => 'Department',
-                'list_endpoint' => '/api/department/list.do',
-                'detail_endpoint' => '/api/department/detail.do',
-                'identifier_field' => 'name', // Department pakai name
-                'type' => 'master',
-            ],
-            'employee' => [
-                'name' => 'Employee',
-                'list_endpoint' => '/api/employee/list.do',
-                'detail_endpoint' => '/api/employee/detail.do',
-                'identifier_field' => 'employeeNo', // Employee pakai employeeNo
-                'type' => 'master',
-            ],
-            'fixed-asset' => [
-                'name' => 'Fixed Asset',
-                'list_endpoint' => '/api/fixed-asset/list.do',
-                'detail_endpoint' => '/api/fixed-asset/detail.do',
-                'identifier_field' => 'name', // Fixed Asset pakai name
-                'type' => 'master',
-            ],
-            'warehouse' => [
-                'name' => 'Warehouse',
-                'list_endpoint' => '/api/warehouse/list.do',
-                'detail_endpoint' => '/api/warehouse/detail.do',
-                'identifier_field' => 'name', // Warehouse pakai name
+                'identifier_field' => 'customerNo',
                 'type' => 'master',
             ],
             'vendor' => [
                 'name' => 'Vendor',
                 'list_endpoint' => '/api/vendor/list.do',
                 'detail_endpoint' => '/api/vendor/detail.do',
-                'identifier_field' => 'vendorNo', // Vendor pakai vendorNo
+                'identifier_field' => 'vendorNo',
+                'type' => 'master',
+            ],
+            'item' => [
+                'name' => 'Item',
+                'list_endpoint' => '/api/item/list.do',
+                'detail_endpoint' => '/api/item/detail.do',
+                'identifier_field' => 'itemNo',
+                'type' => 'master',
+            ],
+            'branch' => [
+                'name' => 'Branch',
+                'list_endpoint' => '/api/branch/list.do',
+                'detail_endpoint' => '/api/branch/detail.do',
+                'identifier_field' => 'name',
+                'type' => 'master',
+            ],
+            'department' => [
+                'name' => 'Department',
+                'list_endpoint' => '/api/department/list.do',
+                'detail_endpoint' => '/api/department/detail.do',
+                'identifier_field' => 'name',
+                'type' => 'master',
+            ],
+            'employee' => [
+                'name' => 'Employee',
+                'list_endpoint' => '/api/employee/list.do',
+                'detail_endpoint' => '/api/employee/detail.do',
+                'identifier_field' => 'employeeNo',
+                'type' => 'master',
+            ],
+            'warehouse' => [
+                'name' => 'Warehouse',
+                'list_endpoint' => '/api/warehouse/list.do',
+                'detail_endpoint' => '/api/warehouse/detail.do',
+                'identifier_field' => 'name',
                 'type' => 'master',
             ],
             'project' => [
                 'name' => 'Project',
                 'list_endpoint' => '/api/project/list.do',
                 'detail_endpoint' => '/api/project/detail.do',
-                'identifier_field' => 'name', // Project pakai name
+                'identifier_field' => 'name',
+                'type' => 'master',
+            ],
+
+            // Categories & Classifications
+            'customer-category' => [
+                'name' => 'Customer Category',
+                'list_endpoint' => '/api/customer-category/list.do',
+                'detail_endpoint' => '/api/customer-category/detail.do',
+                'identifier_field' => 'name',
+                'type' => 'master',
+            ],
+            'vendor-category' => [
+                'name' => 'Vendor Category',
+                'list_endpoint' => '/api/vendor-category/list.do',
+                'detail_endpoint' => '/api/vendor-category/detail.do',
+                'identifier_field' => 'name',
+                'type' => 'master',
+            ],
+            'item-category' => [
+                'name' => 'Item Category',
+                'list_endpoint' => '/api/item-category/list.do',
+                'detail_endpoint' => '/api/item-category/detail.do',
+                'identifier_field' => 'name',
+                'type' => 'master',
+            ],
+            'price-category' => [
+                'name' => 'Price Category',
+                'list_endpoint' => '/api/price-category/list.do',
+                'detail_endpoint' => '/api/price-category/detail.do',
+                'identifier_field' => 'name',
+                'type' => 'master',
+            ],
+            'data-classification' => [
+                'name' => 'Data Classification',
+                'list_endpoint' => '/api/data-classification/list.do',
+                'detail_endpoint' => '/api/data-classification/detail.do',
+                'identifier_field' => 'name',
+                'type' => 'master',
+            ],
+
+            // Claims & Additional
+            'customer-claim' => [
+                'name' => 'Customer Claim',
+                'list_endpoint' => '/api/customer-claim/list.do',
+                'detail_endpoint' => '/api/customer-claim/detail.do',
+                'identifier_field' => 'number',
+                'type' => 'transaction',
+            ],
+            'vendor-claim' => [
+                'name' => 'Vendor Claim',
+                'list_endpoint' => '/api/vendor-claim/list.do',
+                'detail_endpoint' => '/api/vendor-claim/detail.do',
+                'identifier_field' => 'number',
+                'type' => 'transaction',
+            ],
+            'vendor-price' => [
+                'name' => 'Vendor Price',
+                'list_endpoint' => '/api/vendor-price/list.do',
+                'detail_endpoint' => '/api/vendor-price/detail.do',
+                'identifier_field' => 'name',
+                'type' => 'master',
+            ],
+            'shipment' => [
+                'name' => 'Shipment',
+                'list_endpoint' => '/api/shipment/list.do',
+                'detail_endpoint' => '/api/shipment/detail.do',
+                'identifier_field' => 'number',
+                'type' => 'transaction',
+            ],
+
+            // Configuration
+            'glaccount' => [
+                'name' => 'GL Account',
+                'list_endpoint' => '/api/glaccount/list.do',
+                'detail_endpoint' => '/api/glaccount/detail.do',
+                'identifier_field' => 'name',
+                'type' => 'master',
+            ],
+            'currency' => [
+                'name' => 'Currency',
+                'list_endpoint' => '/api/currency/list.do',
+                'detail_endpoint' => '/api/currency/detail.do',
+                'identifier_field' => 'name',
+                'type' => 'master',
+            ],
+            'tax' => [
+                'name' => 'Tax',
+                'list_endpoint' => '/api/tax/list.do',
+                'detail_endpoint' => '/api/tax/detail.do',
+                'identifier_field' => 'name',
+                'type' => 'master',
+            ],
+            'unit' => [
+                'name' => 'Unit',
+                'list_endpoint' => '/api/unit/list.do',
+                'detail_endpoint' => '/api/unit/detail.do',
+                'identifier_field' => 'name',
+                'type' => 'master',
+            ],
+            'fob' => [
+                'name' => 'FOB',
+                'list_endpoint' => '/api/fob/list.do',
+                'detail_endpoint' => '/api/fob/detail.do',
+                'identifier_field' => 'name',
                 'type' => 'master',
             ],
         ];

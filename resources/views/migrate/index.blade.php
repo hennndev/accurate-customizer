@@ -32,6 +32,9 @@
         showDeleteModal: false,
         showSingleDeleteModal: false,
         deleteTarget: null,
+        migrating: false,
+        progress: 0,
+        currentStatus: 'Preparing migration...',
     
         selectAllTransactions() {
             if (this.selectAll) {
@@ -61,6 +64,37 @@
 
         deleteSingle() {
             $refs.singleDeleteForm.submit();
+        },
+
+        async migrateSelected() {
+            this.migrating = true;
+            this.progress = 0;
+            this.currentStatus = 'Preparing migration...';
+            
+            // Simulate progress
+            const progressInterval = setInterval(() => {
+                if (this.progress < 90) {
+                    this.progress += Math.floor(Math.random() * 10) + 5;
+                    
+                    // Update status based on progress
+                    if (this.progress < 30) {
+                        this.currentStatus = 'Preparing migration...';
+                    } else if (this.progress < 60) {
+                        this.currentStatus = 'Processing transactions...';
+                    } else if (this.progress < 90) {
+                        this.currentStatus = 'Syncing with Accurate...';
+                    }
+                } else if (this.progress >= 90 && this.progress < 100) {
+                    this.progress = 100;
+                    this.currentStatus = 'Finalizing...';
+                    clearInterval(progressInterval);
+                    
+                    // Submit form after progress reaches 100%
+                    setTimeout(() => {
+                        $refs.migrateForm.submit();
+                    }, 500);
+                }
+            }, 300);
         }
     }" x-init="$watch('selected', value => selectAll = value.length === allTransactionIds.length && allTransactionIds.length > 0)">
         <div
@@ -158,6 +192,23 @@
                     <span class="font-medium">{{ session('success') }}</span>
                 </div>
                 <button @click="show = false" class="text-green-600 hover:text-green-800">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2"
+                        stroke="currentColor" class="w-5 h-5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+        @elseif(session('error'))
+            <div x-data="{ show: true }" x-show="show" x-init="setTimeout(() => show = false, 8000)"
+                class="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2"
+                        stroke="currentColor" class="w-5 h-5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+                    </svg>
+                    <span class="font-medium">{{ session('error') }}</span>
+                </div>
+                <button @click="show = false" class="text-red-600 hover:text-red-800">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2"
                         stroke="currentColor" class="w-5 h-5">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
@@ -264,7 +315,7 @@
                         </svg>
                         <span>Remove <span x-text="selected.length"></span> Selected</span>
                     </button>
-                    <button
+                    <button @click="migrateSelected()" type="button"
                         class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 md:px-6 py-2 md:py-2.5 rounded-lg transition flex items-center gap-2 text-sm md:text-base">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                             stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
@@ -273,6 +324,59 @@
                         </svg>
                         <span>Migrate <span x-text="selected.length"></span> Selected</span>
                     </button>
+                </div>
+
+                {{-- Migration Progress Modal --}}
+                <div x-show="migrating" x-transition:enter="transition ease-out duration-300"
+                    x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+                    x-transition:leave="transition ease-in duration-200" x-transition:leave-start="opacity-100"
+                    x-transition:leave-end="opacity-0"
+                    class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center px-4"
+                    style="display: none;">
+                    <div class="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl"
+                        x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 scale-95"
+                        x-transition:enter-end="opacity-100 scale-100">
+                        <div class="flex flex-col gap-6">
+                            <div class="flex items-center gap-4">
+                                <div class="relative">
+                                    <svg class="animate-spin h-12 w-12 text-blue-600" xmlns="http://www.w3.org/2000/svg"
+                                        fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                            stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor"
+                                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                                        </path>
+                                    </svg>
+                                </div>
+                                <div class="flex-1">
+                                    <p class="text-lg font-semibold text-gray-900">Migrating Data...</p>
+                                    <p class="text-sm text-gray-600" x-text="currentStatus"></p>
+                                </div>
+                            </div>
+
+                            <div class="space-y-2">
+                                <div class="flex justify-between text-sm">
+                                    <span class="text-gray-600">Progress</span>
+                                    <span class="font-semibold text-blue-600" x-text="progress + '%'"></span>
+                                </div>
+                                <div class="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                                    <div class="bg-gradient-to-r from-blue-600 to-blue-400 h-3 rounded-full transition-all duration-300 ease-out"
+                                        :style="`width: ${progress}%`"></div>
+                                </div>
+                            </div>
+
+                            <div x-show="progress === 100" x-transition:enter="transition ease-out duration-300"
+                                x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
+                                class="flex items-center gap-2 text-green-600">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6">
+                                    <path fill-rule="evenodd"
+                                        d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12Zm13.36-1.814a.75.75 0 1 0-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 0 0-1.06 1.06l2.25 2.25a.75.75 0 0 0 1.14-.094l3.75-5.25Z"
+                                        clip-rule="evenodd" />
+                                </svg>
+                                <span class="font-semibold">Complete!</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Delete Confirmation Modal -->
@@ -685,6 +789,14 @@
             <form x-ref="bulkDeleteForm" action="{{ route('migrate.destroyMultiple') }}" method="POST" class="hidden">
                 @csrf
                 @method('DELETE')
+                <template x-for="id in selected" :key="id">
+                    <input type="hidden" name="ids[]" :value="id">
+                </template>
+            </form>
+
+            <!-- Hidden form for bulk migrate -->
+            <form x-ref="migrateForm" action="{{ route('migrate.toAccurate') }}" method="POST" class="hidden">
+                @csrf
                 <template x-for="id in selected" :key="id">
                     <input type="hidden" name="ids[]" :value="id">
                 </template>
