@@ -47,6 +47,9 @@ class ModulesController extends Controller
 
     public function captureData(Request $request, AccurateService $accurate, $module)
     {
+        // Set execution time limit to 5 minutes for large data capture
+        set_time_limit(300);
+        
         // Mapping module slug ke Accurate API endpoint
         $moduleMapping = [
             // Transaction Modules
@@ -221,8 +224,8 @@ class ModulesController extends Controller
             ],
             'expense-accrual' => [
                 'name' => 'Expense Accrual',
-                'list_endpoint' => '/api/expense-accrual/list.do',
-                'detail_endpoint' => '/api/expense-accrual/detail.do',
+                'list_endpoint' => '/api/expense/list.do',
+                'detail_endpoint' => '/api/expense/detail.do',
                 'identifier_field' => 'number',
                 'type' => 'transaction',
             ],
