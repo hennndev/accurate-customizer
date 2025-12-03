@@ -28,7 +28,7 @@
     <div class="flex flex-col gap-6 md:gap-8 lg:gap-10" x-data="{
         selectAll: false,
         selected: [],
-        allTransactionIds: {{ $transactions->pluck('id')->toJson() }},
+        allTransactionIds: {{ $transactions->where('status', '!=', 'success')->pluck('id')->toJson() }},
         showDeleteModal: false,
         showSingleDeleteModal: false,
         deleteTarget: null,
@@ -71,10 +71,15 @@
             this.progress = 0;
             this.currentStatus = 'Preparing migration...';
             
-            // Simulate progress
+            // Submit form immediately (parallel with progress animation)
+            setTimeout(() => {
+                $refs.migrateForm.submit();
+            }, 100);
+            
+            // Simulate progress animation (slower and smoother)
             const progressInterval = setInterval(() => {
-                if (this.progress < 90) {
-                    this.progress += Math.floor(Math.random() * 10) + 5;
+                if (this.progress < 95) {
+                    this.progress += Math.floor(Math.random() * 3) + 1; // Slower increment (1-3%)
                     
                     // Update status based on progress
                     if (this.progress < 30) {
@@ -83,18 +88,11 @@
                         this.currentStatus = 'Processing transactions...';
                     } else if (this.progress < 90) {
                         this.currentStatus = 'Syncing with Accurate...';
+                    } else {
+                        this.currentStatus = 'Finalizing...';
                     }
-                } else if (this.progress >= 90 && this.progress < 100) {
-                    this.progress = 100;
-                    this.currentStatus = 'Finalizing...';
-                    clearInterval(progressInterval);
-                    
-                    // Submit form after progress reaches 100%
-                    setTimeout(() => {
-                        $refs.migrateForm.submit();
-                    }, 500);
                 }
-            }, 300);
+            }, 800); // Slower interval (800ms instead of 300ms)
         }
     }" x-init="$watch('selected', value => selectAll = value.length === allTransactionIds.length && allTransactionIds.length > 0)">
         <div
@@ -182,38 +180,138 @@
         </div>
 
         @if (session('success'))
-            <div x-data="{ show: true }" x-show="show" x-init="setTimeout(() => show = false, 5000)"
-                class="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg flex items-center justify-between">
-                <div class="flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2"
-                        stroke="currentColor" class="w-5 h-5">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                    </svg>
-                    <span class="font-medium">{{ session('success') }}</span>
+            <div x-data="{ show: true }" x-show="show"
+                class="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg">
+                <div class="flex items-start justify-between gap-3">
+                    <div class="flex items-start gap-3 flex-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2"
+                            stroke="currentColor" class="w-5 h-5 flex-shrink-0 mt-0.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                        </svg>
+                        <div class="flex-1">
+                            @php
+                                $successMessage = session('success');
+                                // Parse success message format: "Migration completed: X succeeded, Y failed. Errors: ..."
+                                preg_match('/(\d+)\s+succeeded,\s+(\d+)\s+failed/', $successMessage, $matches);
+                                $succeeded = $matches[1] ?? 0;
+                                $failed = $matches[2] ?? 0;
+                            @endphp
+                            
+                            <p class="font-semibold text-base">Migration Completed</p>
+                            <div class="mt-2 space-y-1">
+                                <p class="text-sm"><span class="font-semibold text-green-700">{{ $succeeded }}</span> transactions migrated successfully</p>
+                                @if($failed > 0)
+                                    <p class="text-sm"><span class="font-semibold text-red-600">{{ $failed }}</span> transactions failed</p>
+                                @endif
+                            </div>
+                        </div>
+                    </div>
+                    <button @click="show = false" class="text-green-600 hover:text-green-800 flex-shrink-0">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2"
+                            stroke="currentColor" class="w-5 h-5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                        </svg>
+                    </button>
                 </div>
-                <button @click="show = false" class="text-green-600 hover:text-green-800">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2"
-                        stroke="currentColor" class="w-5 h-5">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
-                    </svg>
-                </button>
             </div>
         @elseif(session('error'))
-            <div x-data="{ show: true }" x-show="show" x-init="setTimeout(() => show = false, 8000)"
-                class="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg flex items-center justify-between">
-                <div class="flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2"
-                        stroke="currentColor" class="w-5 h-5">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
-                    </svg>
-                    <span class="font-medium">{{ session('error') }}</span>
+            <div x-data="{ show: true }" x-show="show"
+                class="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg">
+                <div class="flex items-start justify-between gap-3">
+                    <div class="flex items-start gap-3 flex-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2"
+                            stroke="currentColor" class="w-5 h-5 flex-shrink-0 mt-0.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+                        </svg>
+                        <div class="flex-1">
+                            @php
+                                $errorMessage = session('error');
+                                // Parse error message: "Migration completed: X succeeded, Y failed. Details: Module1 (Success: X, Failed: Y) - Errors: error1, error2; ..."
+                                $parts = explode('. Details: ', $errorMessage);
+                                $summary = $parts[0] ?? $errorMessage;
+                                $moduleDetails = $parts[1] ?? null;
+                                
+                                // Extract counts from summary
+                                preg_match('/(\d+)\s+succeeded(?:,\s+(\d+)\s+failed)?/', $summary, $matches);
+                                $succeeded = $matches[1] ?? 0;
+                                $failed = $matches[2] ?? 0;
+                                
+                                // Parse module details: "ModuleName (Success: X, Failed: Y) - Errors: error1, error2"
+                                $parsedModules = [];
+                                if ($moduleDetails) {
+                                    $moduleList = array_map('trim', explode(';', $moduleDetails));
+                                    foreach ($moduleList as $moduleInfo) {
+                                        // Match: "ModuleName (Success: X, Failed: Y) - Errors: error messages"
+                                        if (preg_match('/^([^\(]+)\s*\(Success:\s*(\d+),\s*Failed:\s*(\d+)\)(?:\s*-\s*Errors:\s*(.+))?$/', $moduleInfo, $moduleMatches)) {
+                                            $parsedModules[] = [
+                                                'name' => trim($moduleMatches[1]),
+                                                'success' => (int) $moduleMatches[2],
+                                                'failed' => (int) $moduleMatches[3],
+                                                'errors' => isset($moduleMatches[4]) ? array_map('trim', explode(',', $moduleMatches[4])) : []
+                                            ];
+                                        }
+                                    }
+                                }
+                            @endphp
+                            
+                            <p class="font-semibold text-base">Migration Completed with Errors</p>
+                            <div class="mt-2 space-y-1">
+                                @if($succeeded > 0)
+                                    <p class="text-sm"><span class="font-semibold text-green-700">{{ $succeeded }}</span> transactions migrated successfully</p>
+                                @endif
+                                @if($failed > 0)
+                                    <p class="text-sm"><span class="font-semibold text-red-600">{{ $failed }}</span> transactions failed</p>
+                                @endif
+                            </div>
+                            
+                            @if(!empty($parsedModules))
+                                <div class="mt-3 space-y-2">
+                                    <p class="text-sm font-medium">Module Details:</p>
+                                    @foreach($parsedModules as $moduleInfo)
+                                        <div class="bg-red-100/50 rounded-lg p-3 border border-red-300">
+                                            <div class="flex items-start justify-between gap-2 mb-2">
+                                                <p class="font-semibold text-sm flex items-center gap-2">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" d="M9.568 3H5.25A2.25 2.25 0 0 0 3 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 0 0 5.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 0 0 9.568 3Z" />
+                                                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 6h.008v.008H6V6Z" />
+                                                    </svg>
+                                                    {{ $moduleInfo['name'] }}
+                                                </p>
+                                                <div class="flex items-center gap-3 text-xs font-medium">
+                                                    @if($moduleInfo['success'] > 0)
+                                                        <span class="bg-green-100 text-green-700 px-2 py-1 rounded">✓ {{ $moduleInfo['success'] }}</span>
+                                                    @endif
+                                                    @if($moduleInfo['failed'] > 0)
+                                                        <span class="bg-red-200 text-red-700 px-2 py-1 rounded">✗ {{ $moduleInfo['failed'] }}</span>
+                                                    @endif
+                                                </div>
+                                            </div>
+                                            @if(!empty($moduleInfo['errors']))
+                                                <div class="mt-2 bg-white/50 rounded p-2">
+                                                    <p class="text-xs font-medium text-red-800 mb-1">Error causes:</p>
+                                                    <ul class="space-y-1">
+                                                        @foreach($moduleInfo['errors'] as $error)
+                                                            <li class="text-xs flex items-start gap-2">
+                                                                <span class="text-red-600 mt-0.5">•</span>
+                                                                <span class="flex-1">{{ $error }}</span>
+                                                            </li>
+                                                        @endforeach
+                                                    </ul>
+                                                </div>
+                                            @endif
+                                        </div>
+                                    @endforeach
+                                </div>
+                            @endif
+                        </div>
+                    </div>
+                    <button @click="show = false" class="text-red-600 hover:text-red-800 flex-shrink-0">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2"
+                            stroke="currentColor" class="w-5 h-5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                        </svg>
+                    </button>
                 </div>
-                <button @click="show = false" class="text-red-600 hover:text-red-800">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2"
-                        stroke="currentColor" class="w-5 h-5">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
-                    </svg>
-                </button>
             </div>
         @elseif($current_database_name)
             <div class="bg-green-50 border border-green-200 flex flex-col sm:flex-row gap-3 p-4 rounded-lg">
@@ -494,7 +592,10 @@
                 </div>
 
                 <!-- All Modules Dropdown -->
-                <div x-data="{ open: false, selected: '{{ request('module', 'All Modules') }}' }" class="relative w-full md:w-auto">
+                <div x-data="{ 
+                    open: false, 
+                    selected: '{{ request('module') ? request('module') : 'All Modules' }}' 
+                }" class="relative w-full md:w-auto">
                     <input type="hidden" name="module" :value="selected !== 'All Modules' ? selected : ''">
                     <button @click="open = !open" type="button"
                         class="bg-white border w-full md:min-w-[180px] lg:min-w-[200px] border-gray-200 text-gray-700 text-xs md:text-sm rounded-md py-2 px-3 md:px-4 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center gap-2 whitespace-nowrap">
@@ -512,7 +613,7 @@
                         x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
                         class="absolute z-[99] mt-2 bg-white border border-gray-200 rounded-md shadow-lg overflow-hidden w-full">
                         <ul class="py-1 max-h-[250px] overflow-y-auto">
-                            <li @click="selected = 'All Modules'; $nextTick(() => $el.closest('form').submit())"
+                            <li @click="selected = 'All Modules'; open = false; $nextTick(() => { document.getElementById('filterForm').submit(); })"
                                 :class="selected === 'All Modules' ? 'bg-blue-50' : ''"
                                 class="px-4 py-2 text-gray-700 text-sm hover:bg-gray-100 cursor-pointer transition font-medium flex items-center justify-between">
                                 <span>All Modules</span>
@@ -523,7 +624,7 @@
                                 </svg>
                             </li>
                             @foreach ($modules as $module)
-                                <li @click="selected = '{{ $module }}'; $nextTick(() => $el.closest('form').submit())"
+                                <li @click="selected = '{{ $module }}'; open = false; $nextTick(() => { document.getElementById('filterForm').submit(); })"
                                     :class="selected === '{{ $module }}' ? 'bg-blue-50' : ''"
                                     class="px-4 py-2 text-gray-700 text-sm hover:bg-gray-100 cursor-pointer transition font-medium flex items-center justify-between">
                                     <span>{{ $module }}</span>
@@ -640,11 +741,12 @@
                         </thead>
                         <tbody class="bg-white">
                             @forelse ($transactions as $transaction)
-                                <tr class="border-b border-gray-100 hover:bg-gray-50 transition">
+                                <tr class="border-b border-gray-100 hover:bg-gray-50 transition" :class="{{ $transaction->status === 'success' ? 'true' : 'false' }} && 'opacity-60'">
                                     <td class="p-2 md:p-4">
                                         <input type="checkbox" x-model="selected"
                                             value="{{ $transaction->id }}"
-                                            class="w-3.5 h-3.5 md:w-4 md:h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 cursor-pointer">
+                                            @if($transaction->status === 'success') disabled @endif
+                                            class="w-3.5 h-3.5 md:w-4 md:h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 {{ $transaction->status === 'success' ? 'cursor-not-allowed opacity-50' : 'cursor-pointer' }}">
                                     </td>
                                     <td class="p-2 md:p-4 text-xs md:text-sm font-medium text-gray-900">
                                         {{ $transaction->transaction_no }}</td>

@@ -45,9 +45,9 @@ class DataMigrateController extends Controller
         }
 
         if ($request->filled('module') && $request->module !== 'All Modules') {
-            $moduleRecord = Module::where('name', $request->module)->first();
-            if ($moduleRecord) {
-                $query->where('module_id', $moduleRecord->id);
+            $moduleIds = Module::where('name', $request->module)->pluck('id');
+            if ($moduleIds->isNotEmpty()) {
+                $query->whereIn('module_id', $moduleIds);
             }
         }
 
@@ -165,6 +165,7 @@ class DataMigrateController extends Controller
             $failedCount = 0;
             $skippedCount = 0;
             $errors = [];
+            $moduleResults = []; // Track per-module results
 
             foreach ($groupedByModule as $moduleSlug => $moduleTransactions) {
                 $module = $moduleTransactions->first()->module;       
@@ -181,6 +182,15 @@ class DataMigrateController extends Controller
                         'transaction_count' => $moduleTransactions->count(),
                     ]);
                     continue;
+                }
+                
+                // Initialize module tracking
+                if (!isset($moduleResults[$module->name])) {
+                    $moduleResults[$module->name] = [
+                        'success' => 0,
+                        'failed' => 0,
+                        'errors' => []
+                    ];
                 }
                 $bulkData = [];
                 foreach ($moduleTransactions as $transaction) {
@@ -222,21 +232,45 @@ class DataMigrateController extends Controller
                         ]);
 
                         $result = $this->accurateService->bulkSaveToAccurate($endpoint, $chunkData);
+                        
+                        // Check if overall response is successful
+                        $isOverallSuccess = isset($result['s']) && $result['s'] === true;
                         $itemResults = $result['d'] ?? [];
                         
                         if (!is_array($itemResults)) {
-                            $itemResults = [$result];
+                            $itemResults = [];
                         }
 
-                        foreach ($chunkTransactions[$chunkIndex] as $idx => $transaction) {
-                            $itemResult = $itemResults[$idx] ?? null;
-                            
-                            if ($itemResult && isset($itemResult['s']) && $itemResult['s'] === true) {
+                        // If overall success and no individual item results, mark all as success
+                        if ($isOverallSuccess && empty($itemResults)) {
+                            foreach ($chunkTransactions[$chunkIndex] as $idx => $transaction) {
                                 $transaction->update([
                                     'status' => 'success',
                                     'migrated_at' => now(),
                                 ]);
                                 $successCount++;
+                                $moduleResults[$module->name]['success']++;
+                                
+                                Log::info('MIGRATION_ITEM_SUCCESS', [
+                                    'module' => $module->name,
+                                    'chunk_index' => $chunkIndex + 1,
+                                    'item_index' => $idx,
+                                    'transaction_id' => $transaction->id,
+                                    'message' => 'Bulk save successful',
+                                ]);
+                            }
+                        } else {
+                            // Process individual item results
+                            foreach ($chunkTransactions[$chunkIndex] as $idx => $transaction) {
+                                $itemResult = $itemResults[$idx] ?? null;
+                                
+                                if ($itemResult && isset($itemResult['s']) && $itemResult['s'] === true) {
+                                $transaction->update([
+                                    'status' => 'success',
+                                    'migrated_at' => now(),
+                                ]);
+                                $successCount++;
+                                $moduleResults[$module->name]['success']++;
                                 
                                 Log::info('MIGRATION_ITEM_SUCCESS', [
                                     'module' => $module->name,
@@ -265,6 +299,12 @@ class DataMigrateController extends Controller
                                     'error_message' => $errorText,
                                 ]);
                                 $failedCount++;
+                                $moduleResults[$module->name]['failed']++;
+                                
+                                // Store unique errors per module
+                                if (!in_array($errorText, $moduleResults[$module->name]['errors'])) {
+                                    $moduleResults[$module->name]['errors'][] = $errorText;
+                                }
                                 
                                 Log::error('MIGRATION_ITEM_FAILED', [
                                     'module' => $module->name,
@@ -273,9 +313,8 @@ class DataMigrateController extends Controller
                                     'transaction_id' => $transaction->id,
                                     'error' => $errorText,
                                 ]);
-                                
-                                $errors[] = "{$module->name} - Transaction {$transaction->transaction_no}: {$errorText}";
                             }
+                        }
                         }
 
                         Log::info('MIGRATION_CHUNK_PROCESSED', [
@@ -355,9 +394,14 @@ class DataMigrateController extends Controller
                             'status' => 'failed',
                         ]);
                         $failedCount++;
+                        $moduleResults[$module->name]['failed']++;
                     }
 
-                    $errors[] = "{$module->name}: {$e->getMessage()}";
+                    // Store module exception error
+                    if (!in_array($e->getMessage(), $moduleResults[$module->name]['errors'])) {
+                        $moduleResults[$module->name]['errors'][] = $e->getMessage();
+                    }
+                    
                     SystemLog::create([
                         'event_type' => 'migrate',
                         'module' => $module->name,
@@ -390,8 +434,20 @@ class DataMigrateController extends Controller
                 $message .= ", {$skippedCount} skipped";
             }
 
-            if (!empty($errors)) {
-                $message .= ". Errors: " . implode('; ', $errors);
+            // Build grouped error message per module
+            if (!empty($moduleResults)) {
+                $moduleDetails = [];
+                foreach ($moduleResults as $moduleName => $result) {
+                    $moduleDetail = "{$moduleName} (Success: {$result['success']}, Failed: {$result['failed']})";
+                    if (!empty($result['errors'])) {
+                        $moduleDetail .= " - Errors: " . implode(', ', array_slice($result['errors'], 0, 3));
+                    }
+                    $moduleDetails[] = $moduleDetail;
+                }
+                
+                if (!empty($moduleDetails)) {
+                    $message .= ". Details: " . implode('; ', $moduleDetails);
+                }
             }
 
             $status = $failedCount > 0 ? 'error' : 'success';
