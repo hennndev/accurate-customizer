@@ -192,7 +192,7 @@
                             @php
                                 $successMessage = session('success');
                                 // Parse success message format: "Migration completed: X succeeded, Y failed. Errors: ..."
-                                preg_match('/(\d+)\s+succeeded,\s+(\d+)\s+failed/', $successMessage, $matches);
+                                preg_match('/(\d+)\s+succeeded(?:,\s+(\d+)\s+failed)?/', $successMessage, $matches);
                                 $succeeded = $matches[1] ?? 0;
                                 $failed = $matches[2] ?? 0;
                             @endphp

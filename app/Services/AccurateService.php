@@ -39,18 +39,110 @@ class AccurateService
 
   public function bulkSaveToAccurate(string $endpoint, array $data)
   {
+    // Set execution time limit to 5 minutes for large data migration
+    set_time_limit(300);
+    
     // Special handling for modules that only support save.do (not bulk-save)
     if (str_contains($endpoint, 'warehouse') || str_contains($endpoint, 'price-category')) {
       return $this->saveOneByOne($endpoint, $data);
     }
 
-    $cleanedData = array_map(function ($item) use ($endpoint) {
+  // Special handling for tax module: fetch GL Account details from source IDs
+  // Since GL Account IDs from source DB won't exist in target DB,
+  // we fetch the account details using the source IDs to get their 'no' (account number)
+  if (str_contains($endpoint, '/tax/')) {
+    $data = array_map(function ($item) {
+      $salesTaxGlAccountId = $item['salesTaxGlAccountId'] ?? null;
+      $purchaseTaxGlAccountId = $item['purchaseTaxGlAccountId'] ?? null;
+      
+      // Remove the ID fields
+      unset($item['salesTaxGlAccountId']);
+      unset($item['purchaseTaxGlAccountId']);
+      
+      $taxType = $item['taxType'] ?? '';
+      $salesAccountNo = null;
+      $purchaseAccountNo = null;
+      
+      // Try to fetch GL Account details for salesTaxGlAccountId
+      if ($salesTaxGlAccountId !== null) {
+        try {
+          $response = $this->dataClient()->get('/api/glaccount/detail.do', [
+            'id' => $salesTaxGlAccountId
+          ]);
+          
+          Log::info('TAX_SALES_GL_ACCOUNT_DETAIL_FETCH', [
+            'sourceId' => $salesTaxGlAccountId,
+            'response' => $response->json()
+          ]);
+          
+          if ($response->successful() && isset($response->json()['d']['no'])) {
+            $salesAccountNo = $response->json()['d']['no'];
+          }
+        } catch (\Exception $e) {
+          Log::error('TAX_SALES_GL_ACCOUNT_FETCH_ERROR', [
+            'sourceId' => $salesTaxGlAccountId,
+            'error' => $e->getMessage()
+          ]);
+        }
+      }
+      
+      // Try to fetch GL Account details for purchaseTaxGlAccountId
+      if ($purchaseTaxGlAccountId !== null) {
+        try {
+          $response = $this->dataClient()->get('/api/glaccount/detail.do', [
+            'id' => $purchaseTaxGlAccountId
+          ]);
+          
+          Log::info('TAX_PURCHASE_GL_ACCOUNT_DETAIL_FETCH', [
+            'sourceId' => $purchaseTaxGlAccountId,
+            'response' => $response->json()
+          ]);
+          
+          if ($response->successful() && isset($response->json()['d']['no'])) {
+            $purchaseAccountNo = $response->json()['d']['no'];
+          }
+        } catch (\Exception $e) {
+          Log::error('TAX_PURCHASE_GL_ACCOUNT_FETCH_ERROR', [
+            'sourceId' => $purchaseTaxGlAccountId,
+            'error' => $e->getMessage()
+          ]);
+        }
+      }
+      
+      // Set to null if not found
+      $item['salesTaxGlAccountNo'] = $salesAccountNo;
+      $item['purchaseTaxGlAccountNo'] = $purchaseAccountNo;
+      
+      Log::info('TAX_ITEM_GL_ACCOUNTS_MAPPED', [
+        'taxCode' => $item['taxCode'] ?? 'N/A',
+        'taxType' => $taxType,
+        'sourceIds' => [
+          'sales' => $salesTaxGlAccountId,
+          'purchase' => $purchaseTaxGlAccountId
+        ],
+        'mappedAccounts' => [
+          'salesTaxGlAccountNo' => $salesAccountNo,
+          'purchaseTaxGlAccountNo' => $purchaseAccountNo
+        ],
+        'found' => [
+          'sales' => $salesAccountNo !== null,
+          'purchase' => $purchaseAccountNo !== null
+        ]
+      ]);
+      
+      return $item;
+    }, $data);
+  }    $cleanedData = array_map(function ($item) use ($endpoint) {
       return $this->cleanDataItem($item, $endpoint);
     }, $data);
 
     $requestBody = [
       'data' => $cleanedData
     ];
+
+    Log::info("RAW_DATA", [
+      "data" => $cleanedData
+    ]);
 
     $response = $this->dataClient()->post($endpoint, $requestBody);
     Log::info('BULK_SAVE_RESPONSE', [
@@ -63,6 +155,9 @@ class AccurateService
 
   protected function saveOneByOne(string $endpoint, array $data)
   {
+    // Set execution time limit to 5 minutes for large data migration
+    set_time_limit(300);
+    
     $results = [];
     $successCount = 0;
     $failedCount = 0;
@@ -81,10 +176,10 @@ class AccurateService
     foreach ($data as $index => $item) {
       $cleanedItem = $this->cleanDataItem($item, $endpoint);
       
-      // Log::info("{$moduleName}_SAVE_REQUEST", [
-      //   "index" => $index,
-      //   "data" => $cleanedItem,
-      // ]);
+      Log::info("{$moduleName}_SAVE_REQUEST", [
+        "index" => $index,
+        "data" => $cleanedItem,
+      ]);
 
       try {
         $response = $this->dataClient()->post($saveEndpoint, $cleanedItem);
@@ -141,6 +236,12 @@ class AccurateService
         continue;
       }
 
+      // Skip salesTaxGlAccountId and purchaseTaxGlAccountId for tax endpoint
+      // These should be converted to *No fields in convertTaxGlAccountIds
+      if (str_contains($endpoint, '/tax/') && ($key === 'salesTaxGlAccountId' || $key === 'purchaseTaxGlAccountId')) {
+        continue;
+      }
+
       // Special handling for purchase-order, purchase-invoice, purchase-payment, purchase-return and receive-item: replace vendor object with vendorNo only
       if ($key === 'vendor' && is_array($value) && (str_contains($endpoint, 'purchase-order') || str_contains($endpoint, 'purchase-invoice') || str_contains($endpoint, 'purchase-payment') || str_contains($endpoint, 'purchase-return') || str_contains($endpoint, 'receive-item'))) {
         if (isset($value['vendorNo'])) {
@@ -149,10 +250,42 @@ class AccurateService
         continue;
       }
 
-      // Special handling for sales-order and sales-invoice: replace customer object with customerNo only
-      if ($key === 'customer' && is_array($value) && (str_contains($endpoint, 'sales-order') || str_contains($endpoint, 'sales-invoice'))) {
+      // Special handling for sales-order, sales-invoice, sales-quotation, sales-receipt and sales-return: replace customer object with customerNo only
+      if ($key === 'customer' && is_array($value) && (str_contains($endpoint, 'sales-order') || str_contains($endpoint, 'sales-invoice') || str_contains($endpoint, 'sales-quotation') || str_contains($endpoint, 'sales-receipt') || str_contains($endpoint, 'sales-return'))) {
         if (isset($value['customerNo'])) {
           $cleaned['customerNo'] = $value['customerNo'];
+        }
+        continue;
+      }
+
+      // Special handling for bank-transfer: replace fromBank and toBank objects with fromBankNo and toBankNo
+      if (str_contains($endpoint, 'bank-transfer')) {
+        if ($key === 'fromBank' && is_array($value)) {
+          if (isset($value['no'])) {
+            $cleaned['fromBankNo'] = $value['no'];
+          }
+          continue;
+        }
+        if ($key === 'toBank' && is_array($value)) {
+          if (isset($value['no'])) {
+            $cleaned['toBankNo'] = $value['no'];
+          }
+          continue;
+        }
+      }
+
+      // Special handling for expense: replace expensePayable object with expensePayableNo
+      if ($key === 'expensePayable' && is_array($value) && str_contains($endpoint, 'expense')) {
+        if (isset($value['no'])) {
+          $cleaned['expensePayableNo'] = $value['no'];
+        }
+        continue;
+      }
+
+      // Special handling for sales-receipt: replace bank object with bankNo
+      if ($key === 'bank' && is_array($value) && str_contains($endpoint, 'sales-receipt')) {
+        if (isset($value['no'])) {
+          $cleaned['bankNo'] = $value['no'];
         }
         continue;
       }
@@ -195,8 +328,8 @@ class AccurateService
           if (is_array($subValue)) {
             $cleanedSubItem = $this->cleanDataItem($subValue, $endpoint);
             if (!empty($cleanedSubItem)) {
-              // Special handling for detailItem in purchase-order, purchase-invoice, purchase-return, receive-item, sales-order, sales-invoice and job-order: flatten item object
-              if ($key === 'detailItem' && (str_contains($endpoint, 'purchase-order') || str_contains($endpoint, 'purchase-invoice') || str_contains($endpoint, 'purchase-return') || str_contains($endpoint, 'receive-item') || str_contains($endpoint, 'sales-order') || str_contains($endpoint, 'sales-invoice') || str_contains($endpoint, 'job-order'))) {
+              // Special handling for detailItem in purchase-order, purchase-invoice, purchase-return, receive-item, sales-order, sales-invoice, sales-quotation, sales-return and job-order: flatten item object
+              if ($key === 'detailItem' && (str_contains($endpoint, 'purchase-order') || str_contains($endpoint, 'purchase-invoice') || str_contains($endpoint, 'purchase-return') || str_contains($endpoint, 'receive-item') || str_contains($endpoint, 'sales-order') || str_contains($endpoint, 'sales-invoice') || str_contains($endpoint, 'job-order') || str_contains($endpoint, 'sales-quotation') || str_contains($endpoint, 'sales-return'))) {
                 if (isset($cleanedSubItem['item']['no'])) {
                   $cleanedSubItem['itemNo'] = $cleanedSubItem['item']['no'];
                   unset($cleanedSubItem['item']);
@@ -225,6 +358,22 @@ class AccurateService
               if ($key === 'detailSerialNumber' && (str_contains($endpoint, '/item/') || str_contains($endpoint, 'job-order'))) {
                 if (isset($cleanedSubItem['serialNumber']['number'])) {
                   $cleanedSubItem['serialNumberNo'] = $cleanedSubItem['serialNumber']['number'];
+                }
+              }
+
+              // Special handling for detailAccount in expense endpoint: flatten account object to accountNo
+              if ($key === 'detailAccount' && str_contains($endpoint, 'expense')) {
+                if (isset($cleanedSubItem['account']['no'])) {
+                  $cleanedSubItem['accountNo'] = $cleanedSubItem['account']['no'];
+                  unset($cleanedSubItem['account']);
+                }
+              }
+
+              // Special handling for detailJournalVoucher in journal-voucher endpoint: flatten glAccount object to accountNo
+              if ($key === 'detailJournalVoucher' && str_contains($endpoint, 'journal-voucher')) {
+                if (isset($cleanedSubItem['glAccount']['no'])) {
+                  $cleanedSubItem['accountNo'] = $cleanedSubItem['glAccount']['no'];
+                  unset($cleanedSubItem['glAccount']);
                 }
               }
               
@@ -271,6 +420,7 @@ class AccurateService
       ->withHeaders([
         'X-Session-ID' => $sessionId,
       ])
+      ->timeout(300) // Set timeout to 5 minutes for large data operations
       ->acceptJson()
       ->baseUrl($host . '/accurate');
   }
@@ -305,6 +455,125 @@ class AccurateService
       return $responseData;
     } catch (Exception $e) {
       Log::error('ACCURATE_ERROR - Gagal membuka database ID: ' . $dbId, ['error' => $e->getMessage()]);
+      return null;
+    }
+  }
+
+  protected function convertTaxGlAccountIds(array $taxItem): array
+  {
+    Log::info('TAX_ITEM_BEFORE_CONVERSION', [
+      'data' => $taxItem
+    ]);
+
+    // Convert salesTaxGlAccountId to salesTaxGlAccountNo
+    // Strategy: Fetch GL Account from SOURCE DB by ID to get the account 'no',
+    // then use that 'no' directly in target (account numbers should be consistent)
+    if (isset($taxItem['salesTaxGlAccountId']) && $taxItem['salesTaxGlAccountId'] !== null) {
+      try {
+        $accountNo = $this->getGlAccountNoFromSourceById($taxItem['salesTaxGlAccountId']);
+        if ($accountNo) {
+          $taxItem['salesTaxGlAccountNo'] = $accountNo;
+          unset($taxItem['salesTaxGlAccountId']);
+          Log::info('TAX_SALES_CONVERSION_SUCCESS', [
+            'sourceId' => $taxItem['salesTaxGlAccountId'] ?? 'unset',
+            'accountNo' => $accountNo
+          ]);
+        } else {
+          Log::warning('TAX_SALES_CONVERSION_FAILED', [
+            'sourceId' => $taxItem['salesTaxGlAccountId'],
+            'reason' => 'GL Account not found in source DB'
+          ]);
+          // Remove the Id field even if conversion failed to avoid API error
+          unset($taxItem['salesTaxGlAccountId']);
+        }
+      } catch (\Exception $e) {
+        Log::error('TAX_SALES_GLACCOUNT_FETCH_ERROR', [
+          'sourceId' => $taxItem['salesTaxGlAccountId'],
+          'error' => $e->getMessage()
+        ]);
+        // Remove the Id field even if error occurred
+        unset($taxItem['salesTaxGlAccountId']);
+      }
+    }
+
+    // Convert purchaseTaxGlAccountId to purchaseTaxGlAccountNo
+    if (isset($taxItem['purchaseTaxGlAccountId']) && $taxItem['purchaseTaxGlAccountId'] !== null) {
+      try {
+        $accountNo = $this->getGlAccountNoFromSourceById($taxItem['purchaseTaxGlAccountId']);
+        if ($accountNo) {
+          $taxItem['purchaseTaxGlAccountNo'] = $accountNo;
+          unset($taxItem['purchaseTaxGlAccountId']);
+          Log::info('TAX_PURCHASE_CONVERSION_SUCCESS', [
+            'sourceId' => $taxItem['purchaseTaxGlAccountId'] ?? 'unset',
+            'accountNo' => $accountNo
+          ]);
+        } else {
+          Log::warning('TAX_PURCHASE_CONVERSION_FAILED', [
+            'sourceId' => $taxItem['purchaseTaxGlAccountId'],
+            'reason' => 'GL Account not found in source DB'
+          ]);
+          // Remove the Id field even if conversion failed to avoid API error
+          unset($taxItem['purchaseTaxGlAccountId']);
+        }
+      } catch (\Exception $e) {
+        Log::error('TAX_PURCHASE_GLACCOUNT_FETCH_ERROR', [
+          'sourceId' => $taxItem['purchaseTaxGlAccountId'],
+          'error' => $e->getMessage()
+        ]);
+        // Remove the Id field even if error occurred
+        unset($taxItem['purchaseTaxGlAccountId']);
+      }
+    }
+
+    Log::info('TAX_ITEM_AFTER_CONVERSION', [
+      'data' => $taxItem
+    ]);
+
+    return $taxItem;
+  }
+
+  protected function getGlAccountNoFromSourceById(int $glAccountId): ?string
+  {
+    try {
+      // Get GL Account from the SOURCE database (stored in transactions table)
+      // The transaction data comes from source DB, so we need to fetch GL Account details from source
+      // We'll use the fetchModuleData which uses dataClient (target DB session)
+      // But for Tax GL Accounts, we need to get the 'no' from the original data
+      
+      // Since we're working with data that was fetched from source DB and stored in transactions table,
+      // the glAccountId is from source DB. We need to fetch that account's 'no' from source.
+      // However, the current session is pointing to TARGET DB.
+      
+      // For now, let's try to get GL Account list and find by ID
+      $glAccounts = $this->fetchModuleData('/api/glaccount/list.do', [
+        'sp.pageSize' => 10000 // Get all accounts
+      ]);
+      
+      // Find GL Account with matching ID
+      foreach ($glAccounts as $account) {
+        if (isset($account['id']) && $account['id'] === $glAccountId) {
+          $accountNo = $account['no'] ?? null;
+          
+          Log::info('GLACCOUNT_NO_FOUND_IN_LIST', [
+            'sourceId' => $glAccountId,
+            'accountNo' => $accountNo
+          ]);
+          
+          return $accountNo;
+        }
+      }
+      
+      Log::warning('GLACCOUNT_NO_NOT_FOUND_IN_LIST', [
+        'sourceId' => $glAccountId,
+        'totalAccountsChecked' => count($glAccounts)
+      ]);
+      
+      return null;
+    } catch (\Exception $e) {
+      Log::error('GLACCOUNT_FETCH_FROM_SOURCE_ERROR', [
+        'sourceId' => $glAccountId,
+        'error' => $e->getMessage()
+      ]);
       return null;
     }
   }

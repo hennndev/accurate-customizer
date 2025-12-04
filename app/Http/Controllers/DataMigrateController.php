@@ -426,10 +426,7 @@ class DataMigrateController extends Controller
             }
 
             // Prepare response message
-            $message = "Migration completed: {$successCount} succeeded";
-            if ($failedCount > 0) {
-                $message .= ", {$failedCount} failed";
-            }
+            $message = "Migration completed: {$successCount} succeeded, {$failedCount} failed";
             if ($skippedCount > 0) {
                 $message .= ", {$skippedCount} skipped";
             }
