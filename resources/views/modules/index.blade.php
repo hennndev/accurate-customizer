@@ -283,6 +283,22 @@
 
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5" x-ref="moduleGrid">
             @php
+                // Color mapping untuk inline styles
+                $colorMap = [
+                    'blue' => ['bg' => '#2563eb', 'bgHover' => '#1d4ed8', 'from' => '#2563eb', 'to' => '#60a5fa', 'fromHover' => '#1d4ed8', 'toHover' => '#3b82f6'],
+                    'cyan' => ['bg' => '#0891b2', 'bgHover' => '#0e7490', 'from' => '#0891b2', 'to' => '#22d3ee', 'fromHover' => '#0e7490', 'toHover' => '#06b6d4'],
+                    'violet' => ['bg' => '#7c3aed', 'bgHover' => '#6d28d9', 'from' => '#7c3aed', 'to' => '#a78bfa', 'fromHover' => '#6d28d9', 'toHover' => '#8b5cf6'],
+                    'orange' => ['bg' => '#ea580c', 'bgHover' => '#c2410c', 'from' => '#ea580c', 'to' => '#fb923c', 'fromHover' => '#c2410c', 'toHover' => '#f97316'],
+                    'red' => ['bg' => '#dc2626', 'bgHover' => '#b91c1c', 'from' => '#dc2626', 'to' => '#f87171', 'fromHover' => '#b91c1c', 'toHover' => '#ef4444'],
+                    'emerald' => ['bg' => '#059669', 'bgHover' => '#047857', 'from' => '#059669', 'to' => '#34d399', 'fromHover' => '#047857', 'toHover' => '#10b981'],
+                    'purple' => ['bg' => '#9333ea', 'bgHover' => '#7e22ce', 'from' => '#9333ea', 'to' => '#c084fc', 'fromHover' => '#7e22ce', 'toHover' => '#a855f7'],
+                    'green' => ['bg' => '#16a34a', 'bgHover' => '#15803d', 'from' => '#16a34a', 'to' => '#4ade80', 'fromHover' => '#15803d', 'toHover' => '#22c55e'],
+                    'indigo' => ['bg' => '#4f46e5', 'bgHover' => '#4338ca', 'from' => '#4f46e5', 'to' => '#818cf8', 'fromHover' => '#4338ca', 'toHover' => '#6366f1'],
+                    'pink' => ['bg' => '#db2777', 'bgHover' => '#be185d', 'from' => '#db2777', 'to' => '#f472b6', 'fromHover' => '#be185d', 'toHover' => '#ec4899'],
+                    'teal' => ['bg' => '#0d9488', 'bgHover' => '#0f766e', 'from' => '#0d9488', 'to' => '#2dd4bf', 'fromHover' => '#0f766e', 'toHover' => '#14b8a6'],
+                    'yellow' => ['bg' => '#ca8a04', 'bgHover' => '#a16207', 'from' => '#ca8a04', 'to' => '#fbbf24', 'fromHover' => '#a16207', 'toHover' => '#eab308'],
+                ];
+
                 $moduleCards = [
                     [
                         'name' => 'Bank Transfer',
@@ -673,6 +689,7 @@
                     $transactionCount = $isCaptured ? $moduleData->transactions_count : 0;
                     $isActive = $isCaptured ? $moduleData->is_active : false;
                     $lastCaptured = $isCaptured ? $moduleData->updated_at : null;
+                    $colors = $colorMap[$card['color']] ?? $colorMap['blue'];
                 @endphp
 
                 <div data-module-name="{{ $card['name'] }}" data-module-description="{{ $card['description'] }}"
@@ -680,7 +697,8 @@
                     <div class="flex flex-col gap-5">
                         <div class="flex items-center justify-between">
                             <div
-                                class="flex items-center justify-center bg-{{ $card['color'] }}-600 w-[60px] h-[60px] md:w-[70px] md:h-[70px] rounded-xl">
+                                class="flex items-center justify-center w-[60px] h-[60px] md:w-[70px] md:h-[70px] rounded-xl"
+                                style="background-color: {{ $colors['bg'] }};">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                                     stroke-width="1.5" stroke="#FFF" class="size-8">
                                     {!! $card['icon'] !!}
@@ -728,7 +746,10 @@
                             </div>
                             <button @click="captureData('{{ $card['name'] }}', '{{ $card['slug'] }}')"
                                 :disabled="capturing || switchingDb"
-                                class="flex items-center justify-center gap-3 bg-gradient-to-r from-{{ $card['color'] }}-600 to-{{ $card['color'] }}-400 text-white font-semibold px-4 py-2 rounded-lg hover:from-{{ $card['color'] }}-700 hover:to-{{ $card['color'] }}-500 transition disabled:opacity-50 disabled:cursor-not-allowed">
+                                class="flex items-center justify-center gap-3 text-white font-semibold px-4 py-2 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                style="background: linear-gradient(to right, {{ $colors['from'] }}, {{ $colors['to'] }});"
+                                onmouseover="this.style.background='linear-gradient(to right, {{ $colors['fromHover'] }}, {{ $colors['toHover'] }})'"
+                                onmouseout="this.style.background='linear-gradient(to right, {{ $colors['from'] }}, {{ $colors['to'] }})'">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"
                                     class="size-5">
                                     <path fill-rule="evenodd"
@@ -743,7 +764,10 @@
                             </div>
                             <button @click="captureData('{{ $card['name'] }}', '{{ $card['slug'] }}')"
                                 :disabled="capturing || switchingDb"
-                                class="flex items-center justify-center gap-3 bg-gradient-to-r from-{{ $card['color'] }}-600 to-{{ $card['color'] }}-400 text-white font-semibold px-4 py-2 rounded-lg hover:from-{{ $card['color'] }}-700 hover:to-{{ $card['color'] }}-500 transition disabled:opacity-50 disabled:cursor-not-allowed">
+                                class="flex items-center justify-center gap-3 text-white font-semibold px-4 py-2 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                style="background: linear-gradient(to right, {{ $colors['from'] }}, {{ $colors['to'] }});"
+                                onmouseover="this.style.background='linear-gradient(to right, {{ $colors['fromHover'] }}, {{ $colors['toHover'] }})'"
+                                onmouseout="this.style.background='linear-gradient(to right, {{ $colors['from'] }}, {{ $colors['to'] }})'">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"
                                     class="size-5">
                                     <path fill-rule="evenodd"
