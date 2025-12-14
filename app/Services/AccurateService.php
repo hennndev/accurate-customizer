@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Services;
+
 use Illuminate\Support\Facades\Http;
 use Exception;
 use Illuminate\Support\Facades\Log;
@@ -13,7 +14,7 @@ class AccurateService
     if (!session()->has('accurate_access_token')) {
       throw new Exception('Tidak bisa mengambil daftar database tanpa Access Token.');
     }
-    
+
     // Check if database list is already cached in session (valid for 30 minutes)
     if (session()->has('accurate_database_list_cache')) {
       $cache = session('accurate_database_list_cache');
@@ -23,7 +24,7 @@ class AccurateService
         return $cache['data'];
       }
     }
-    
+
     Log::info('ACCURATE_DB_LIST_FETCHING_FROM_API');
     $response = Http::withToken(session('accurate_access_token'))
       ->timeout(120) // Set timeout to 2 minutes for slow API connections
@@ -34,9 +35,9 @@ class AccurateService
       Log::error('ACCURATE_ERROR - Gagal mengambil daftar database', $response->json() ?? ['body' => $response->body()]);
       throw new Exception("Gagal mendapatkan daftar database dari Accurate.");
     }
-    
+
     $databases = $response->json()['d'] ?? [];
-    
+
     // Cache the database list in session
     session([
       'accurate_database_list_cache' => [
@@ -44,7 +45,7 @@ class AccurateService
         'timestamp' => time()
       ]
     ]);
-    
+
     return $databases;
   }
 
@@ -66,98 +67,99 @@ class AccurateService
   {
     // Set execution time limit to 5 minutes for large data migration
     set_time_limit(300);
-    
+
     // Special handling for modules that only support save.do (not bulk-save)
     if (str_contains($endpoint, 'warehouse') || str_contains($endpoint, 'price-category') || str_contains($endpoint, 'work-order') || str_contains($endpoint, 'bill-of-material')) {
       return $this->saveOneByOne($endpoint, $data);
     }
 
-  // Special handling for tax module: fetch GL Account details from source IDs
-  // Since GL Account IDs from source DB won't exist in target DB,
-  // we fetch the account details using the source IDs to get their 'no' (account number)
-  if (str_contains($endpoint, '/tax/')) {
-    $data = array_map(function ($item) {
-      $salesTaxGlAccountId = $item['salesTaxGlAccountId'] ?? null;
-      $purchaseTaxGlAccountId = $item['purchaseTaxGlAccountId'] ?? null;
-      
-      // Remove the ID fields
-      unset($item['salesTaxGlAccountId']);
-      unset($item['purchaseTaxGlAccountId']);
-      
-      $taxType = $item['taxType'] ?? '';
-      $salesAccountNo = null;
-      $purchaseAccountNo = null;
-      
-      // Try to fetch GL Account details for salesTaxGlAccountId
-      if ($salesTaxGlAccountId !== null) {
-        try {
-          $response = $this->dataClient()->get('/api/glaccount/detail.do', [
-            'id' => $salesTaxGlAccountId
-          ]);
-          
-          Log::info('TAX_SALES_GL_ACCOUNT_DETAIL_FETCH', [
-            'sourceId' => $salesTaxGlAccountId,
-            'response' => $response->json()
-          ]);
-          
-          if ($response->successful() && isset($response->json()['d']['no'])) {
-            $salesAccountNo = $response->json()['d']['no'];
+    // Special handling for tax module: fetch GL Account details from source IDs
+    // Since GL Account IDs from source DB won't exist in target DB,
+    // we fetch the account details using the source IDs to get their 'no' (account number)
+    if (str_contains($endpoint, '/tax/')) {
+      $data = array_map(function ($item) {
+        $salesTaxGlAccountId = $item['salesTaxGlAccountId'] ?? null;
+        $purchaseTaxGlAccountId = $item['purchaseTaxGlAccountId'] ?? null;
+
+        // Remove the ID fields
+        unset($item['salesTaxGlAccountId']);
+        unset($item['purchaseTaxGlAccountId']);
+
+        $taxType = $item['taxType'] ?? '';
+        $salesAccountNo = null;
+        $purchaseAccountNo = null;
+
+        // Try to fetch GL Account details for salesTaxGlAccountId
+        if ($salesTaxGlAccountId !== null) {
+          try {
+            $response = $this->dataClient()->get('/api/glaccount/detail.do', [
+              'id' => $salesTaxGlAccountId
+            ]);
+
+            Log::info('TAX_SALES_GL_ACCOUNT_DETAIL_FETCH', [
+              'sourceId' => $salesTaxGlAccountId,
+              'response' => $response->json()
+            ]);
+
+            if ($response->successful() && isset($response->json()['d']['no'])) {
+              $salesAccountNo = $response->json()['d']['no'];
+            }
+          } catch (\Exception $e) {
+            Log::error('TAX_SALES_GL_ACCOUNT_FETCH_ERROR', [
+              'sourceId' => $salesTaxGlAccountId,
+              'error' => $e->getMessage()
+            ]);
           }
-        } catch (\Exception $e) {
-          Log::error('TAX_SALES_GL_ACCOUNT_FETCH_ERROR', [
-            'sourceId' => $salesTaxGlAccountId,
-            'error' => $e->getMessage()
-          ]);
         }
-      }
-      
-      // Try to fetch GL Account details for purchaseTaxGlAccountId
-      if ($purchaseTaxGlAccountId !== null) {
-        try {
-          $response = $this->dataClient()->get('/api/glaccount/detail.do', [
-            'id' => $purchaseTaxGlAccountId
-          ]);
-          
-          Log::info('TAX_PURCHASE_GL_ACCOUNT_DETAIL_FETCH', [
-            'sourceId' => $purchaseTaxGlAccountId,
-            'response' => $response->json()
-          ]);
-          
-          if ($response->successful() && isset($response->json()['d']['no'])) {
-            $purchaseAccountNo = $response->json()['d']['no'];
+
+        // Try to fetch GL Account details for purchaseTaxGlAccountId
+        if ($purchaseTaxGlAccountId !== null) {
+          try {
+            $response = $this->dataClient()->get('/api/glaccount/detail.do', [
+              'id' => $purchaseTaxGlAccountId
+            ]);
+
+            Log::info('TAX_PURCHASE_GL_ACCOUNT_DETAIL_FETCH', [
+              'sourceId' => $purchaseTaxGlAccountId,
+              'response' => $response->json()
+            ]);
+
+            if ($response->successful() && isset($response->json()['d']['no'])) {
+              $purchaseAccountNo = $response->json()['d']['no'];
+            }
+          } catch (\Exception $e) {
+            Log::error('TAX_PURCHASE_GL_ACCOUNT_FETCH_ERROR', [
+              'sourceId' => $purchaseTaxGlAccountId,
+              'error' => $e->getMessage()
+            ]);
           }
-        } catch (\Exception $e) {
-          Log::error('TAX_PURCHASE_GL_ACCOUNT_FETCH_ERROR', [
-            'sourceId' => $purchaseTaxGlAccountId,
-            'error' => $e->getMessage()
-          ]);
         }
-      }
-      
-      // Set to null if not found
-      $item['salesTaxGlAccountNo'] = $salesAccountNo;
-      $item['purchaseTaxGlAccountNo'] = $purchaseAccountNo;
-      
-      Log::info('TAX_ITEM_GL_ACCOUNTS_MAPPED', [
-        'taxCode' => $item['taxCode'] ?? 'N/A',
-        'taxType' => $taxType,
-        'sourceIds' => [
-          'sales' => $salesTaxGlAccountId,
-          'purchase' => $purchaseTaxGlAccountId
-        ],
-        'mappedAccounts' => [
-          'salesTaxGlAccountNo' => $salesAccountNo,
-          'purchaseTaxGlAccountNo' => $purchaseAccountNo
-        ],
-        'found' => [
-          'sales' => $salesAccountNo !== null,
-          'purchase' => $purchaseAccountNo !== null
-        ]
-      ]);
-      
-      return $item;
-    }, $data);
-  }    $cleanedData = array_map(function ($item) use ($endpoint) {
+
+        // Set to null if not found
+        $item['salesTaxGlAccountNo'] = $salesAccountNo;
+        $item['purchaseTaxGlAccountNo'] = $purchaseAccountNo;
+
+        Log::info('TAX_ITEM_GL_ACCOUNTS_MAPPED', [
+          'taxCode' => $item['taxCode'] ?? 'N/A',
+          'taxType' => $taxType,
+          'sourceIds' => [
+            'sales' => $salesTaxGlAccountId,
+            'purchase' => $purchaseTaxGlAccountId
+          ],
+          'mappedAccounts' => [
+            'salesTaxGlAccountNo' => $salesAccountNo,
+            'purchaseTaxGlAccountNo' => $purchaseAccountNo
+          ],
+          'found' => [
+            'sales' => $salesAccountNo !== null,
+            'purchase' => $purchaseAccountNo !== null
+          ]
+        ]);
+
+        return $item;
+      }, $data);
+    }
+    $cleanedData = array_map(function ($item) use ($endpoint) {
       return $this->cleanDataItem($item, $endpoint);
     }, $data);
 
@@ -182,14 +184,14 @@ class AccurateService
   {
     // Set execution time limit to 5 minutes for large data migration
     set_time_limit(300);
-    
+
     $results = [];
     $successCount = 0;
     $failedCount = 0;
 
     // Replace bulk-save with save.do
     $saveEndpoint = str_replace('bulk-save.do', 'save.do', $endpoint);
-    
+
     // Get module name for logging
     $moduleName = 'Module';
     if (str_contains($endpoint, 'warehouse')) {
@@ -200,7 +202,7 @@ class AccurateService
 
     foreach ($data as $index => $item) {
       $cleanedItem = $this->cleanDataItem($item, $endpoint);
-      
+
       Log::info("{$moduleName}_SAVE_REQUEST", [
         "index" => $index,
         "data" => $cleanedItem,
@@ -209,7 +211,7 @@ class AccurateService
       try {
         $response = $this->dataClient()->post($saveEndpoint, $cleanedItem);
         $result = $response->json();
-        
+
         Log::info("{$moduleName}_SAVE_RESPONSE", [
           'index' => $index,
           'status' => $response->status(),
@@ -217,7 +219,7 @@ class AccurateService
         ]);
 
         $results[] = $result;
-        
+
         if (isset($result['s']) && $result['s'] === true) {
           $successCount++;
         } else {
@@ -246,11 +248,11 @@ class AccurateService
     ];
   }
 
-  
+
   protected function cleanDataItem(array $item, string $endpoint = ''): array
   {
     $cleaned = [];
-    
+
     foreach ($item as $key => $value) {
       if ($key === 'id' || $key === 'vendorType') {
         continue;
@@ -385,20 +387,20 @@ class AccurateService
       }
       if ($value === null) {
         continue;
-      }      
+      }
       if (str_ends_with($key, 'Id') && $value === 0) {
         continue;
       }
-      
+
       if ($value === '') {
         continue;
       }
-      
+
       if (is_array($value)) {
         if (empty($value)) {
           continue;
         }
-        
+
         $cleanedArray = [];
         foreach ($value as $subKey => $subValue) {
           if (is_array($subValue)) {
@@ -411,7 +413,7 @@ class AccurateService
                   unset($cleanedSubItem['item']);
                 }
               }
-              
+
               // Special handling for detailItem in item-adjustment: only keep specific fields
               if ($key === 'detailItem' && str_contains($endpoint, 'item-adjustment')) {
                 $adjustmentItem = [];
@@ -438,7 +440,7 @@ class AccurateService
                 } elseif (isset($cleanedSubItem['serialNumber']['no'])) {
                   $cleanedSubItem['serialNumberNo'] = $cleanedSubItem['serialNumber']['no'];
                   unset($cleanedSubItem['serialNumber']);
-                } 
+                }
               }
 
               // Special handling for detailAccount in expense endpoint: flatten account object to accountNo
@@ -454,6 +456,16 @@ class AccurateService
                 if (isset($cleanedSubItem['glAccount']['no'])) {
                   $cleanedSubItem['accountNo'] = $cleanedSubItem['glAccount']['no'];
                   unset($cleanedSubItem['glAccount']);
+                }
+                // Flatten vendor object to vendorNo
+                if (isset($cleanedSubItem['vendor']['vendorNo'])) {
+                  $cleanedSubItem['vendorNo'] = $cleanedSubItem['vendor']['vendorNo'];
+                  unset($cleanedSubItem['vendor']);
+                }
+                // Flatten customer object to customerNo
+                if (isset($cleanedSubItem['customer']['customerNo'])) {
+                  $cleanedSubItem['customerNo'] = $cleanedSubItem['customer']['customerNo'];
+                  unset($cleanedSubItem['customer']);
                 }
               }
 
@@ -500,28 +512,30 @@ class AccurateService
                   }
                 }
               }
-              
+
               $cleanedArray[] = $cleanedSubItem;
             }
           } else {
             if ($subKey === 'id' || $subKey === 'vendorType') {
               continue;
             }
-            
-            if ($subValue !== null && $subValue !== '' && 
-                !(str_ends_with($subKey, 'Id') && $subValue === 0)) {
+
+            if (
+              $subValue !== null && $subValue !== '' &&
+              !(str_ends_with($subKey, 'Id') && $subValue === 0)
+            ) {
               $cleanedArray[$subKey] = $subValue;
             }
           }
         }
-        
+
         if (!empty($cleanedArray)) {
           $cleaned[$key] = $cleanedArray;
         }
         continue;
       }
       $cleaned[$key] = $value;
-    }  
+    }
     return $cleaned;
   }
 
@@ -537,7 +551,7 @@ class AccurateService
 
     $dbInfo = session('accurate_database');
     $host = $dbInfo['host'];
-    $sessionId = $dbInfo['session']; 
+    $sessionId = $dbInfo['session'];
     $accessToken = session('accurate_access_token');
 
     return Http::withToken($accessToken)
@@ -666,35 +680,35 @@ class AccurateService
       // The transaction data comes from source DB, so we need to fetch GL Account details from source
       // We'll use the fetchModuleData which uses dataClient (target DB session)
       // But for Tax GL Accounts, we need to get the 'no' from the original data
-      
+
       // Since we're working with data that was fetched from source DB and stored in transactions table,
       // the glAccountId is from source DB. We need to fetch that account's 'no' from source.
       // However, the current session is pointing to TARGET DB.
-      
+
       // For now, let's try to get GL Account list and find by ID
       $glAccounts = $this->fetchModuleData('/api/glaccount/list.do', [
         'sp.pageSize' => 10000 // Get all accounts
       ]);
-      
+
       // Find GL Account with matching ID
       foreach ($glAccounts as $account) {
         if (isset($account['id']) && $account['id'] === $glAccountId) {
           $accountNo = $account['no'] ?? null;
-          
+
           Log::info('GLACCOUNT_NO_FOUND_IN_LIST', [
             'sourceId' => $glAccountId,
             'accountNo' => $accountNo
           ]);
-          
+
           return $accountNo;
         }
       }
-      
+
       Log::warning('GLACCOUNT_NO_NOT_FOUND_IN_LIST', [
         'sourceId' => $glAccountId,
         'totalAccountsChecked' => count($glAccounts)
       ]);
-      
+
       return null;
     } catch (\Exception $e) {
       Log::error('GLACCOUNT_FETCH_FROM_SOURCE_ERROR', [
@@ -712,22 +726,22 @@ class AccurateService
       $allData = [];
       $pageNumber = 1;
       $pageSize = 100; // Accurate API max page size is usually 100
-      
+
       // Set page size
       $params['sp.pageSize'] = $pageSize;
-      
+
       do {
         // Set current page number
         $params['sp.page'] = $pageNumber;
-        
+
         Log::info('ACCURATE_FETCH_PAGE', [
           'endpoint' => $endpoint,
           'page' => $pageNumber,
           'pageSize' => $pageSize
         ]);
-        
+
         $response = $this->dataClient()->get($endpoint, $params);
-        
+
         if ($response->failed()) {
           Log::error('ACCURATE_FETCH_MODULE_ERROR', [
             'endpoint' => $endpoint,
@@ -740,46 +754,54 @@ class AccurateService
 
         $responseData = $response->json();
         $pageData = $responseData['d'] ?? [];
-        
+
         // Special filtering for journal-voucher: only get manual journal vouchers
         // Exclude auto-generated journals from other transactions (DO, SPY, PPY, etc.)
-        if (str_contains($endpoint, 'journal-voucher')) {
-          $pageData = array_filter($pageData, function($item) {
-            // Keep only if journalVoucher is true (manual journal)
-            // OR if transactionType is empty/null/JV
-            $isManualJournal = isset($item['journalVoucher']) && $item['journalVoucher'] === true;
-            $transactionType = $item['transactionType'] ?? '';
-            $hasNoTransactionType = empty($transactionType) || $transactionType === 'JV';
-            
-            return $isManualJournal || $hasNoTransactionType;
-          });
-          
-          // Re-index array after filtering
-          $pageData = array_values($pageData);
-          
-          Log::info('JOURNAL_VOUCHER_FILTERED', [
-            'page' => $pageNumber,
-            'beforeFilter' => count($responseData['d'] ?? []),
-            'afterFilter' => count($pageData)
-          ]);
-        }
-        
+        // if (str_contains($endpoint, 'journal-voucher')) {
+        //   $originalCount = count($pageData);
+
+        //   // Filter untuk manual journal entries saja
+        //   $pageData = array_values(array_filter($pageData, function ($item) {
+        //     // Cek apakah ini manual journal entry
+        //     $isManualJournal = !empty($item['journalVoucher']);
+
+        //     // Cek transaction type (kosong atau 'JV' dianggap manual)
+        //     $transactionType = $item['transactionType'] ?? null;
+        //     $isJournalVoucherType = empty($transactionType) || $transactionType === 'JV';
+
+        //     // Include jika salah satu kondisi terpenuhi
+        //     return $isManualJournal || $isJournalVoucherType;
+        //   }));
+
+        //   $filteredCount = count($pageData);
+
+        //   // Log hanya jika ada data yang difilter
+        //   if ($originalCount !== $filteredCount) {
+        //     Log::info('Journal Voucher Filtered', [
+        //       'page' => $pageNumber,
+        //       'original_count' => $originalCount,
+        //       'filtered_count' => $filteredCount,
+        //       'removed_count' => $originalCount - $filteredCount,
+        //     ]);
+        //   }
+        // }
+
         // Add current page data to all data
         $allData = array_merge($allData, $pageData);
-        
+
         Log::info('ACCURATE_FETCH_PAGE_RESULT', [
           'endpoint' => $endpoint,
           'page' => $pageNumber,
           'pageDataCount' => count($pageData),
           'totalDataSoFar' => count($allData)
         ]);
-        
+
         // Check if there's more data
         // If page returns less than pageSize, we've reached the end
         $hasMoreData = count($pageData) === $pageSize;
-        
+
         $pageNumber++;
-        
+
         // Safety limit to prevent infinite loop (max 100 pages = 10,000 records)
         if ($pageNumber > 100) {
           Log::warning('ACCURATE_FETCH_MAX_PAGES_REACHED', [
@@ -789,9 +811,8 @@ class AccurateService
           ]);
           break;
         }
-        
       } while ($hasMoreData);
-      
+
       Log::info('ACCURATE_FETCH_COMPLETE', [
         'endpoint' => $endpoint,
         'totalPages' => $pageNumber - 1,

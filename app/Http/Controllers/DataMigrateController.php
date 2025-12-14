@@ -208,18 +208,18 @@ class DataMigrateController extends Controller
 
             foreach ($groupedByModule as $moduleSlug => $moduleTransactions) {
                 $module = $moduleTransactions->first()->module;       
-                // Log::info('MIGRATION_PROCESSING_MODULE', [
-                //     'module_slug' => $moduleSlug,
-                //     'module_name' => $module?->name,
-                //     'transaction_count' => $moduleTransactions->count(),
-                // ]);
+                Log::info('MIGRATION_PROCESSING_MODULE', [
+                    'module_slug' => $moduleSlug,
+                    'module_name' => $module?->name,
+                    'transaction_count' => $moduleTransactions->count(),
+                ]);
                 if (!$module) {
                     $failedCount += $moduleTransactions->count();
                     $errors[] = "Module not found for some transactions";
-                    // Log::error('MIGRATION_MODULE_NOT_FOUND', [
-                    //     'module_slug' => $moduleSlug,
-                    //     'transaction_count' => $moduleTransactions->count(),
-                    // ]);
+                    Log::error('MIGRATION_MODULE_NOT_FOUND', [
+                        'module_slug' => $moduleSlug,
+                        'transaction_count' => $moduleTransactions->count(),
+                    ]);
                     continue;
                 }
                 
@@ -241,10 +241,10 @@ class DataMigrateController extends Controller
 
                 if (empty($bulkData)) {
                     $skippedCount += $moduleTransactions->count();
-                    // Log::warning('MIGRATION_NO_DATA_TO_MIGRATE', [
-                    //     'module' => $module->name,
-                    //     'transaction_count' => $moduleTransactions->count(),
-                    // ]);
+                    Log::warning('MIGRATION_NO_DATA_TO_MIGRATE', [
+                        'module' => $module->name,
+                        'transaction_count' => $moduleTransactions->count(),
+                    ]);
                     continue;
                 }
 
@@ -254,21 +254,21 @@ class DataMigrateController extends Controller
                     $chunks = array_chunk($bulkData, 100);
                     $chunkTransactions = array_chunk($moduleTransactions->all(), 100);
                     
-                    // Log::info('MIGRATION_CALLING_ACCURATE_API', [
-                    //     'module' => $module->name,
-                    //     'endpoint' => $endpoint,
-                    //     'total_data_count' => count($bulkData),
-                    //     'chunks_count' => count($chunks),
-                    //     'target_database' => $targetDbName,
-                    // ]);
+                    Log::info('MIGRATION_CALLING_ACCURATE_API', [
+                        'module' => $module->name,
+                        'endpoint' => $endpoint,
+                        'total_data_count' => count($bulkData),
+                        'chunks_count' => count($chunks),
+                        'target_database' => $targetDbName,
+                    ]);
 
                     foreach ($chunks as $chunkIndex => $chunkData) {
-                        // Log::info('MIGRATION_PROCESSING_CHUNK', [
-                        //     'module' => $module->name,
-                        //     'chunk_index' => $chunkIndex + 1,
-                        //     'chunk_size' => count($chunkData),
-                        //     'total_chunks' => count($chunks),
-                        // ]);
+                        Log::info('MIGRATION_PROCESSING_CHUNK', [
+                            'module' => $module->name,
+                            'chunk_index' => $chunkIndex + 1,
+                            'chunk_size' => count($chunkData),
+                            'total_chunks' => count($chunks),
+                        ]);
 
                         $result = $this->accurateService->bulkSaveToAccurate($endpoint, $chunkData);
                         
@@ -290,13 +290,13 @@ class DataMigrateController extends Controller
                                 $successCount++;
                                 $moduleResults[$module->name]['success']++;
                                 
-                                // Log::info('MIGRATION_ITEM_SUCCESS', [
-                                //     'module' => $module->name,
-                                //     'chunk_index' => $chunkIndex + 1,
-                                //     'item_index' => $idx,
-                                //     'transaction_id' => $transaction->id,
-                                //     'message' => 'Bulk save successful',
-                                // ]);
+                                Log::info('MIGRATION_ITEM_SUCCESS', [
+                                    'module' => $module->name,
+                                    'chunk_index' => $chunkIndex + 1,
+                                    'item_index' => $idx,
+                                    'transaction_id' => $transaction->id,
+                                    'message' => 'Bulk save successful',
+                                ]);
                             }
                         } else {
                             // Process individual item results
@@ -311,13 +311,13 @@ class DataMigrateController extends Controller
                                 $successCount++;
                                 $moduleResults[$module->name]['success']++;
                                 
-                                // Log::info('MIGRATION_ITEM_SUCCESS', [
-                                //     'module' => $module->name,
-                                //     'chunk_index' => $chunkIndex + 1,
-                                //     'item_index' => $idx,
-                                //     'transaction_id' => $transaction->id,
-                                //     'message' => $itemResult['d'] ?? 'Success',
-                                // ]);
+                                Log::info('MIGRATION_ITEM_SUCCESS', [
+                                    'module' => $module->name,
+                                    'chunk_index' => $chunkIndex + 1,
+                                    'item_index' => $idx,
+                                    'transaction_id' => $transaction->id,
+                                    'message' => $itemResult['d'] ?? 'Success',
+                                ]);
                             } else {
                                 $errorData = $itemResult['d'] ?? ['Unknown error'];
                                 
@@ -356,13 +356,13 @@ class DataMigrateController extends Controller
                         }
                         }
 
-                        // Log::info('MIGRATION_CHUNK_PROCESSED', [
-                        //     'module' => $module->name,
-                        //     'chunk_index' => $chunkIndex + 1,
-                        //     'total_items' => count($chunkTransactions[$chunkIndex]),
-                        //     'current_success_count' => $successCount,
-                        //     'current_failed_count' => $failedCount,
-                        // ]);
+                        Log::info('MIGRATION_CHUNK_PROCESSED', [
+                            'module' => $module->name,
+                            'chunk_index' => $chunkIndex + 1,
+                            'total_items' => count($chunkTransactions[$chunkIndex]),
+                            'current_success_count' => $successCount,
+                            'current_failed_count' => $failedCount,
+                        ]);
                     }
 
                     $moduleSuccessCount = $moduleTransactions->filter(function($t) {
@@ -373,13 +373,13 @@ class DataMigrateController extends Controller
                         return $t->fresh()->status === 'failed';
                     })->count();
 
-                    // Log::info('MIGRATION_MODULE_COMPLETED', [
-                    //     'module' => $module->name,
-                    //     'success_count' => $moduleSuccessCount,
-                    //     'failed_count' => $moduleFailedCount,
-                    //     'total_success_so_far' => $successCount,
-                    //     'total_failed_so_far' => $failedCount,
-                    // ]);
+                    Log::info('MIGRATION_MODULE_COMPLETED', [
+                        'module' => $module->name,
+                        'success_count' => $moduleSuccessCount,
+                        'failed_count' => $moduleFailedCount,
+                        'total_success_so_far' => $successCount,
+                        'total_failed_so_far' => $failedCount,
+                    ]);
                     if ($moduleSuccessCount > 0) {
                         SystemLog::create([
                             'event_type' => 'migrate',
