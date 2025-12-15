@@ -494,9 +494,6 @@ class ModulesController extends Controller
             $detailData = $accurate->fetchModuleData($moduleInfo['detail_endpoint'], [
               'id' => $itemId
             ]);
-            Log::info('DETAIL_CAPTURED_DATA', [
-              "data" => $detailData,
-            ]);
 
             // Get identifier berdasarkan module type
             $identifierField = $moduleInfo['identifier_field'] ?? 'number';

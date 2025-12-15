@@ -139,22 +139,22 @@ class AccurateService
         $item['salesTaxGlAccountNo'] = $salesAccountNo;
         $item['purchaseTaxGlAccountNo'] = $purchaseAccountNo;
 
-        Log::info('TAX_ITEM_GL_ACCOUNTS_MAPPED', [
-          'taxCode' => $item['taxCode'] ?? 'N/A',
-          'taxType' => $taxType,
-          'sourceIds' => [
-            'sales' => $salesTaxGlAccountId,
-            'purchase' => $purchaseTaxGlAccountId
-          ],
-          'mappedAccounts' => [
-            'salesTaxGlAccountNo' => $salesAccountNo,
-            'purchaseTaxGlAccountNo' => $purchaseAccountNo
-          ],
-          'found' => [
-            'sales' => $salesAccountNo !== null,
-            'purchase' => $purchaseAccountNo !== null
-          ]
-        ]);
+        // Log::info('TAX_ITEM_GL_ACCOUNTS_MAPPED', [
+        //   'taxCode' => $item['taxCode'] ?? 'N/A',
+        //   'taxType' => $taxType,
+        //   'sourceIds' => [
+        //     'sales' => $salesTaxGlAccountId,
+        //     'purchase' => $purchaseTaxGlAccountId
+        //   ],
+        //   'mappedAccounts' => [
+        //     'salesTaxGlAccountNo' => $salesAccountNo,
+        //     'purchaseTaxGlAccountNo' => $purchaseAccountNo
+        //   ],
+        //   'found' => [
+        //     'sales' => $salesAccountNo !== null,
+        //     'purchase' => $purchaseAccountNo !== null
+        //   ]
+        // ]);
 
         return $item;
       }, $data);
@@ -166,17 +166,12 @@ class AccurateService
     $requestBody = [
       'data' => $cleanedData
     ];
-
-    Log::info("RAW_DATA", [
-      "data" => $cleanedData
-    ]);
-
     $response = $this->dataClient()->post($endpoint, $requestBody);
-    Log::info('BULK_SAVE_RESPONSE', [
-      'endpoint' => $endpoint,
-      'status' => $response->status(),
-      'response_data' => $response->json(),
-    ]);
+    // Log::info('BULK_SAVE_RESPONSE', [
+    //   'endpoint' => $endpoint,
+    //   'status' => $response->status(),
+    //   'response_data' => $response->json(),
+    // ]);
     return $response->json();
   }
 
@@ -453,6 +448,12 @@ class AccurateService
 
               // Special handling for detailJournalVoucher in journal-voucher endpoint: flatten glAccount object to accountNo
               if ($key === 'detailJournalVoucher' && str_contains($endpoint, 'journal-voucher')) {
+                // Skip items with amount 0 or less than 1
+                $amount = $cleanedSubItem['amount'] ?? 0;
+                if ($amount < 1) {
+                  continue;
+                }
+                
                 if (isset($cleanedSubItem['glAccount']['no'])) {
                   $cleanedSubItem['accountNo'] = $cleanedSubItem['glAccount']['no'];
                   unset($cleanedSubItem['glAccount']);
