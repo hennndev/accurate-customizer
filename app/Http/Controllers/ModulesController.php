@@ -409,7 +409,6 @@ class ModulesController extends Controller
 
     try {
       $moduleInfo = $moduleMapping[$module];
-
       $accurateDbId = session()->get('database_id');
 
       if (!$accurateDbId) {
@@ -419,9 +418,7 @@ class ModulesController extends Controller
         ], 400);
       }
 
-      // Cari record AccurateDatabase berdasarkan db_id untuk dapatkan primary key ID
       $accurateDatabase = \App\Models\AccurateDatabase::where('db_id', $accurateDbId)->first();
-
       if (!$accurateDatabase) {
         return response()->json([
           'success' => false,
@@ -430,20 +427,15 @@ class ModulesController extends Controller
       }
 
       $databaseId = $accurateDatabase->id;
-
       $listData = $accurate->fetchModuleData($moduleInfo['list_endpoint']);
-      Log::info('LIST_RESULT_CAPTURE_DATA', [
-        "resut" => $listData,
-      ]);
-      Log::info('ACCURATE_MODULE_LIST', [
-        'module' => $module,
-        'total_items' => count($listData),
-      ]);
-
-      // Cek apakah ada data atau tidak
+      // Log::info('LIST_RESULT_CAPTURE_DATA', [
+      //   "resut" => $listData,
+      // ]);
+      // Log::info('ACCURATE_MODULE_LIST', [
+      //   'module' => $module,
+      //   'total_items' => count($listData),
+      // ]);
       $hasData = count($listData) > 0;
-
-      // Create atau update Module berdasarkan database_id dan slug
       $moduleRecord = Module::firstOrCreate(
         [
           'accurate_database_id' => $databaseId,
@@ -459,7 +451,6 @@ class ModulesController extends Controller
         ]
       );
 
-      // Update status jika module sudah ada
       if (!$moduleRecord->wasRecentlyCreated) {
         $moduleRecord->update([
           'is_active' => $hasData,
@@ -479,7 +470,6 @@ class ModulesController extends Controller
       $failedCount = 0;
       $savedTransactionNumbers = [];
 
-      // Hanya loop jika ada data
       if ($hasData) {
         foreach ($listData as $item) {
           try {
@@ -490,16 +480,49 @@ class ModulesController extends Controller
               continue;
             }
 
-            // Fetch detail dari detail.do dengan id
             $detailData = $accurate->fetchModuleData($moduleInfo['detail_endpoint'], [
               'id' => $itemId
             ]);
 
-            // Get identifier berdasarkan module type
+            if ($module === 'journal-voucher') {
+
+              if (isset($detailData['branchId'])) {
+                $rootBranchId = $detailData['branchId'];
+                $foundBranchName = null;
+                
+                if (isset($detailData['detailJournalVoucher']) && is_array($detailData['detailJournalVoucher'])) {
+                  foreach ($detailData['detailJournalVoucher'] as $detail) {
+                    if (isset($detail['branch']['id']) && $detail['branch']['id'] == $rootBranchId) {
+                      if (isset($detail['branch']['name'])) {
+                        $foundBranchName = $detail['branch']['name'];
+                        break; // Found match, stop searching
+                      }
+                    }
+                  }
+                }
+                
+                if ($foundBranchName !== null) {
+                  unset($detailData['branchId']);
+                  $detailData['branchName'] = $foundBranchName;
+                  
+                  Log::info('JOURNAL_VOUCHER_BRANCH_TRANSFORMED', [
+                    'item_id' => $itemId,
+                    'old_branch_id' => $rootBranchId,
+                    'new_branch_name' => $foundBranchName
+                  ]);
+                } else {
+                  Log::warning('JOURNAL_VOUCHER_BRANCH_NOT_FOUND', [
+                    'item_id' => $itemId,
+                    'root_branch_id' => $rootBranchId,
+                    'detail_count' => count($detailData['detailJournalVoucher'] ?? [])
+                  ]);
+                }
+              }
+            }
+
             $identifierField = $moduleInfo['identifier_field'] ?? 'number';
             $transactionNo = $detailData[$identifierField] ?? $item[$identifierField] ?? "ID-{$itemId}";
 
-            // Cek apakah transaction_no sudah ada untuk module ini
             $exists = Transaction::where('transaction_no', $transactionNo)
               ->where('module_id', $moduleRecord->id)
               ->where('accurate_database_id', $databaseId)
@@ -507,11 +530,6 @@ class ModulesController extends Controller
 
             if ($exists) {
               $skippedCount++;
-              // Log::info('ACCURATE_ITEM_SKIPPED', [
-              //     'module' => $module,
-              //     'number' => $transactionNo,
-              //     'reason' => 'already_exists'
-              // ]);
               continue;
             }
 
@@ -528,26 +546,14 @@ class ModulesController extends Controller
             $savedCount++;
             $savedTransactionNumbers[] = $transaction->transaction_no;
 
-            // Log::info('ACCURATE_ITEM_SAVED', [
-            //     'module' => $module,
-            //     'id' => $itemId,
-            //     'identifier' => $transactionNo,
-            //     'identifier_field' => $identifierField,
-            // ]);
-
           } catch (\Exception $e) {
             $failedCount++;
-            // Log::error('ACCURATE_ITEM_ERROR', [
-            //     'module' => $module,
-            //     'item_id' => $itemId ?? null,
-            //     'error' => $e->getMessage()
-            // ]);
             continue;
           }
         }
       }
 
-      // Create system log untuk capture event
+
       $logStatus = $failedCount > 0 ? 'warning' : ($hasData ? 'success' : 'info');
       $logMessage = $hasData
         ? "Capture {$moduleInfo['name']}: {$savedCount} new, {$skippedCount} skipped" . ($failedCount > 0 ? ", {$failedCount} failed" : "")
