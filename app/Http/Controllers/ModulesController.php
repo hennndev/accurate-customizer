@@ -6,7 +6,9 @@ use App\Models\Module;
 use App\Models\Transaction;
 use App\Models\SystemLog;
 use App\Services\AccurateService;
+use App\Modules\ModuleManager;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
 
@@ -47,10 +49,8 @@ class ModulesController extends Controller
 
   public function captureData(Request $request, AccurateService $accurate, $module)
   {
-    // Set execution time limit to 5 minutes for large data capture
-    set_time_limit(3000);
+    set_time_limit(6000);
 
-    // Mapping module slug ke Accurate API endpoint
     $moduleMapping = [
       // Transaction Modules
       'sales-order' => [
@@ -427,14 +427,35 @@ class ModulesController extends Controller
       }
 
       $databaseId = $accurateDatabase->id;
-      $listData = $accurate->fetchModuleData($moduleInfo['list_endpoint']);
-      // Log::info('LIST_RESULT_CAPTURE_DATA', [
-      //   "resut" => $listData,
-      // ]);
-      // Log::info('ACCURATE_MODULE_LIST', [
-      //   'module' => $module,
-      //   'total_items' => count($listData),
-      // ]);
+      
+      // ===FILTER TANGGAL===
+      $params = [];
+      $filterType = $request->input('filter_type', 'range');    
+      if ($filterType === 'equal') {
+        if ($request->filled('start_date')) {
+          $params['filter.transDate.op'] = 'EQUAL';
+          $params['filter.transDate.val'] = Carbon::parse($request->start_date)->format('d/m/Y');;
+        }
+      } else {
+        $hasStartDate = $request->filled('start_date');
+        $hasEndDate = $request->filled('end_date');
+        
+        if ($hasStartDate && $hasEndDate) {
+          $params['filter.transDate.op'] = 'RANGE';
+          $params['filter.transDate.val[0]'] = Carbon::parse($request->start_date)->format('d/m/Y');;
+          $params['filter.transDate.val[1]'] = Carbon::parse($request->end_date)->format('d/m/Y');;
+        } elseif ($hasStartDate) {
+          $params['filter.transDate.op'] = 'GREATER_EQUAL_THAN';
+          $params['filter.transDate.val'] = Carbon::parse($request->start_date)->format('d/m/Y');;
+        } elseif ($hasEndDate) {
+          $params['filter.transDate.op'] = 'LESS_EQUAL_THAN';
+          $params['filter.transDate.val'] = Carbon::parse($request->end_date)->format('d/m/Y');;
+        }
+      }
+      // ===END FILTER TANGGAL===
+
+      $listData = $accurate->fetchModuleData($moduleInfo['list_endpoint'], $params);
+
       $hasData = count($listData) > 0;
       $moduleRecord = Module::firstOrCreate(
         [
@@ -443,10 +464,10 @@ class ModulesController extends Controller
         ],
         [
           'name' => $moduleInfo['name'],
-          'icon' => 'heroicon-o-document-text', // default icon
+          'icon' => 'heroicon-o-document-text', 
           'description' => $moduleInfo['name'],
           'accurate_endpoint' => $moduleInfo['list_endpoint'],
-          'is_active' => $hasData, // active jika ada data
+          'is_active' => $hasData, 
           'order' => 0,
         ]
       );
@@ -457,72 +478,38 @@ class ModulesController extends Controller
         ]);
       }
 
-      Log::info('MODULE_CREATED_OR_UPDATED', [
-        'module' => $module,
-        'database_id' => $databaseId,
-        'has_data' => $hasData,
-        'is_active' => $moduleRecord->is_active,
-        'was_created' => $moduleRecord->wasRecentlyCreated,
-      ]);
-
       $savedCount = 0;
       $skippedCount = 0;
       $failedCount = 0;
       $savedTransactionNumbers = [];
 
+      $handler = ModuleManager::forSlug($module);
+      $sharedContext = [];
+    
+      $handler->preCapture($accurate, $sharedContext);
+
       if ($hasData) {
         foreach ($listData as $item) {
           try {
             $itemId = $item['id'] ?? null;
-
-            if (!$itemId) {
-              Log::warning('ACCURATE_ITEM_NO_ID', ['item' => $item]);
-              continue;
-            }
-
-            $detailData = $accurate->fetchModuleData($moduleInfo['detail_endpoint'], [
+            $detailDataRaw = $accurate->fetchModuleData($moduleInfo['detail_endpoint'], [
               'id' => $itemId
             ]);
-
-            if ($module === 'journal-voucher') {
-
-              if (isset($detailData['branchId'])) {
-                $rootBranchId = $detailData['branchId'];
-                $foundBranchName = null;
-                
-                if (isset($detailData['detailJournalVoucher']) && is_array($detailData['detailJournalVoucher'])) {
-                  foreach ($detailData['detailJournalVoucher'] as $detail) {
-                    if (isset($detail['branch']['id']) && $detail['branch']['id'] == $rootBranchId) {
-                      if (isset($detail['branch']['name'])) {
-                        $foundBranchName = $detail['branch']['name'];
-                        break; // Found match, stop searching
-                      }
-                    }
-                  }
-                }
-                
-                if ($foundBranchName !== null) {
-                  unset($detailData['branchId']);
-                  $detailData['branchName'] = $foundBranchName;
-                  
-                  Log::info('JOURNAL_VOUCHER_BRANCH_TRANSFORMED', [
-                    'item_id' => $itemId,
-                    'old_branch_id' => $rootBranchId,
-                    'new_branch_name' => $foundBranchName
-                  ]);
-                } else {
-                  Log::warning('JOURNAL_VOUCHER_BRANCH_NOT_FOUND', [
-                    'item_id' => $itemId,
-                    'root_branch_id' => $rootBranchId,
-                    'detail_count' => count($detailData['detailJournalVoucher'] ?? [])
-                  ]);
-                }
-              }
+            
+            $detailData = $detailDataRaw;
+            if (is_array($detailDataRaw) && isset($detailDataRaw[0]) && is_array($detailDataRaw[0])) {
+              $detailData = $detailDataRaw[0];
             }
-
+            
+            if (empty($detailData) || !is_array($detailData)) {
+              $failedCount++;
+              continue;
+            }
+            
             $identifierField = $moduleInfo['identifier_field'] ?? 'number';
             $transactionNo = $detailData[$identifierField] ?? $item[$identifierField] ?? "ID-{$itemId}";
-
+            $handler->transformDetail($detailData, $sharedContext, ['itemId' => $itemId, 'module' => $module]);
+            
             $exists = Transaction::where('transaction_no', $transactionNo)
               ->where('module_id', $moduleRecord->id)
               ->where('accurate_database_id', $databaseId)
@@ -532,8 +519,6 @@ class ModulesController extends Controller
               $skippedCount++;
               continue;
             }
-
-            // Save detail lengkap ke transactions table
             $transaction = Transaction::create([
               'transaction_no' => $transactionNo,
               'accurate_database_id' => $databaseId,

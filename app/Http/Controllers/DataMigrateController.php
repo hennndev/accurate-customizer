@@ -7,6 +7,7 @@ use App\Models\SystemLog;
 use App\Models\AccurateDatabase;
 use App\Models\Module;
 use App\Services\AccurateService;
+use App\Modules\ModuleManager;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -136,17 +137,7 @@ class DataMigrateController extends Controller
     $targetDbId = session('database_id');
     $targetDbName = session('database_name');
 
-    Log::info('MIGRATION_STARTED', [
-      'user_id' => Auth::id(),
-      'target_database_id' => $targetDbId,
-      'target_database_name' => $targetDbName,
-      'total_transactions' => count($request->input('ids', [])),
-    ]);
-
     if (!$targetDbId || !$targetDbName) {
-      Log::warning('MIGRATION_NO_TARGET_DATABASE', [
-        'user_id' => Auth::id(),
-      ]);
       return redirect()->route('migrate.index')->with('error', 'Please select a target database first.');
     }
 
@@ -167,12 +158,6 @@ class DataMigrateController extends Controller
         'database_id' => $targetDbId,
         'database_name' => $targetDbName,
       ]);
-
-      Log::info('MIGRATION_DATABASE_REOPENED', [
-        'database_id' => $targetDbId,
-        'database_name' => $targetDbName,
-        'host' => $dbInfo['host'] ?? 'unknown',
-      ]);
     } catch (\Exception $e) {
       Log::error('MIGRATION_DATABASE_REOPEN_ERROR', [
         'error' => $e->getMessage(),
@@ -188,17 +173,9 @@ class DataMigrateController extends Controller
         ->get();
 
       if ($transactions->isEmpty()) {
-        Log::warning('MIGRATION_NO_TRANSACTIONS', [
-          'user_id' => Auth::id(),
-          'requested_ids' => $ids,
-        ]);
         return redirect()->route('migrate.index')->with('error', 'No transactions selected for migration.');
       }
 
-      Log::info('MIGRATION_TRANSACTIONS_LOADED', [
-        'total_loaded' => $transactions->count(),
-        'modules' => $transactions->pluck('module.name')->unique()->values(),
-      ]);
       $groupedByModule = $transactions->groupBy('module.slug');
       $successCount = 0;
       $failedCount = 0;
@@ -206,13 +183,9 @@ class DataMigrateController extends Controller
       $errors = [];
       $moduleResults = []; // Track per-module results
 
+
       foreach ($groupedByModule as $moduleSlug => $moduleTransactions) {
         $module = $moduleTransactions->first()->module;
-        Log::info('MIGRATION_PROCESSING_MODULE', [
-          'module_slug' => $moduleSlug,
-          'module_name' => $module?->name,
-          'transaction_count' => $moduleTransactions->count(),
-        ]);
         if (!$module) {
           $failedCount += $moduleTransactions->count();
           $errors[] = "Module not found for some transactions";
@@ -241,10 +214,6 @@ class DataMigrateController extends Controller
 
         if (empty($bulkData)) {
           $skippedCount += $moduleTransactions->count();
-          Log::warning('MIGRATION_NO_DATA_TO_MIGRATE', [
-            'module' => $module->name,
-            'transaction_count' => $moduleTransactions->count(),
-          ]);
           continue;
         }
 
@@ -254,22 +223,7 @@ class DataMigrateController extends Controller
           $chunks = array_chunk($bulkData, 100);
           $chunkTransactions = array_chunk($moduleTransactions->all(), 100);
 
-          Log::info('MIGRATION_CALLING_ACCURATE_API', [
-            'module' => $module->name,
-            'endpoint' => $endpoint,
-            'total_data_count' => count($bulkData),
-            'chunks_count' => count($chunks),
-            'target_database' => $targetDbName,
-          ]);
-
           foreach ($chunks as $chunkIndex => $chunkData) {
-            Log::info('MIGRATION_PROCESSING_CHUNK', [
-              'module' => $module->name,
-              'chunk_index' => $chunkIndex + 1,
-              'chunk_size' => count($chunkData),
-              'total_chunks' => count($chunks),
-            ]);
-
             $result = $this->accurateService->bulkSaveToAccurate($endpoint, $chunkData);
             $isOverallSuccess = isset($result['s']) && $result['s'] === true;
             $itemResults = $result['d'] ?? [];
