@@ -131,38 +131,20 @@ class DataMigrateController extends Controller
 
     $request->validate([
       'ids' => 'required|array',
-      'ids.*' => 'required|integer|exists:transactions,id'
+      'ids.*' => 'required|integer|exists:transactions,id',
+      'target_database_id' => 'required|integer'
     ]);
 
-    $targetDbId = session('database_id');
-    $targetDbName = session('database_name');
-
-    if (!$targetDbId || !$targetDbName) {
-      return redirect()->route('migrate.index')->with('error', 'Please select a target database first.');
-    }
-
-    // Re-open database to ensure fresh session and valid host
+    $targetDbId = $request->input('target_database_id');
+    
+    // Get database info from Accurate API and open fresh session for target database
     try {
       $dbInfo = $this->accurateService->openDatabaseById($targetDbId);
       if (!$dbInfo) {
-        Log::error('MIGRATION_FAILED_TO_REOPEN_DATABASE', [
-          'user_id' => Auth::id(),
-          'target_database_id' => $targetDbId,
-        ]);
         return redirect()->route('migrate.index')->with('error', 'Failed to connect to target database. Please try again.');
       }
-
-      // Update session with fresh database info
-      session([
-        'accurate_database' => $dbInfo,
-        'database_id' => $targetDbId,
-        'database_name' => $targetDbName,
-      ]);
+      $targetDbName = $dbInfo['name'] ?? 'Unknown Database';
     } catch (\Exception $e) {
-      Log::error('MIGRATION_DATABASE_REOPEN_ERROR', [
-        'error' => $e->getMessage(),
-        'database_id' => $targetDbId,
-      ]);
       return redirect()->route('migrate.index')->with('error', 'Failed to connect to database: ' . $e->getMessage());
     }
 
@@ -224,7 +206,7 @@ class DataMigrateController extends Controller
           $chunkTransactions = array_chunk($moduleTransactions->all(), 100);
 
           foreach ($chunks as $chunkIndex => $chunkData) {
-            $result = $this->accurateService->bulkSaveToAccurate($endpoint, $chunkData);
+            $result = $this->accurateService->bulkSaveToAccurate($endpoint, $chunkData, $dbInfo);
             $isOverallSuccess = isset($result['s']) && $result['s'] === true;
             $itemResults = $result['d'] ?? [];
 

@@ -68,6 +68,16 @@
         },
 
         async migrateSelected() {
+            // Validate target database is selected
+            const targetDbSelect = document.getElementById('targetDatabaseSelect');
+            if (!targetDbSelect || !targetDbSelect.value) {
+                alert('Please select a target database first!');
+                return;
+            }
+            
+            // Set target database ID in hidden form
+            document.getElementById('targetDbIdInput').value = targetDbSelect.value;
+            
             this.migrating = true;
             this.progress = 0;
             this.currentStatus = 'Preparing migration...';
@@ -106,73 +116,83 @@
                             d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" />
                     </svg>
                     <div class="flex flex-col">
-                        <p class="text-white font-normal text-xs md:text-sm tracking-wide">Source Database</p>
-                        <p class="text-white text-sm md:text-base lg:text-lg font-semibold">Select database to migrate from</p>
+                        <p class="text-white font-normal text-xs md:text-sm tracking-wide">Source Database (Current Session)</p>
+                        <p class="text-white text-sm md:text-base lg:text-lg font-semibold">Data captured from this database</p>
                     </div>
                 </div>
 
                 <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                    <form id="dbSelectForm" action="{{ route('database.select') }}" method="POST" class="w-full flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                        @csrf
-                        <input type="hidden" name="selected_db_json" id="selectedDbInput">
-                        
-                        <div x-data="{ 
-                            open: false, 
-                            selected: @js($current_database_name ?? 'Select Database'),
-                            loading: false,
-                            selectDb(dbId, dbAlias, dbData) {
-                                this.selected = dbAlias;
-                                this.open = false;
-                                this.loading = true;
-                                document.getElementById('selectedDbInput').value = JSON.stringify(dbData);
-                                document.getElementById('dbSelectForm').submit();
-                            }
-                        }" class="relative w-full">
-                            <button @click="open = !open" type="button" :disabled="loading"
-                                class="bg-white/20 backdrop-blur-md border border-white/30 text-white text-xs md:text-sm rounded-lg focus:ring-white/50 focus:border-white/50 w-full p-2 md:p-2.5 text-left flex items-center justify-between disabled:opacity-50 disabled:cursor-not-allowed">
-                                <span x-show="!loading" x-text="selected"></span>
-                                <span x-show="loading" class="flex items-center gap-2">
-                                    <svg class="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                    </svg>
-                                    Switching database...
-                                </span>
-                                <svg x-show="!loading" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                                    stroke-width="1.5" stroke="currentColor" class="size-5 transition-transform"
-                                    :class="{ 'rotate-180': open }">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
-                                </svg>
-                            </button>
-
-                            <div x-show="open" @click.away="open = false" x-cloak
-                                x-transition:enter="transition ease-out duration-200"
-                                x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
-                                x-transition:leave="transition ease-in duration-150"
-                                x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
-                                class="absolute z-[999] w-full mt-2 bg-white border border-white/30 rounded-lg shadow-lg overflow-hidden max-h-60 overflow-y-auto">
-                                <ul class="py-1">
-                                    @forelse($databases as $db)
-                                    <li @click="selectDb({{ $db['id'] }}, '{{ $db['alias'] }}', {{ json_encode($db) }})"
-                                        :class="selected === '{{ $db['alias'] }}' ? 'bg-blue-50' : ''"
-                                        class="px-4 py-2 text-black text-sm hover:bg-gray-100 cursor-pointer transition font-medium flex items-center justify-between">
-                                        <span>{{ $db['alias'] }}</span>
-                                        <svg x-show="selected === '{{ $db['alias'] }}'" xmlns="http://www.w3.org/2000/svg"
-                                            fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"
-                                            class="size-5 text-blue-600">
-                                            <path stroke-linecap="round" stroke-linejoin="round"
-                                                d="m4.5 12.75 6 6 9-13.5" />
-                                        </svg>
-                                    </li>
-                                    @empty
-                                    <li class="px-4 py-3 text-gray-500 text-sm text-center">
-                                        No databases available
-                                    </li>
-                                    @endforelse
-                                </ul>
-                            </div>
+                    <div class="bg-white/20 backdrop-blur-md border border-white/30 text-white text-xs md:text-sm rounded-lg w-full p-2 md:p-2.5 flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-4">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" />
+                            </svg>
+                            <span class="font-medium">{{ $current_database_name ?? 'No database selected' }}</span>
                         </div>
-                    </form>
+                        <a href="{{ route('modules.index') }}" class="text-white/80 hover:text-white text-xs underline">
+                            Change
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex flex-col gap-4 md:gap-5 w-full lg:w-auto">
+                <div class="flex items-center gap-3 md:gap-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                        stroke="#FFFFFF" class="w-5 h-5 md:w-6 md:h-6 flex-shrink-0">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                            d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                    </svg>
+                    <div class="flex flex-col">
+                        <p class="text-white font-normal text-xs md:text-sm tracking-wide">Target Database</p>
+                        <p class="text-white text-sm md:text-base lg:text-lg font-semibold">Select database to migrate to</p>
+                    </div>
+                </div>
+
+                <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                    <div x-data="{ 
+                        open: false, 
+                        selected: 'Select Target Database',
+                        selectedId: null
+                    }" class="relative w-full">
+                        <input type="hidden" id="targetDatabaseSelect" x-model="selectedId">
+                        <button @click="open = !open" type="button"
+                            class="bg-white/20 backdrop-blur-md border border-white/30 text-white text-xs md:text-sm rounded-lg focus:ring-white/50 focus:border-white/50 w-full p-2 md:p-2.5 text-left flex items-center justify-between">
+                            <span x-text="selected"></span>
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                stroke-width="1.5" stroke="currentColor" class="size-5 transition-transform"
+                                :class="{ 'rotate-180': open }">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+                            </svg>
+                        </button>
+
+                        <div x-show="open" @click.away="open = false" x-cloak
+                            x-transition:enter="transition ease-out duration-200"
+                            x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
+                            x-transition:leave="transition ease-in duration-150"
+                            x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
+                            class="absolute z-[999] w-full mt-2 bg-white border border-white/30 rounded-lg shadow-lg overflow-hidden max-h-60 overflow-y-auto">
+                            <ul class="py-1">
+                                @forelse($databases as $db)
+                                <li @click="selected = '{{ $db['alias'] }}'; selectedId = {{ $db['id'] }}; open = false"
+                                    :class="selectedId === {{ $db['id'] }} ? 'bg-blue-50' : ''"
+                                    class="px-4 py-2 text-black text-sm hover:bg-gray-100 cursor-pointer transition font-medium flex items-center justify-between">
+                                    <span>{{ $db['alias'] }}</span>
+                                    <svg x-show="selectedId === {{ $db['id'] }}" xmlns="http://www.w3.org/2000/svg"
+                                        fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"
+                                        class="size-5 text-blue-600">
+                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                            d="m4.5 12.75 6 6 9-13.5" />
+                                    </svg>
+                                </li>
+                                @empty
+                                <li class="px-4 py-3 text-gray-500 text-sm text-center">
+                                    No databases available
+                                </li>
+                                @endforelse
+                            </ul>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -185,6 +205,49 @@
                 <div class="flex flex-col">
                     <p class="text-white font-medium text-xs md:text-sm">Ready to Migrate</p>
                     <p class="text-2xl md:text-3xl font-bold text-white self-end">{{ $readyToMigrate }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Target Database Info Alert -->
+        <div x-data="{ 
+            targetDbName: '',
+            showAlert: false,
+            databases: {{ Js::from($databases) }},
+            updateAlert() {
+                const select = document.getElementById('targetDatabaseSelect');
+                if (select && select.value) {
+                    const selectedDb = this.databases.find(db => db.id == select.value);
+                    if (selectedDb) {
+                        this.targetDbName = selectedDb.alias;
+                        this.showAlert = true;
+                    } else {
+                        this.showAlert = false;
+                    }
+                } else {
+                    this.showAlert = false;
+                }
+            }
+        }" 
+        @click.window="updateAlert()"
+        x-init="
+            const select = document.getElementById('targetDatabaseSelect');
+            if (select) {
+                const observer = new MutationObserver(() => { updateAlert(); });
+                observer.observe(select, { attributes: true, attributeFilter: ['x-model'] });
+            }
+        ">
+            <div x-show="showAlert" x-cloak x-transition
+                class="bg-green-50 border border-green-200 flex flex-col sm:flex-row gap-3 p-4 rounded-lg">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6 flex-shrink-0 text-green-600">
+                    <path fill-rule="evenodd" d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12Zm13.36-1.814a.75.75 0 1 0-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 0 0-1.06 1.06l2.25 2.25a.75.75 0 0 0 1.14-.094l3.75-5.25Z" clip-rule="evenodd" />
+                </svg>
+                <div class="flex flex-col gap-1">
+                    <p class="text-base text-green-800 font-medium">Target Database Selected</p>
+                    <p class="text-lg text-green-900 font-bold" x-text="targetDbName"></p>
+                    <p class="text-green-700 font-normal text-sm">
+                        Transactions will be migrated to this database.
+                    </p>
                 </div>
             </div>
         </div>
@@ -321,21 +384,6 @@
                             <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
                         </svg>
                     </button>
-                </div>
-            </div>
-        @elseif($current_database_name)
-            <div class="bg-green-50 border border-green-200 flex flex-col sm:flex-row gap-3 p-4 rounded-lg">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="green" class="size-6 flex-shrink-0">
-                    <path fill-rule="evenodd"
-                        d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12Zm13.36-1.814a.75.75 0 1 0-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 0 0-1.06 1.06l2.25 2.25a.75.75 0 0 0 1.14-.094l3.75-5.25Z"
-                        clip-rule="evenodd" />
-                </svg>
-                <div class="flex flex-col gap-1">
-                    <p class="text-base text-green-800 font-medium">Connected to</p>
-                    <p class="text-lg text-green-800 font-bold">{{ $current_database_name }}</p>
-                    <p class="text-green-800 font-normal text-sm">
-                        Showing transactions from this database.
-                    </p>
                 </div>
             </div>
         @endif
@@ -979,6 +1027,7 @@
             <!-- Hidden form for bulk migrate -->
             <form x-ref="migrateForm" action="{{ route('migrate.toAccurate') }}" method="POST" class="hidden">
                 @csrf
+                <input type="hidden" name="target_database_id" id="targetDbIdInput">
                 <template x-for="id in selected" :key="id">
                     <input type="hidden" name="ids[]" :value="id">
                 </template>
