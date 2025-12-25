@@ -64,7 +64,7 @@ class AccurateService
   }
 
   // ===BULK SAVE TO ACCURATE===
-  public function bulkSaveToAccurate(string $endpoint, array $data) {
+  public function bulkSaveToAccurate(string $endpoint, array $data, ?array $targetDbInfo = null) {
     // Execution time 10 minutes untuk large data (prevent something worse)
     set_time_limit(600);
     if (
@@ -72,11 +72,14 @@ class AccurateService
       str_contains($endpoint, 'price-category') || 
       str_contains($endpoint, 'work-order') || 
       str_contains($endpoint, 'bill-of-material')) {
-      return $this->saveOneByOne($endpoint, $data);
+      return $this->saveOneByOne($endpoint, $data, $targetDbInfo);
     }
 
+    // Determine which client to use: target database or session database
+    $client = $targetDbInfo ? $this->dataClientForDatabase($targetDbInfo) : $this->dataClient();
+
     if (str_contains($endpoint, '/tax/')) {
-      $data = array_map(function ($item) {
+      $data = array_map(function ($item) use ($client) {
         $salesTaxGlAccountId = $item['salesTaxGlAccountId'] ?? null;
         $purchaseTaxGlAccountId = $item['purchaseTaxGlAccountId'] ?? null;
 
@@ -89,7 +92,7 @@ class AccurateService
 
         if ($salesTaxGlAccountId !== null) {
           try {
-            $response = $this->dataClient()->get('/api/glaccount/detail.do', [
+            $response = $client->get('/api/glaccount/detail.do', [
               'id' => $salesTaxGlAccountId
             ]);
             if ($response->successful() && isset($response->json()['d']['no'])) {
@@ -101,7 +104,7 @@ class AccurateService
 
         if ($purchaseTaxGlAccountId !== null) {
           try {
-            $response = $this->dataClient()->get('/api/glaccount/detail.do', [
+            $response = $client->get('/api/glaccount/detail.do', [
               'id' => $purchaseTaxGlAccountId
             ]);
             if ($response->successful() && isset($response->json()['d']['no'])) {
@@ -122,25 +125,32 @@ class AccurateService
     $requestBody = [
       'data' => $cleanedData
     ];
-    $response = $this->dataClient()->post($endpoint, $requestBody);
+    $response = $client->post($endpoint, $requestBody);
     $responseData = $response->json();
-    $this->storeNumberMappings($endpoint, $data, $responseData);
+    $this->storeNumberMappings($endpoint, $data, $responseData, $targetDbInfo);
     return $responseData;
   }
 
   // ===STORE NUMBER MAPPINGS===
-  protected function storeNumberMappings(string $endpoint, array $originalData, array $responseData): void {
+  protected function storeNumberMappings(string $endpoint, array $originalData, array $responseData, ?array $targetDbInfo = null): void {
     if (!isset($responseData['s']) || $responseData['s'] !== true) {
       return;
     }
-    $accurateDatabaseId = session('accurate_database.id') ?? null;
-    if (!$accurateDatabaseId) {
-      $dbId = session('database_id');
-      if ($dbId) {
-        $accurateDb = \App\Models\AccurateDatabase::where('db_id', $dbId)->first();
-        $accurateDatabaseId = $accurateDb?->id;
+    
+    // If targetDbInfo is provided, use its database ID, otherwise use session
+    if ($targetDbInfo && isset($targetDbInfo['id'])) {
+      $accurateDatabaseId = $targetDbInfo['id'];
+    } else {
+      $accurateDatabaseId = session('accurate_database.id') ?? null;
+      if (!$accurateDatabaseId) {
+        $dbId = session('database_id');
+        if ($dbId) {
+          $accurateDb = \App\Models\AccurateDatabase::where('db_id', $dbId)->first();
+          $accurateDatabaseId = $accurateDb?->id;
+        }
       }
-    }   
+    }
+    
     if (!$accurateDatabaseId) {
       return;
     }
@@ -169,9 +179,12 @@ class AccurateService
   }
 
   // ===CASE JIKA MODULE HANYA BISA SAVE.DO===
-  protected function saveOneByOne(string $endpoint, array $data) {
+  protected function saveOneByOne(string $endpoint, array $data, ?array $targetDbInfo = null) {
     // Execution time 10 minutes untuk large data (prevent something worse)
     set_time_limit(600);
+
+    // Determine which client to use
+    $client = $targetDbInfo ? $this->dataClientForDatabase($targetDbInfo) : $this->dataClient();
 
     $results = [];
     $successCount = 0;
@@ -189,7 +202,7 @@ class AccurateService
       $cleanedItem = $this->cleanDataItem($item, $endpoint);
 
       try {
-        $response = $this->dataClient()->post($saveEndpoint, $cleanedItem);
+        $response = $client->post($saveEndpoint, $cleanedItem);
         $result = $response->json();
         $results[] = $result;
 
@@ -581,6 +594,26 @@ class AccurateService
       ])
       ->timeout(600) // Set timeout to 10 minutes for large data operations
       ->connectTimeout(60) // Set connection timeout to 60 seconds
+      ->acceptJson()
+      ->baseUrl($host . '/accurate');
+  }
+
+  // ===DATA CLIENT FOR SPECIFIC DATABASE===
+  protected function dataClientForDatabase(array $dbInfo) {
+    if (!session()->has('accurate_access_token')) {
+      throw new Exception('Token Akses Accurate tidak ditemukan di session.');
+    }
+
+    $host = $dbInfo['host'];
+    $sessionId = $dbInfo['session'];
+    $accessToken = session('accurate_access_token');
+
+    return Http::withToken($accessToken)
+      ->withHeaders([
+        'X-Session-ID' => $sessionId,
+      ])
+      ->timeout(600)
+      ->connectTimeout(60)
       ->acceptJson()
       ->baseUrl($host . '/accurate');
   }

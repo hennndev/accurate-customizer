@@ -33,13 +33,16 @@ class AccurateController extends Controller
         }
 
         try {
-            $clientId = env('ACCURATE_CLIENT_ID'); // <-- Kembali baca dari .env
-            $clientSecret = env('ACCURATE_CLIENT_SECRET'); // <-- Kembali baca dari .env
+            $clientId = env('ACCURATE_CLIENT_ID');
+            $clientSecret = env('ACCURATE_CLIENT_SECRET');
             $authHeader = base64_encode($clientId . ':' . $clientSecret);
 
             $response = Http::asForm()->withHeaders([
                 'Authorization' => 'Basic ' . $authHeader,
-            ])->post(env('ACCURATE_API_URL') . '/oauth/token', [
+            ])
+            ->timeout(30)
+            ->retry(3, 1000) // Retry 3x with 1 second delay
+            ->post(env('ACCURATE_API_URL') . '/oauth/token', [
                 'grant_type' => 'authorization_code',
                 'code' => $request->code,
                 'redirect_uri' => route('accurate.callback'),
@@ -58,7 +61,16 @@ class AccurateController extends Controller
 
             return redirect()->route('database.selection');
 
+        } catch (\Illuminate\Http\Client\ConnectionException $e) {
+            Log::error('ACCURATE_OAUTH_CONNECTION_ERROR', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            return redirect()->route('settings.accurate')->with('error', 'Tidak dapat terhubung ke server Accurate. Periksa koneksi internet Anda atau coba lagi nanti.');
         } catch (Exception $e) {
+            Log::error('ACCURATE_OAUTH_GENERAL_ERROR', [
+                'error' => $e->getMessage()
+            ]);
             return redirect()->route('settings.accurate')->with('error', $e->getMessage());
         }
     }
