@@ -14,8 +14,6 @@ class DatabaseSelectionController extends Controller
   {
     try {
       $databases = $accurate->getDatabaseList();
-      Log::info('ACCURATE_DB_LIST_RESPONSE', $databases);
-
       if (count($databases) === 1) {
         // Memanggil method openDatabaseById untuk mendapatkan host dan session
         $dbDetail = $accurate->openDatabaseById($databases[0]['id']);
@@ -59,9 +57,6 @@ class DatabaseSelectionController extends Controller
         'database_id' => $dbData['id'],
         'database_name' => $dbData['alias'],
       ]);
-
-      Log::info('DB_SELECTION_SUCCESS', ['db_id' => $dbData['id'], 'db_name' => $dbData['alias']]);
-
       return $this->handleRedirect($request, 'success', 'Successfully connected to ' . $dbData['alias']);
     } catch (Exception $e) {
       Log::error('DB_SELECTION_ERROR', ['message' => $e->getMessage()]);
@@ -69,9 +64,6 @@ class DatabaseSelectionController extends Controller
     }
   }
 
-  /**
-   * Handle redirect based on the previous URL
-   */
   private function handleRedirect(Request $request, string $type, string $message)
   {
     $previousUrl = url()->previous();
