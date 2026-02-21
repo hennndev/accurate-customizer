@@ -2,9 +2,6 @@
 
 namespace App\Modules\Handlers;
 
-use Illuminate\Support\Facades\Log;
-use App\Services\AccurateService;
-
 class JournalVoucherHandler extends BaseHandler
 {
     public function transformDetail(array &$detailData, array $sharedContext, array $meta = []): void
@@ -29,12 +26,6 @@ class JournalVoucherHandler extends BaseHandler
         if ($foundBranchName !== null) {
             unset($detailData['branchId']);
             $detailData['branchName'] = $foundBranchName;
-        } else {
-            Log::warning('JOURNAL_VOUCHER_BRANCH_NOT_FOUND', [
-                'item_id' => $meta['itemId'] ?? null,
-                'root_branch_id' => $rootBranchId,
-                'detail_count' => count($detailData['detailJournalVoucher'] ?? []),
-            ]);
-        }
+        } 
     }
 }

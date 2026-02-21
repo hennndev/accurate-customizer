@@ -5,10 +5,12 @@ namespace App\Modules;
 use App\Modules\Contracts\ModuleHandler;
 use App\Modules\Handlers\BaseHandler;
 use App\Modules\Handlers\BankTransferHandler;
+use App\Modules\Handlers\BillOfMaterialHandler;
 use App\Modules\Handlers\JournalVoucherHandler;
 use App\Modules\Handlers\CustomerHandler;
 use App\Modules\Handlers\DeliveryOrderHandler;
 use App\Modules\Handlers\ItemTransferHandler;
+use App\Modules\Handlers\MaterialSlipHandler;
 use App\Modules\Handlers\PurchaseInvoiceHandler;
 use App\Modules\Handlers\PurchaseOrderHandler;
 use App\Modules\Handlers\PurchasePaymentHandler;
@@ -42,6 +44,8 @@ class ModuleManager
             'sales-receipt' => new SalesReceiptHandler(),
             'sales-return' => new SalesReturnHandler(),
             'delivery-order' => new DeliveryOrderHandler(),
+            'bill-of-material' => new BillOfMaterialHandler(),
+            // 'material-slip' => new MaterialSlipHandler(),
             default => new BaseHandler(),
         };
     }
@@ -96,6 +100,12 @@ class ModuleManager
         if (str_contains($endpoint, '/delivery-order/')) {
             return new DeliveryOrderHandler();
         }
+        if (str_contains($endpoint, '/bill-of-material/')) {
+            return new BillOfMaterialHandler();
+        }
+        // if (str_contains($endpoint, '/material-slip/')) {
+        //     return new MaterialSlipHandler();
+        // }
         return new BaseHandler();
     }
 }

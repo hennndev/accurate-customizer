@@ -9,7 +9,8 @@ use Illuminate\Support\Facades\Log;
 class AccurateService
 {
   // ===GET DATABASE LIST===
-  public function getDatabaseList(): array {
+  public function getDatabaseList(): array
+  {
     if (!session()->has('accurate_access_token')) {
       throw new Exception('Tidak bisa mengambil daftar database tanpa Access Token.');
     }
@@ -20,7 +21,7 @@ class AccurateService
         return $cache['data'];
       }
     }
-    
+
     try {
       $response = Http::withToken(session('accurate_access_token'))
         ->timeout(120) // Set timeout to 2 minutes for slow API connections
@@ -30,7 +31,7 @@ class AccurateService
       if ($response->failed()) {
         throw new Exception("Gagal mendapatkan daftar database dari Accurate.");
       }
-      
+
       $databases = $response->json()['d'] ?? [];
       session([
         'accurate_database_list_cache' => [
@@ -47,13 +48,14 @@ class AccurateService
         'database_id',
         'accurate_host'
       ]);
-      
+
       throw new Exception('Koneksi ke Accurate gagal. Kemungkinan server sedang maintenance. Silakan login kembali.');
     }
   }
 
   // ===GET DATABASE HOST===
-  public function getDatabaseHost() {
+  public function getDatabaseHost()
+  {
     $response = $this->client()->post('/api/api-token.do');
     if ($response->failed() || !isset($response->json()['d']['database']['host'])) {
       throw new Exception("Gagal mendapatkan host database dari Accurate.");
@@ -64,14 +66,16 @@ class AccurateService
   }
 
   // ===BULK SAVE TO ACCURATE===
-  public function bulkSaveToAccurate(string $endpoint, array $data, ?array $targetDbInfo = null) {
+  public function bulkSaveToAccurate(string $endpoint, array $data, ?array $targetDbInfo = null)
+  {
     // Execution time 10 minutes untuk large data (prevent something worse)
-    set_time_limit(600);
+    set_time_limit(1800);
     if (
-      str_contains($endpoint, 'warehouse') || 
-      str_contains($endpoint, 'price-category') || 
-      str_contains($endpoint, 'work-order') || 
-      str_contains($endpoint, 'bill-of-material')) {
+      str_contains($endpoint, 'warehouse') ||
+      str_contains($endpoint, 'price-category') ||
+      str_contains($endpoint, 'work-order') ||
+      str_contains($endpoint, 'bill-of-material')
+    ) {
       return $this->saveOneByOne($endpoint, $data, $targetDbInfo);
     }
 
@@ -132,11 +136,12 @@ class AccurateService
   }
 
   // ===STORE NUMBER MAPPINGS===
-  protected function storeNumberMappings(string $endpoint, array $originalData, array $responseData, ?array $targetDbInfo = null): void {
+  protected function storeNumberMappings(string $endpoint, array $originalData, array $responseData, ?array $targetDbInfo = null): void
+  {
     if (!isset($responseData['s']) || $responseData['s'] !== true) {
       return;
     }
-    
+
     // If targetDbInfo is provided, use its database ID, otherwise use session
     if ($targetDbInfo && isset($targetDbInfo['id'])) {
       $accurateDatabaseId = $targetDbInfo['id'];
@@ -150,18 +155,18 @@ class AccurateService
         }
       }
     }
-    
+
     if (!$accurateDatabaseId) {
       return;
     }
     preg_match('/\/api\/([^\/]+)\//', $endpoint, $matches);
     $moduleSlug = $matches[1] ?? null;
-    
+
     if (!$moduleSlug) {
       return;
     }
-    
-    $results = $responseData['d'] ?? [];   
+
+    $results = $responseData['d'] ?? [];
     foreach ($results as $index => $result) {
       if (!isset($result['s']) || $result['s'] !== true) {
         continue;
@@ -179,7 +184,8 @@ class AccurateService
   }
 
   // ===CASE JIKA MODULE HANYA BISA SAVE.DO===
-  protected function saveOneByOne(string $endpoint, array $data, ?array $targetDbInfo = null) {
+  protected function saveOneByOne(string $endpoint, array $data, ?array $targetDbInfo = null)
+  {
     // Execution time 10 minutes untuk large data (prevent something worse)
     set_time_limit(600);
 
@@ -200,7 +206,6 @@ class AccurateService
 
     foreach ($data as $index => $item) {
       $cleanedItem = $this->cleanDataItem($item, $endpoint);
-
       try {
         $response = $client->post($saveEndpoint, $cleanedItem);
         $result = $response->json();
@@ -229,9 +234,10 @@ class AccurateService
   }
 
   // ===GET MAPPED NUMBER===
-  protected function getMappedNumber(string $moduleSlug, string $oldNumber): string {
+  protected function getMappedNumber(string $moduleSlug, string $oldNumber): string
+  {
     $accurateDatabaseId = session('accurate_database.id') ?? null;
-    
+
     if (!$accurateDatabaseId) {
       $dbId = session('database_id');
       if ($dbId && ($moduleSlug !== "employee")) {
@@ -239,9 +245,9 @@ class AccurateService
         $accurateDatabaseId = $accurateDb?->id;
       }
     }
-    
+
     if (!$accurateDatabaseId) {
-      return $oldNumber; 
+      return $oldNumber;
     }
     $newNumber = \App\Models\TransactionNumberMapping::getNewNumber(
       $accurateDatabaseId,
@@ -252,17 +258,21 @@ class AccurateService
   }
 
   // ===CLEAN DATA ITEM BEFORE SENDING TO ACCURATE===
-  protected function cleanDataItem(array $item, string $endpoint = ''): array {
+  protected function cleanDataItem(array $item, string $endpoint = ''): array
+  {
     $handler = \App\Modules\ModuleManager::forEndpoint($endpoint);
     $sharedContext = [];
     $meta = [];
     $handler->transformDetail($item, $sharedContext, $meta);
-    
+
     $cleaned = [];
 
     foreach ($item as $key => $value) {
       // ===START SKIP FIELDS===
       if ($key === 'id' || $key === 'vendorType') {
+        continue;
+      }
+      if ($key === 'itemId' && str_contains($endpoint, 'bill-of-material')) {
         continue;
       }
       if ($key === 'transactionType' && str_contains($endpoint, 'journal-voucher')) {
@@ -271,29 +281,69 @@ class AccurateService
       if ($key === 'locationId' && str_contains($endpoint, 'warehouse')) {
         continue;
       }
+      if ($key === 'branchId' && str_contains($endpoint, 'stock-opname-order')) {
+        continue;
+      }
       if (str_contains($endpoint, '/tax/') && ($key === 'salesTaxGlAccountId' || $key === 'purchaseTaxGlAccountId')) {
         continue;
       }
       if ($key === 'number' && (
-        str_contains($endpoint, 'delivery-order') || 
-        str_contains($endpoint, 'purchase-invoice') || 
-        str_contains($endpoint, 'purchase-order') || 
-        str_contains($endpoint, 'purchase-payment') || 
-        str_contains($endpoint, 'purchase-requisition') || 
-        str_contains($endpoint, 'purchase-return') || 
-        str_contains($endpoint, 'sales-invoice') || 
-        str_contains($endpoint, 'sales-order') || 
-        str_contains($endpoint, 'sales-quotation') || 
-        str_contains($endpoint, 'sales-receipt') || 
-        str_contains($endpoint, 'sales-return') || 
-        str_contains($endpoint, 'receive-item') || 
+        str_contains($endpoint, 'delivery-order') ||
+        str_contains($endpoint, 'purchase-invoice') ||
+        str_contains($endpoint, 'purchase-order') ||
+        str_contains($endpoint, 'purchase-payment') ||
+        str_contains($endpoint, 'purchase-requisition') ||
+        str_contains($endpoint, 'purchase-return') ||
+        str_contains($endpoint, 'sales-invoice') ||
+        str_contains($endpoint, 'sales-order') ||
+        str_contains($endpoint, 'sales-quotation') ||
+        str_contains($endpoint, 'sales-receipt') ||
+        str_contains($endpoint, 'sales-return') ||
+        str_contains($endpoint, 'receive-item') ||
+        str_contains($endpoint, 'job-order') ||
         str_contains($endpoint, 'item-transfer')
       )) {
         continue;
       }
+
+      if($key === 'apAccountId') {
+        continue;
+      }
       // ===END SKIP FIELDS===
 
+
+
+
+
       // ===START TRANSFORM FIELDS===
+      if (str_contains($endpoint, 'item')) {
+        if ($key == "itemCategory" && is_array($value)) {
+          if (isset($value['name'])) {
+            $cleaned['itemCategoryName'] = $value['name'];
+          }
+          continue;
+        }
+      }
+      if (str_contains($endpoint, 'stock-opname-order')) {
+        if ($key == "itemCategoryList" && is_array($value)) {
+          $cleaned['itemCategoryListName'] = $value;
+          continue;
+        }
+      }
+      if (str_contains($endpoint, 'material-slip')) {
+        if ($key == "branch" && is_array($value)) {
+          if (isset($value['name'])) {
+            $cleaned['branchName'] = $value['name'];
+          }
+          continue;
+        }
+        if ($key == "workOrder" && is_array($value)) {
+          if (isset($value['number'])) {
+            $cleaned['workOrderNumber'] = $value['number'];
+          }
+          continue;
+        }
+      }
       if ($key === 'vendor' && is_array($value) && (str_contains($endpoint, 'purchase-order') || str_contains($endpoint, 'purchase-invoice') || str_contains($endpoint, 'purchase-payment') || str_contains($endpoint, 'purchase-return') || str_contains($endpoint, 'receive-item'))) {
         if (isset($value['vendorNo'])) {
           $cleaned['vendorNo'] = $value['vendorNo'];
@@ -340,7 +390,17 @@ class AccurateService
       }
       if ($key === 'invoice' && is_array($value) && (str_contains($endpoint, 'purchase-return') || str_contains($endpoint, 'sales-return'))) {
         if (isset($value['number'])) {
-          $cleaned['invoiceNumber'] = $value['number'];
+          if (str_contains($endpoint, 'purchase-return')) {
+            $cleaned['invoiceNumber'] = $this->getMappedNumber(
+              'purchase-invoice',
+              $value['number']
+            );
+          } else {
+            $cleaned['invoiceNumber'] = $this->getMappedNumber(
+              'sales-invoice',
+              $value['number']
+            );
+          }
         }
         continue;
       }
@@ -365,6 +425,12 @@ class AccurateService
       if ($key === 'manufactureOrder' && is_array($value) && str_contains($endpoint, 'work-order')) {
         if (isset($value['number'])) {
           $cleaned['manufactureOrderNo'] = $value['number'];
+        }
+        continue;
+      }
+      if ($key === 'warehouse' && is_array($value) && str_contains($endpoint, 'stock-opname-order')) {
+        if (isset($value['name'])) {
+          $cleaned['warehouseName'] = $value['name'];
         }
         continue;
       }
@@ -412,17 +478,56 @@ class AccurateService
           if (is_array($subValue)) {
             $cleanedSubItem = $this->cleanDataItem($subValue, $endpoint);
             if (!empty($cleanedSubItem)) {
-              if ($key === 'detailItem' && (str_contains($endpoint, 'purchase-order') || str_contains($endpoint, 'purchase-invoice') || str_contains($endpoint, 'purchase-return') || str_contains($endpoint, 'receive-item') || str_contains($endpoint, 'sales-order') || str_contains($endpoint, 'sales-invoice') || str_contains($endpoint, 'job-order') || str_contains($endpoint, 'sales-quotation') || str_contains($endpoint, 'sales-return') || str_contains($endpoint, 'delivery-order') || str_contains($endpoint, 'item-transfer'))) {
+              if ($key === 'detailItem' && (
+                str_contains($endpoint, 'purchase-order') ||
+                str_contains($endpoint, 'purchase-invoice') ||
+                str_contains($endpoint, 'purchase-return') ||
+                str_contains($endpoint, 'receive-item') ||
+                str_contains($endpoint, 'sales-order') ||
+                str_contains($endpoint, 'sales-invoice') ||
+                str_contains($endpoint, 'job-order') ||
+                str_contains($endpoint, 'sales-quotation') ||
+                str_contains($endpoint, 'sales-return') ||
+                str_contains($endpoint, 'delivery-order') ||
+                str_contains($endpoint, 'material-slip') ||
+                str_contains($endpoint, 'finished-good-slip') ||
+                str_contains($endpoint, 'vendor-price') ||
+                str_contains($endpoint, 'purchase-requisition') ||
+                str_contains($endpoint, 'stock-opname-result') ||
+                str_contains($endpoint, 'item-transfer'))) {
                 if (isset($cleanedSubItem['item']['no'])) {
                   $cleanedSubItem['itemNo'] = $cleanedSubItem['item']['no'];
                   unset($cleanedSubItem['item']);
                 }
-                if (isset($cleanedSubItem['purchaseOrder']['number']) && !str_contains($endpoint, "receive-item")) {
+                if (isset($cleanedSubItem['warehouse']['name'])) {
+                  $cleanedSubItem['warehouseName'] = $cleanedSubItem['warehouse']['name'];
+                  unset($cleanedSubItem['warehouse']);
+                }
+                if (isset($cleanedSubItem['itemUnit']['name'])) {
+                  $cleanedSubItem['itemUnitName'] = $cleanedSubItem['itemUnit']['name'];
+                  unset($cleanedSubItem['itemUnit']);
+                  unset($cleanedSubItem['itemUnitId']);
+                }
+                if (isset($cleanedSubItem['purchaseOrder']['number'])) {
                   $cleanedSubItem['purchaseOrderNumber'] = $this->getMappedNumber(
                     'purchase-order',
                     $cleanedSubItem['purchaseOrder']['number']
                   );
                   unset($cleanedSubItem['purchaseOrder']);
+                }
+                if (isset($cleanedSubItem['salesOrder']['number'])) {
+                  $cleanedSubItem['salesOrderNumber'] = $this->getMappedNumber(
+                    'sales-order',
+                    $cleanedSubItem['salesOrder']['number']
+                  );
+                  unset($cleanedSubItem['salesOrder']);
+                }
+                if (isset($cleanedSubItem['salesQuotation']['number'])) {
+                  $cleanedSubItem['salesQuotationNumber'] = $this->getMappedNumber(
+                    'sales-quotation',
+                    $cleanedSubItem['salesQuotation']['number']
+                  );
+                  unset($cleanedSubItem['salesQuotation']);
                 }
                 // if (isset($cleanedSubItem['salesQuotation']['number'])) {
                 //   $cleanedSubItem['salesQuotationNumber'] = $this->getMappedNumber(
@@ -432,6 +537,7 @@ class AccurateService
                 //   unset($cleanedSubItem['salesQuotation']);
                 // }
               }
+
 
               if ($key === 'detailItem' && str_contains($endpoint, 'item-adjustment')) {
                 $adjustmentItem = [];
@@ -486,6 +592,15 @@ class AccurateService
                 }
               }
 
+              // ===ITEM===
+              if ($key === "detailOpenBalance" && str_contains($endpoint, "item")) {
+                if (isset($cleanedSubItem['warehouse']['name'])) {
+                  $cleanedSubItem['warehouseName'] = $cleanedSubItem['warehouse']['name'];
+                  unset($cleanedSubItem['warehouse']);
+                }
+              }
+
+              // ===WORK ORDER===
               if ($key === 'detailExpense' && (str_contains($endpoint, 'work-order') || str_contains($endpoint, 'bill-of-material') || str_contains($endpoint, 'purchase-invoice') || str_contains($endpoint, 'purchase-order'))) {
                 if (isset($cleanedSubItem['item']['no'])) {
                   $cleanedSubItem['itemNo'] = $cleanedSubItem['item']['no'];
@@ -532,9 +647,21 @@ class AccurateService
                 }
               }
 
-              if ($key === 'detailInvoice' && str_contains($endpoint, 'purchase-payment')) {
+              if ($key === 'detailInvoice' && (str_contains($endpoint, 'purchase-payment') || str_contains($endpoint, 'sales-receipt'))) {
                 if (isset($cleanedSubItem['invoice']['number'])) {
-                  $cleanedSubItem['invoiceNo'] = $cleanedSubItem['invoice']['number'];
+                  // $cleanedSubItem['invoiceNo'] = $cleanedSubItem['invoice']['number'];
+                  if (str_contains($endpoint, 'purchase-payment')) {
+                    $cleanedSubItem['invoiceNo'] = $this->getMappedNumber(
+                      'purchase-invoice',
+                      $cleanedSubItem['invoice']['number']
+                    );
+                  } else {
+                    $cleanedSubItem['invoiceNo'] = $this->getMappedNumber(
+                      'sales-invoice',
+                      $cleanedSubItem['invoice']['number']
+                    );
+                  }
+                  unset($cleanedSubItem['invoiceId']);
                   unset($cleanedSubItem['invoice']);
                 }
 
@@ -568,14 +695,15 @@ class AccurateService
         continue;
       }
       // TRANSFORM ARRAY ITEMS===
-  
+
       $cleaned[$key] = $value;
     }
     return $cleaned;
   }
 
   // ===DATA CLIENT WITH SESSION INFO===
-  protected function dataClient() {
+  protected function dataClient()
+  {
     if (!session()->has('accurate_access_token')) {
       throw new Exception('Token Akses Accurate tidak ditemukan di session.');
     }
@@ -599,7 +727,8 @@ class AccurateService
   }
 
   // ===DATA CLIENT FOR SPECIFIC DATABASE===
-  protected function dataClientForDatabase(array $dbInfo) {
+  protected function dataClientForDatabase(array $dbInfo)
+  {
     if (!session()->has('accurate_access_token')) {
       throw new Exception('Token Akses Accurate tidak ditemukan di session.');
     }
@@ -619,7 +748,8 @@ class AccurateService
   }
 
   // ===OPEN DATABASE BY ID===
-  public function openDatabaseById(int $dbId): ?array {
+  public function openDatabaseById(int $dbId): ?array
+  {
     if (!session()->has('accurate_access_token')) {
       throw new Exception('Tidak bisa membuka database tanpa Access Token.');
     }
@@ -652,7 +782,8 @@ class AccurateService
   }
 
   // ===CONVERT TAX GL ACCOUNT IDS TO NOS===
-  protected function convertTaxGlAccountIds(array $taxItem): array {
+  protected function convertTaxGlAccountIds(array $taxItem): array
+  {
     if (isset($taxItem['salesTaxGlAccountId']) && $taxItem['salesTaxGlAccountId'] !== null) {
       try {
         $accountNo = $this->getGlAccountNoFromSourceById($taxItem['salesTaxGlAccountId']);
@@ -688,7 +819,8 @@ class AccurateService
   }
 
   // ===GET GL ACCOUNT NO FROM SOURCE DB BY ID===
-  protected function getGlAccountNoFromSourceById(int $glAccountId): ?string {
+  protected function getGlAccountNoFromSourceById(int $glAccountId): ?string
+  {
     try {
       $glAccounts = $this->fetchModuleData('/api/glaccount/list.do', [
         'sp.pageSize' => 10000
@@ -707,7 +839,8 @@ class AccurateService
   }
 
   // ===FETCH MODULE DATA===
-  public function fetchModuleData(string $endpoint, array $params = []): array {
+  public function fetchModuleData(string $endpoint, array $params = []): array
+  {
     try {
       $allData = [];
       $pageNumber = 1;

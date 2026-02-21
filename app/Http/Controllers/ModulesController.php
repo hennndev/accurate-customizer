@@ -398,6 +398,20 @@ class ModulesController extends Controller
         'identifier_field' => 'name',
         'type' => 'master',
       ],
+      'material-slip' => [
+        'name' => 'Material Slip',
+        'list_endpoint' => '/api/material-slip/list.do',
+        'detail_endpoint' => '/api/material-slip/detail.do',
+        'identifier_field' => 'number',
+        'type' => 'transaction',
+      ],
+      'finished-good-slip' => [
+        'name' => 'Finished Good Slip',
+        'list_endpoint' => '/api/finished-good-slip/list.do',
+        'detail_endpoint' => '/api/finished-good-slip/detail.do',
+        'identifier_field' => 'number',
+        'type' => 'transaction',
+      ],
     ];
 
     if (!isset($moduleMapping[$module])) {
@@ -441,7 +455,7 @@ class ModulesController extends Controller
         $hasEndDate = $request->filled('end_date');
         
         if ($hasStartDate && $hasEndDate) {
-          $params['filter.transDate.op'] = 'RANGE';
+          $params['filter.transDate.op'] = 'BETWEEN';
           $params['filter.transDate.val[0]'] = Carbon::parse($request->start_date)->format('d/m/Y');;
           $params['filter.transDate.val[1]'] = Carbon::parse($request->end_date)->format('d/m/Y');;
         } elseif ($hasStartDate) {
@@ -453,7 +467,6 @@ class ModulesController extends Controller
         }
       }
       // ===END FILTER TANGGAL===
-
       $listData = $accurate->fetchModuleData($moduleInfo['list_endpoint'], $params);
 
       $hasData = count($listData) > 0;
@@ -580,11 +593,6 @@ class ModulesController extends Controller
         'failed_records' => $failedCount,
       ]);
     } catch (\Exception $e) {
-      Log::error('MODULE_CAPTURE_ERROR', [
-        'module' => $module,
-        'error' => $e->getMessage()
-      ]);
-
       // Create system log untuk error
       SystemLog::create([
         'event_type' => 'capture',

@@ -87,6 +87,50 @@ class DataMigrateController extends Controller
     return redirect()->route('migrate.index')->with('success', 'Transaction deleted successfully.');
   }
 
+  // UPDATE TRANSACTION DATA (JSON)
+  public function update(Request $request, Transaction $transaction)
+  {
+    $request->validate([
+      'data' => 'required|json'
+    ]);
+
+    try {
+      // Parse JSON to validate it's valid JSON
+      $jsonData = json_decode($request->data, true);
+      
+      if (json_last_error() !== JSON_ERROR_NONE) {
+        return redirect()->route('migrate.index')
+          ->with('error', 'Invalid JSON format: ' . json_last_error_msg());
+      }
+
+      $oldData = $transaction->data;
+      $transaction->data = json_encode($jsonData);
+      $transaction->save();
+
+      SystemLog::create([
+        'event_type' => 'update',
+        'module' => $transaction->module ? $transaction->module->name : 'N/A',
+        'status' => 'success',
+        'payload' => [
+          'transaction_no' => $transaction->transaction_no,
+          'transaction_id' => $transaction->id,
+          'old_data' => $oldData,
+          'new_data' => $transaction->data,
+          'updated_at' => now()->toDateTimeString(),
+        ],
+        'message' => "Transaction {$transaction->transaction_no} data updated successfully",
+        'user_id' => Auth::id(),
+      ]);
+
+      return redirect()->route('migrate.index')
+        ->with('success', 'Transaction data updated successfully.');
+        
+    } catch (\Exception $e) {
+      return redirect()->route('migrate.index')
+        ->with('error', 'Failed to update transaction: ' . $e->getMessage());
+    }
+  }
+
   // DELETE MULTIPLE TRANSACTIONS
   public function destroyMultiple(Request $request)
   {
@@ -171,10 +215,6 @@ class DataMigrateController extends Controller
         if (!$module) {
           $failedCount += $moduleTransactions->count();
           $errors[] = "Module not found for some transactions";
-          Log::error('MIGRATION_MODULE_NOT_FOUND', [
-            'module_slug' => $moduleSlug,
-            'transaction_count' => $moduleTransactions->count(),
-          ]);
           continue;
         }
 
@@ -383,13 +423,6 @@ class DataMigrateController extends Controller
 
       return redirect()->route('migrate.index')->with($status, $message);
     } catch (\Exception $e) {
-      Log::error('MIGRATION_PROCESS_ERROR', [
-        'user_id' => Auth::id(),
-        'target_database' => $targetDbName ?? 'N/A',
-        'error' => $e->getMessage(),
-        'trace' => $e->getTraceAsString(),
-      ]);
-
       return redirect()->route('migrate.index')->with('error', 'Migration failed: ' . $e->getMessage());
     }
   }

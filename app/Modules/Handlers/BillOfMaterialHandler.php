@@ -3,9 +3,8 @@
 namespace App\Modules\Handlers;
 
 use App\Services\AccurateService;
-use Illuminate\Support\Facades\Log;
 
-class SalesOrderHandler extends BaseHandler
+class BillOfMaterialHandler extends BaseHandler
 {
   public function preCapture(AccurateService $accurate, array &$sharedContext): void
   {
@@ -33,8 +32,5 @@ class SalesOrderHandler extends BaseHandler
         $detailData['branchName'] = $branchName;
       }
     }
-    // if (isset($detailData['number'])) {
-    //   unset($detailData['number']);
-    // }
   }
 }
