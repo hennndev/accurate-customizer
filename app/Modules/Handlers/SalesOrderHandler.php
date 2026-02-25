@@ -7,6 +7,28 @@ use Illuminate\Support\Facades\Log;
 
 class SalesOrderHandler extends BaseHandler
 {
+    protected array $allowedFields = [
+        'number',      // dibutuhkan oleh inject loop untuk UPDATE detection; di-strip oleh cleanDataItem sebelum kirim ke Accurate
+        'customerNo',
+        'customer',
+        'detailExpense',
+        'detailItem',
+        'branchName',
+        'cashDiscount',
+        'currencyCode',
+        'description',
+        'fobName',
+        'inclusiveTax',
+        'paymentTerm',
+        'poNumber',
+        'rate',
+        'shipDate',
+        'shipmentName',
+        'taxable',
+        'toAddress',
+        'transDate',
+    ];
+
   public function preCapture(AccurateService $accurate, array &$sharedContext): void
   {
     try {
@@ -24,17 +46,28 @@ class SalesOrderHandler extends BaseHandler
 
   public function transformDetail(array &$detailData, array $sharedContext, array $meta = []): void
   {
+    // Transform branchId → branchName
     $branchList = $sharedContext['branchList'] ?? [];
     if (isset($detailData['branchId']) && !empty($branchList)) {
       $branchId = $detailData['branchId'];
       if (isset($branchList[$branchId]['name'])) {
-        $branchName = $branchList[$branchId]['name'];
-        unset($detailData['branchId']);
-        $detailData['branchName'] = $branchName;
+        $detailData['branchName'] = $branchList[$branchId]['name'];
+      } else {
+        Log::warning('SALES_ORDER_BRANCH_NOT_FOUND_IN_LIST', [
+          'item_id'            => $meta['itemId'] ?? null,
+          'branch_id'          => $branchId,
+          'available_branches' => array_keys($branchList),
+        ]);
       }
     }
-    // if (isset($detailData['number'])) {
-    //   unset($detailData['number']);
-    // }
+
+    $filteredData = [];
+    foreach ($this->allowedFields as $field) {
+      if (array_key_exists($field, $detailData)) {
+        $filteredData[$field] = $detailData[$field];
+      }
+    }
+
+    $detailData = $filteredData;
   }
 }

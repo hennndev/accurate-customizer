@@ -5,40 +5,44 @@ namespace App\Modules\Handlers;
 use App\Services\AccurateService;
 use Illuminate\Support\Facades\Log;
 
-class CustomerHandler extends BaseHandler
+class VendorHandler extends BaseHandler
 {
-    /**
-     * Fields yang ingin disimpan untuk module Customer
-     */
     protected array $allowedFields = [
         'id',
         'transDate',
+        'vendorNo',
+        'name',
+        'address',
+        'mobilePhone',
+        'workPhone',
+        'email',
+        'fax',
+        'taxNumber',
+        'npwpNo',
         'billCity',
         'billProvince',
         'billCountry',
         'billStreet',
         'billZipCode',
-        'categoryName',
-        'customerTaxType',
-        'description',
-        'detailContact',
-        'detailOpenBalance',
-        'detailShipAddress',
-        'fax',
-        'mobilPhone',
-        'npwpNo',
         'shipCity',
         'shipProvince',
         'shipCountry',
         'shipStreet',
         'shipZipCode',
         'shipSameAsBill',
-        'customerNo',
-        'name',
-        'address',
-        'workPhone',
-        'email',
-        'taxNumber',
+        'categoryName',
+        'currencyCode',
+        'description',
+        'detailContact',
+        'detailOpenBalance',
+        'website',
+        'vendorTaxType',
+        'taxCountry',
+        'taxProvince',
+        'taxCity',
+        'taxStreet',
+        'taxZipCode',
+        'taxSameAsBill',
         'branchName', // hasil transform dari branchId
     ];
 
@@ -69,21 +73,20 @@ class CustomerHandler extends BaseHandler
             $branchId = $detailData['branchId'];
             if (isset($branchList[$branchId]['name'])) {
                 $detailData['branchName'] = $branchList[$branchId]['name'];
-                Log::info('CUSTOMER_BRANCH_TRANSFORMED', [
-                    'item_id' => $meta['itemId'] ?? null,
-                    'old_branch_id' => $branchId,
-                    'new_branch_name' => $detailData['branchName'],
+                Log::info('VENDOR_BRANCH_TRANSFORMED', [
+                    'item_id'          => $meta['itemId'] ?? null,
+                    'old_branch_id'    => $branchId,
+                    'new_branch_name'  => $detailData['branchName'],
                 ]);
             } else {
-                Log::warning('CUSTOMER_BRANCH_NOT_FOUND_IN_LIST', [
-                    'item_id' => $meta['itemId'] ?? null,
-                    'branch_id' => $branchId,
-                    'available_branches' => array_keys($branchList),
+                Log::warning('VENDOR_BRANCH_NOT_FOUND_IN_LIST', [
+                    'item_id'             => $meta['itemId'] ?? null,
+                    'branch_id'           => $branchId,
+                    'available_branches'  => array_keys($branchList),
                 ]);
             }
         }
 
-        // Filter hanya field yang dibutuhkan
         $filteredData = [];
         foreach ($this->allowedFields as $field) {
             if (array_key_exists($field, $detailData)) {
@@ -91,23 +94,21 @@ class CustomerHandler extends BaseHandler
             }
         }
 
-        // Log jika ada field penting yang missing
         $missingFields = array_diff($this->allowedFields, array_keys($filteredData));
         if (!empty($missingFields)) {
-            Log::warning('CUSTOMER_MISSING_FIELDS', [
-                'item_id' => $meta['itemId'] ?? $detailData['id'] ?? null,
+            Log::warning('VENDOR_MISSING_FIELDS', [
+                'item_id'        => $meta['itemId'] ?? $detailData['id'] ?? null,
                 'missing_fields' => $missingFields,
             ]);
         }
 
-        // Replace detailData dengan filtered data
         $detailData = $filteredData;
 
-        Log::info('CUSTOMER_DETAIL_FILTERED', [
-            'item_id' => $detailData['id'] ?? null,
-            'customer_no' => $detailData['customerNo'] ?? null,
+        Log::info('VENDOR_DETAIL_FILTERED', [
+            'item_id'      => $detailData['id'] ?? null,
+            'vendor_no'    => $detailData['vendorNo'] ?? null,
             'fields_count' => count($filteredData),
-            'fields' => array_keys($filteredData),
+            'fields'       => array_keys($filteredData),
         ]);
     }
 }

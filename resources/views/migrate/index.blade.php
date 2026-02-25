@@ -465,6 +465,78 @@
           </button>
         </div>
       </div>
+    @elseif(session('delete_success'))
+      <div x-data="{ show: true }"
+           x-show="show"
+           class="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg">
+        <div class="flex items-start justify-between gap-3">
+          <div class="flex items-start gap-3 flex-1">
+            <svg xmlns="http://www.w3.org/2000/svg"
+                 fill="none"
+                 viewBox="0 0 24 24"
+                 stroke-width="2"
+                 stroke="currentColor"
+                 class="w-5 h-5 flex-shrink-0 mt-0.5">
+              <path stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+            </svg>
+            <div class="flex-1">
+              <p class="font-semibold text-base">Transaksi Dihapus</p>
+              <p class="text-sm mt-1">{{ session('delete_success') }}</p>
+            </div>
+          </div>
+          <button @click="show = false"
+                  class="text-green-600 hover:text-green-800 flex-shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg"
+                 fill="none"
+                 viewBox="0 0 24 24"
+                 stroke-width="2"
+                 stroke="currentColor"
+                 class="w-5 h-5">
+              <path stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M6 18 18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    @elseif(session('edit_success'))
+      <div x-data="{ show: true }"
+           x-show="show"
+           class="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg">
+        <div class="flex items-start justify-between gap-3">
+          <div class="flex items-start gap-3 flex-1">
+            <svg xmlns="http://www.w3.org/2000/svg"
+                 fill="none"
+                 viewBox="0 0 24 24"
+                 stroke-width="2"
+                 stroke="currentColor"
+                 class="w-5 h-5 flex-shrink-0 mt-0.5">
+              <path stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+            </svg>
+            <div class="flex-1">
+              <p class="font-semibold text-base">Data Diperbarui</p>
+              <p class="text-sm mt-1">{{ session('edit_success') }}</p>
+            </div>
+          </div>
+          <button @click="show = false"
+                  class="text-green-600 hover:text-green-800 flex-shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg"
+                 fill="none"
+                 viewBox="0 0 24 24"
+                 stroke-width="2"
+                 stroke="currentColor"
+                 class="w-5 h-5">
+              <path stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M6 18 18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </div>
     @elseif(session('error'))
       <div x-data="{ show: true }"
            x-show="show"
@@ -790,7 +862,7 @@
              aria-labelledby="modal-title"
              role="dialog"
              aria-modal="true">
-          <div class="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+          <div class="flex items-center justify-center min-h-screen p-4">
             <!-- Background overlay -->
             <div x-show="showDeleteModal"
                  x-transition:enter="ease-out duration-300"
@@ -805,12 +877,12 @@
             <!-- Modal panel -->
             <div x-show="showDeleteModal"
                  x-transition:enter="ease-out duration-300"
-                 x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-                 x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
+                 x-transition:enter-start="opacity-0 scale-95"
+                 x-transition:enter-end="opacity-100 scale-100"
                  x-transition:leave="ease-in duration-200"
-                 x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100"
-                 x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-                 class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+                 x-transition:leave-start="opacity-100 scale-100"
+                 x-transition:leave-end="opacity-0 scale-95"
+                 class="relative bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all w-full max-w-lg">
               <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
                 <div class="sm:flex sm:items-start">
                   <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
@@ -1156,6 +1228,10 @@
                 </th>
                 <th class="p-2 md:p-4 text-center text-xs md:text-sm font-semibold text-gray-700">
                   Status</th>
+                <th class="p-2 md:p-4 text-center text-xs md:text-sm font-semibold text-gray-700">
+                  Push Status</th>
+                <th class="p-2 md:p-4 text-left text-xs md:text-sm font-semibold text-gray-700">
+                  Last Pushed</th>
                 <th class="p-2 md:p-4 text-left text-xs md:text-sm font-semibold text-gray-700">
                   Error Details</th>
                 <th class="p-2 md:p-4 text-center text-xs md:text-sm font-semibold text-gray-700">
@@ -1226,6 +1302,72 @@
                         </svg>
                         Failed
                       </span>
+                    @endif
+                  </td>
+                  <td class="p-2 md:p-4 text-center">
+                    @if ($transaction->push_status === 'pushed_create')
+                      <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                        <svg xmlns="http://www.w3.org/2000/svg"
+                             fill="none"
+                             viewBox="0 0 24 24"
+                             stroke-width="2"
+                             stroke="currentColor"
+                             class="size-3">
+                          <path stroke-linecap="round"
+                                stroke-linejoin="round"
+                                d="M12 4.5v15m7.5-7.5h-15" />
+                        </svg>
+                        Created
+                      </span>
+                    @elseif ($transaction->push_status === 'pushed_update')
+                      <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700">
+                        <svg xmlns="http://www.w3.org/2000/svg"
+                             fill="none"
+                             viewBox="0 0 24 24"
+                             stroke-width="2"
+                             stroke="currentColor"
+                             class="size-3">
+                          <path stroke-linecap="round"
+                                stroke-linejoin="round"
+                                d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+                        </svg>
+                        Updated
+                      </span>
+                    @elseif ($transaction->push_status === 'failed')
+                      <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                        <svg xmlns="http://www.w3.org/2000/svg"
+                             fill="none"
+                             viewBox="0 0 24 24"
+                             stroke-width="2"
+                             stroke="currentColor"
+                             class="size-3">
+                          <path stroke-linecap="round"
+                                stroke-linejoin="round"
+                                d="M6 18 18 6M6 6l12 12" />
+                        </svg>
+                        Failed
+                      </span>
+                    @else
+                      <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
+                        <svg xmlns="http://www.w3.org/2000/svg"
+                             fill="none"
+                             viewBox="0 0 24 24"
+                             stroke-width="2"
+                             stroke="currentColor"
+                             class="size-3">
+                          <path stroke-linecap="round"
+                                stroke-linejoin="round"
+                                d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                        </svg>
+                        Pending
+                      </span>
+                    @endif
+                  </td>
+                  <td class="p-2 md:p-4 text-xs md:text-sm text-gray-600">
+                    @if ($transaction->last_pushed_at)
+                      <span class="text-gray-700">{{ \Carbon\Carbon::parse($transaction->last_pushed_at)->format('Y-m-d H:i:s') }}</span>
+                    @else
+                      <span class="text-gray-400">-</span>
                     @endif
                   </td>
                   <td class="p-2 md:p-4 text-xs md:text-sm text-gray-600">
@@ -1389,7 +1531,7 @@
            aria-labelledby="modal-title"
            role="dialog"
            aria-modal="true">
-        <div class="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+        <div class="flex items-center justify-center min-h-screen p-4">
           <!-- Background overlay -->
           <div x-show="showSingleDeleteModal"
                x-transition:enter="ease-out duration-300"
@@ -1404,12 +1546,12 @@
           <!-- Modal panel -->
           <div x-show="showSingleDeleteModal"
                x-transition:enter="ease-out duration-300"
-               x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-               x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
+               x-transition:enter-start="opacity-0 scale-95"
+               x-transition:enter-end="opacity-100 scale-100"
                x-transition:leave="ease-in duration-200"
-               x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100"
-               x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-               class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+               x-transition:leave-start="opacity-100 scale-100"
+               x-transition:leave-end="opacity-0 scale-95"
+               class="relative bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all w-full max-w-lg">
             <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
               <div class="sm:flex sm:items-start">
                 <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">

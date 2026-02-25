@@ -84,7 +84,7 @@ class DataMigrateController extends Controller
       'user_id' => Auth::id(),
     ]);
 
-    return redirect()->route('migrate.index')->with('success', 'Transaction deleted successfully.');
+    return redirect()->route('migrate.index')->with('delete_success', "Transaction {$transactionNo} berhasil dihapus.");
   }
 
   // UPDATE TRANSACTION DATA (JSON)
@@ -123,7 +123,7 @@ class DataMigrateController extends Controller
       ]);
 
       return redirect()->route('migrate.index')
-        ->with('success', 'Transaction data updated successfully.');
+        ->with('edit_success', "Data transaksi {$transaction->transaction_no} berhasil diperbarui.");
         
     } catch (\Exception $e) {
       return redirect()->route('migrate.index')
@@ -162,7 +162,7 @@ class DataMigrateController extends Controller
       'user_id' => Auth::id(),
     ]);
 
-    return redirect()->route('migrate.index')->with('success', count($ids) . ' transaction(s) deleted successfully.');
+    return redirect()->route('migrate.index')->with('delete_success', count($ids) . ' transaksi berhasil dihapus: ' . implode(', ', $transactionNumbers) . '.');
   }
 
 
@@ -245,6 +245,16 @@ class DataMigrateController extends Controller
           $chunks = array_chunk($bulkData, 100);
           $chunkTransactions = array_chunk($moduleTransactions->all(), 100);
 
+          // Build lookup: transaction_no yang sudah pernah di-push sebelumnya (termasuk dari row lain)
+          // Cek seluruh transactions (bukan hanya yang dipilih) dengan module yang sama dan push_count > 0
+          $transactionNosInBatch = $moduleTransactions->pluck('transaction_no')->unique()->toArray();
+          $alreadyPushedNos = Transaction::where('module_id', $module->id)
+            ->whereIn('transaction_no', $transactionNosInBatch)
+            ->where('push_count', '>', 0)
+            ->pluck('transaction_no')
+            ->flip() // untuk O(1) lookup
+            ->toArray();
+
           foreach ($chunks as $chunkIndex => $chunkData) {
             $result = $this->accurateService->bulkSaveToAccurate($endpoint, $chunkData, $dbInfo);
             $isOverallSuccess = isset($result['s']) && $result['s'] === true;
@@ -255,10 +265,20 @@ class DataMigrateController extends Controller
             }
             if ($isOverallSuccess && empty($itemResults)) {
               foreach ($chunkTransactions[$chunkIndex] as $idx => $transaction) {
+                // Cek push_count row ini, ATAU apakah transaction_no ini sudah pernah di-push di row lain
+                $transaction->refresh();
+                $isFirstPush = $transaction->push_count === 0
+                  && !isset($alreadyPushedNos[$transaction->transaction_no]);
+                
                 $transaction->update([
                   'status' => 'success',
                   'migrated_at' => now(),
+                  'push_status' => $isFirstPush ? 'pushed_create' : 'pushed_update',
+                  'last_pushed_at' => now(),
+                  'push_count' => $transaction->push_count + 1,
                 ]);
+                // Mark transaction_no ini sebagai sudah pernah di-push untuk sisa batch ini
+                $alreadyPushedNos[$transaction->transaction_no] = true;
                 $successCount++;
                 $moduleResults[$module->name]['success']++;
               }
@@ -268,10 +288,20 @@ class DataMigrateController extends Controller
                 $itemResult = $itemResults[$idx] ?? null;
 
                 if ($itemResult && isset($itemResult['s']) && $itemResult['s'] === true) {
+                  // Cek push_count row ini, ATAU apakah transaction_no ini sudah pernah di-push di row lain
+                  $transaction->refresh();
+                  $isFirstPush = $transaction->push_count === 0
+                    && !isset($alreadyPushedNos[$transaction->transaction_no]);
+                  
                   $transaction->update([
                     'status' => 'success',
                     'migrated_at' => now(),
+                    'push_status' => $isFirstPush ? 'pushed_create' : 'pushed_update',
+                    'last_pushed_at' => now(),
+                    'push_count' => $transaction->push_count + 1,
                   ]);
+                  // Mark transaction_no ini sebagai sudah pernah di-push untuk sisa batch ini
+                  $alreadyPushedNos[$transaction->transaction_no] = true;
                   $successCount++;
                   $moduleResults[$module->name]['success']++;
                 } else {
@@ -292,6 +322,7 @@ class DataMigrateController extends Controller
                   $transaction->update([
                     'status' => 'failed',
                     'error_message' => $errorText,
+                    'push_status' => 'failed',
                   ]);
                   $failedCount++;
                   $moduleResults[$module->name]['failed']++;
@@ -364,6 +395,7 @@ class DataMigrateController extends Controller
           foreach ($moduleTransactions as $transaction) {
             $transaction->update([
               'status' => 'failed',
+              'push_status' => 'failed',
             ]);
             $failedCount++;
             $moduleResults[$module->name]['failed']++;
