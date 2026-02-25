@@ -79,6 +79,61 @@ class AccurateService
       return $this->saveOneByOne($endpoint, $data, $targetDbInfo);
     }
 
+    // Extract module from endpoint
+    preg_match('/\/api\/([^\/]+)\//', $endpoint, $matches);
+    $module = $matches[1] ?? null;
+
+    // Get accurate database ID
+    $accurateDatabaseId = $this->getAccurateDatabaseId($targetDbInfo);
+
+    // Check for existing entities and add IDs for update instead of create
+    if ($module && $accurateDatabaseId) {
+      $numberField = $this->getNumberFieldForModule($module, $data[0] ?? []);
+
+      if ($numberField) {
+        foreach ($data as &$item) {
+          $sourceIdentifier = $item[$numberField] ?? null;
+
+          if ($sourceIdentifier) {
+            $existingId = \App\Models\AccurateEntityMapping::getAccurateId(
+              $accurateDatabaseId,
+              $module,
+              $sourceIdentifier
+            );
+
+            if ($existingId) {
+              // When the number field IS 'id', preserve the original captured id
+              // so storeEntityMappings can still use it as the source identifier.
+              if ($numberField === 'id') {
+                $item['_sourceId'] = $item['id'];
+              }
+
+              // Add ID to trigger update instead of create
+              $item['id'] = $existingId;
+
+              // Add marker to identify this as update operation
+              $item['_isUpdate'] = true;
+
+              // IMPORTANT: Remove identifier field untuk update
+              // Accurate tidak mengizinkan perubahan no/number/vendorNo saat update.
+              // Exception: do NOT unset 'id' — it has already been replaced above.
+              if ($numberField !== 'id') {
+                unset($item[$numberField]);
+              }
+
+              Log::info("Entity already exists, will update", [
+                'module' => $module,
+                'identifier' => $sourceIdentifier,
+                'accurate_id' => $existingId,
+                'removed_field' => $numberField !== 'id' ? $numberField : '(none — id replaced)',
+              ]);
+            }
+          }
+        }
+        unset($item); // Break reference
+      }
+    }
+
     // Determine which client to use: target database or session database
     $client = $targetDbInfo ? $this->dataClientForDatabase($targetDbInfo) : $this->dataClient();
 
@@ -123,14 +178,27 @@ class AccurateService
       }, $data);
     }
     $cleanedData = array_map(function ($item) use ($endpoint) {
-      return $this->cleanDataItem($item, $endpoint);
+      // Check for explicit update marker (set when ID from mapping is added)
+      $isUpdate = isset($item['_isUpdate']) && $item['_isUpdate'] === true;
+      return $this->cleanDataItem($item, $endpoint, $isUpdate);
     }, $data);
 
     $requestBody = [
       'data' => $cleanedData
     ];
+    Log::info("body", ["body" => $requestBody]);
     $response = $client->post($endpoint, $requestBody);
     $responseData = $response->json();
+    Log::info("Received response from Accurate", [
+      'endpoint' => $endpoint,
+      'response' => $responseData
+    ]);
+
+    // Store entity mappings after successful save
+    if (isset($responseData['s']) && $responseData['s'] === true && $module && $accurateDatabaseId) {
+      $this->storeEntityMappings($module, $data, $responseData, $accurateDatabaseId);
+    }
+
     $this->storeNumberMappings($endpoint, $data, $responseData, $targetDbInfo);
     return $responseData;
   }
@@ -189,8 +257,56 @@ class AccurateService
     // Execution time 10 minutes untuk large data (prevent something worse)
     set_time_limit(600);
 
+    // Extract module from endpoint
+    preg_match('/\/api\/([^\/]+)\//', $endpoint, $matches);
+    $module = $matches[1] ?? null;
+
+    // Get accurate database ID
+    $accurateDatabaseId = $this->getAccurateDatabaseId($targetDbInfo);
+
     // Determine which client to use
     $client = $targetDbInfo ? $this->dataClientForDatabase($targetDbInfo) : $this->dataClient();
+
+    // Check for existing entities and add IDs for update
+    if ($module && $accurateDatabaseId) {
+      $numberField = $this->getNumberFieldForModule($module, $data[0] ?? []);
+
+      if ($numberField) {
+        foreach ($data as &$item) {
+          $sourceIdentifier = $item[$numberField] ?? null;
+
+          if ($sourceIdentifier) {
+            $existingId = \App\Models\AccurateEntityMapping::getAccurateId(
+              $accurateDatabaseId,
+              $module,
+              $sourceIdentifier
+            );
+
+            if ($existingId) {
+              // When the number field IS 'id', preserve the original captured id
+              if ($numberField === 'id') {
+                $item['_sourceId'] = $item['id'];
+              }
+
+              $item['id'] = $existingId;
+              $item['_isUpdate'] = true;
+
+              if ($numberField !== 'id') {
+                unset($item[$numberField]);
+              }
+
+              Log::info("Entity already exists (saveOneByOne), will update", [
+                'module' => $module,
+                'identifier' => $sourceIdentifier,
+                'accurate_id' => $existingId,
+                'removed_field' => $numberField !== 'id' ? $numberField : '(none — id replaced)',
+              ]);
+            }
+          }
+        }
+        unset($item); // Break reference
+      }
+    }
 
     $results = [];
     $successCount = 0;
@@ -205,7 +321,10 @@ class AccurateService
     }
 
     foreach ($data as $index => $item) {
-      $cleanedItem = $this->cleanDataItem($item, $endpoint);
+      // Check for explicit update marker (set when ID from mapping is added)
+      $isUpdate = isset($item['_isUpdate']) && $item['_isUpdate'] === true;
+      $cleanedItem = $this->cleanDataItem($item, $endpoint, $isUpdate);
+
       try {
         $response = $client->post($saveEndpoint, $cleanedItem);
         $result = $response->json();
@@ -213,6 +332,51 @@ class AccurateService
 
         if (isset($result['s']) && $result['s'] === true) {
           $successCount++;
+
+          // Store entity mapping for successful save
+          if ($module && $accurateDatabaseId) {
+            $numberField = $this->getNumberFieldForModule($module, $item);
+
+            // For 'id'-based modules the inject loop replaces $item['id'] with the
+            // Accurate entity ID; recover the original captured id from _sourceId.
+            if ($numberField === 'id' && isset($item['_sourceId'])) {
+              $sourceIdentifier = $item['_sourceId'];
+            } else {
+              $sourceIdentifier = $item[$numberField] ?? null;
+            }
+
+            $accurateId = $result['r']['id'] ?? null;
+            // Always use $sourceIdentifier as the mapping key (accurate_number) so
+            // getAccurateId() lookup on the next push finds the record correctly.
+            // Transaction modules get Accurate-assigned numbers different from source;
+            // using the API number would cause a lookup mismatch on second push.
+            $accurateNumber = $sourceIdentifier;
+
+            if ($sourceIdentifier && $accurateId) {
+              $wasUpdate = isset($item['_isUpdate']) && $item['_isUpdate'] === true;
+              
+              \App\Models\AccurateEntityMapping::storeMapping(
+                $accurateDatabaseId,
+                $module,
+                $sourceIdentifier,
+                $accurateId,
+                $accurateNumber,
+                [
+                  'synced_at' => now()->toIso8601String(),
+                  'endpoint' => $saveEndpoint,
+                  'operation' => $wasUpdate ? 'update' : 'create'
+                ]
+              );
+
+              // ===UPDATE TRANSACTION STATUS===
+              $this->updateTransactionStatus(
+                $sourceIdentifier,
+                $module,
+                $accurateDatabaseId,
+                $wasUpdate ? \App\Models\Transaction::STATUS_PUSHED_UPDATE : \App\Models\Transaction::STATUS_PUSHED_CREATE
+              );
+            }
+          }
         } else {
           $failedCount++;
         }
@@ -258,18 +422,52 @@ class AccurateService
   }
 
   // ===CLEAN DATA ITEM BEFORE SENDING TO ACCURATE===
-  protected function cleanDataItem(array $item, string $endpoint = ''): array
+  protected function cleanDataItem(array $item, string $endpoint = '', bool $isUpdate = false, bool $isSubItem = false): array
   {
-    $handler = \App\Modules\ModuleManager::forEndpoint($endpoint);
-    $sharedContext = [];
-    $meta = [];
-    $handler->transformDetail($item, $sharedContext, $meta);
+    // Only apply handler transform at the top (header) level.
+    // Recursive calls for detail sub-items skip this — detail lines are
+    // handled by cleanDataItem's own transformation logic below.
+    if (!$isSubItem) {
+      // Save inject-loop fields before transformDetail overwrites $item.
+      // Handlers filter $item to allowedFields, which strips 'id' even though
+      // it was set by the inject loop to trigger an UPDATE. We must restore it.
+      $injectedId       = $item['id'] ?? null;
+      $injectedSourceId = $item['_sourceId'] ?? null;
+      $injectedIsUpdate = $item['_isUpdate'] ?? null;
+
+      $handler = \App\Modules\ModuleManager::forEndpoint($endpoint);
+      $sharedContext = [];
+      $meta = [];
+      $handler->transformDetail($item, $sharedContext, $meta);
+
+      // Restore after handler filtering so cleanDataItem can honour them.
+      if ($injectedId       !== null) { $item['id']        = $injectedId; }
+      if ($injectedSourceId !== null) { $item['_sourceId'] = $injectedSourceId; }
+      if ($injectedIsUpdate !== null) { $item['_isUpdate'] = $injectedIsUpdate; }
+    }
 
     $cleaned = [];
 
     foreach ($item as $key => $value) {
       // ===START SKIP FIELDS===
-      if ($key === 'id' || $key === 'vendorType') {
+      // Skip internal marker fields
+      if ($key === '_isUpdate' || $key === '_sourceId') {
+        continue;
+      }
+
+      // Skip 'id' only if it's NOT an update operation
+      // On CREATE: skip 'id' from source (Accurate will generate new ID)
+      // On UPDATE: keep 'id' from mapping (Accurate needs ID to identify which record to update)
+      if ($key === 'id' && !$isUpdate) {
+        continue;
+      }
+
+      if ($key === 'vendorType') {
+        continue;
+      }
+      // In detail sub-items, strip branchId (header-level concern) and
+      // optLock (source-system concurrency field Accurate doesn't need in lines).
+      if ($isSubItem && ($key === 'branchId' || $key === 'optLock')) {
         continue;
       }
       if ($key === 'itemId' && str_contains($endpoint, 'bill-of-material')) {
@@ -306,7 +504,13 @@ class AccurateService
         continue;
       }
 
-      if($key === 'apAccountId') {
+      if ($key === 'apAccountId') {
+        continue;
+      }
+      if ($key === 'purchaseOrderDetailId') {
+        continue;
+      }
+      if ($key === 'salesOrderDetailId') {
         continue;
       }
       // ===END SKIP FIELDS===
@@ -440,6 +644,12 @@ class AccurateService
         }
         continue;
       }
+      if ($key === 'paymentTerm' && is_array($value)) {
+        if (isset($value['name'])) {
+          $cleaned['paymentTermName'] = $value['name'];
+        }
+        continue;
+      }
       // ===END TRANSFORM FIELDS===
 
 
@@ -476,7 +686,10 @@ class AccurateService
         $cleanedArray = [];
         foreach ($value as $subKey => $subValue) {
           if (is_array($subValue)) {
-            $cleanedSubItem = $this->cleanDataItem($subValue, $endpoint);
+            // Detail sub-items should never carry their source-system `id`.
+            // Only the header `id` (set by the inject loop) is needed for UPDATE.
+            // Always pass $isUpdate=false so sub-item `id` fields are stripped.
+            $cleanedSubItem = $this->cleanDataItem($subValue, $endpoint, false, true);
             if (!empty($cleanedSubItem)) {
               if ($key === 'detailItem' && (
                 str_contains($endpoint, 'purchase-order') ||
@@ -515,6 +728,9 @@ class AccurateService
                   );
                   unset($cleanedSubItem['purchaseOrder']);
                 }
+                // Always strip purchaseOrderId — Accurate resolves the PO reference
+                // via purchaseOrderNumber, not the source-system integer ID.
+                unset($cleanedSubItem['purchaseOrderId']);
                 if (isset($cleanedSubItem['salesOrder']['number'])) {
                   $cleanedSubItem['salesOrderNumber'] = $this->getMappedNumber(
                     'sales-order',
@@ -846,13 +1062,22 @@ class AccurateService
       $pageNumber = 1;
       $pageSize = 100;
       $params['sp.pageSize'] = $pageSize;
+
+      Log::info("Starting to fetch data from $endpoint", [
+        'initial_params' => $params
+      ]);
+
       do {
         $params['sp.page'] = $pageNumber;
         $response = $this->dataClient()->get($endpoint, $params);
+
         if ($response->failed()) {
           throw new Exception('Failed to fetch module data from Accurate');
         }
         $responseData = $response->json();
+        Log::info("Fetched page $pageNumber from $endpoint", [
+          'response' => $responseData
+        ]);
         $pageData = $responseData['d'] ?? [];
 
         $allData = array_merge($allData, $pageData);
@@ -867,5 +1092,221 @@ class AccurateService
     } catch (\Exception $e) {
       throw $e;
     }
+  }
+
+  // ===GET ACCURATE DATABASE ID===
+  protected function getAccurateDatabaseId(?array $targetDbInfo): ?int
+  {
+    if ($targetDbInfo && isset($targetDbInfo['id'])) {
+      return $targetDbInfo['id'];
+    }
+
+    $accurateDatabaseId = session('accurate_database.id') ?? null;
+    if (!$accurateDatabaseId) {
+      $dbId = session('database_id');
+      if ($dbId) {
+        $accurateDb = \App\Models\AccurateDatabase::where('db_id', $dbId)->first();
+        $accurateDatabaseId = $accurateDb?->id;
+      }
+    }
+
+    return $accurateDatabaseId;
+  }
+
+  // ===STORE ENTITY MAPPINGS===
+  protected function storeEntityMappings(
+    string $module,
+    array $originalData,
+    array $responseData,
+    int $accurateDatabaseId
+  ): void {
+    $numberField = $this->getNumberFieldForModule($module, $originalData[0] ?? []);
+    if (!$numberField) {
+      return;
+    }
+
+    $results = $responseData['d'] ?? [];
+
+    foreach ($results as $index => $result) {
+      if (!isset($result['s']) || $result['s'] !== true) {
+        continue;
+      }
+
+      // For modules using 'id' as key: the inject loop replaces $item['id'] with
+      // the Accurate entity ID, so we must read from '_sourceId' (the original
+      // captured id) instead of the now-overwritten $numberField.
+      if ($numberField === 'id' && isset($originalData[$index]['_sourceId'])) {
+        $sourceIdentifier = $originalData[$index]['_sourceId'];
+      } else {
+        $sourceIdentifier = $originalData[$index][$numberField] ?? null;
+      }
+
+      $accurateId = $result['r']['id'] ?? null;
+      // Always use $sourceIdentifier as the mapping key (accurate_number) so
+      // getAccurateId() lookup on the next push can find the record.
+      // For transaction modules Accurate auto-assigns a different number;
+      // using the API-returned number here would cause a lookup mismatch.
+      $apiNumber = $result['r']['number'] ?? $result['r']['no'] ?? $result['r']['vendorNo'] ?? $result['r']['customerNo'] ?? null;
+
+      // For UPDATE items, numberField was unset from data (by injection loop),
+      // so sourceIdentifier may be null. Fall back to apiNumber from response.
+      $effectiveIdentifier = $sourceIdentifier ?? $apiNumber;
+      $accurateNumber = $effectiveIdentifier; // always key by source identifier
+
+      if ($effectiveIdentifier && $accurateId) {
+        // Check if this was CREATE or UPDATE
+        $wasUpdate = isset($originalData[$index]['_isUpdate']) && $originalData[$index]['_isUpdate'] === true;
+        
+        \App\Models\AccurateEntityMapping::storeMapping(
+          $accurateDatabaseId,
+          $module,
+          $effectiveIdentifier,
+          $accurateId,
+          $accurateNumber,
+          [
+            'synced_at' => now()->toIso8601String(),
+            'endpoint' => '/api/' . $module . '/bulk-save.do',
+            'operation' => $wasUpdate ? 'update' : 'create'
+          ]
+        );
+
+        // ===UPDATE TRANSACTION STATUS===
+        $this->updateTransactionStatus(
+          $effectiveIdentifier,
+          $module,
+          $accurateDatabaseId,
+          $wasUpdate ? \App\Models\Transaction::STATUS_PUSHED_UPDATE : \App\Models\Transaction::STATUS_PUSHED_CREATE
+        );
+
+        Log::info("Entity mapping stored", [
+          'module' => $module,
+          'source_identifier' => $sourceIdentifier,
+          'accurate_id' => $accurateId,
+          'accurate_number' => $accurateNumber,
+          'operation' => $wasUpdate ? 'UPDATE' : 'CREATE'
+        ]);
+      }
+    }
+  }
+
+  // ===UPDATE TRANSACTION STATUS===
+  protected function updateTransactionStatus(
+    string $transactionNo,
+    string $module,
+    int $accurateDatabaseId,
+    string $status
+  ): void {
+    try {
+      // Find module record
+      $moduleRecord = \App\Models\Module::where('accurate_database_id', $accurateDatabaseId)
+        ->where('slug', $module)
+        ->first();
+      
+      if (!$moduleRecord) {
+        Log::warning("Module record not found for transaction status update", [
+          'module' => $module,
+          'accurate_database_id' => $accurateDatabaseId
+        ]);
+        return;
+      }
+
+      // Find and update the most recent transaction with this transaction_no
+      // Order by id DESC to get the latest one if there are duplicates
+      $transaction = \App\Models\Transaction::where('transaction_no', $transactionNo)
+        ->where('module_id', $moduleRecord->id)
+        ->where('accurate_database_id', $accurateDatabaseId)
+        ->orderBy('id', 'desc')
+        ->first();
+
+      if ($transaction) {
+        $transaction->update([
+          'push_status' => $status,
+          'last_pushed_at' => now(),
+          'push_count' => $transaction->push_count + 1
+        ]);
+
+        Log::info("Transaction status updated", [
+          'transaction_id' => $transaction->id,
+          'transaction_no' => $transactionNo,
+          'module' => $module,
+          'status' => $status,
+          'push_count' => $transaction->push_count
+        ]);
+      } else {
+        Log::warning("Transaction not found for status update", [
+          'transaction_no' => $transactionNo,
+          'module' => $module,
+          'accurate_database_id' => $accurateDatabaseId
+        ]);
+      }
+    } catch (\Exception $e) {
+      Log::error("Failed to update transaction status", [
+        'transaction_no' => $transactionNo,
+        'module' => $module,
+        'error' => $e->getMessage(),
+        'trace' => $e->getTraceAsString()
+      ]);
+    }
+  }
+
+  // ===GET NUMBER FIELD FOR MODULE===
+  protected function getNumberFieldForModule(string $module, array $firstItem): ?string
+  {
+    // Module-specific mapping takes priority over generic field detection
+    $moduleFieldMap = [
+      // Modules with unique number/code fields
+      'vendor'               => 'vendorNo',
+      'customer'             => 'customerNo',
+      'item'                 => 'no',
+      'glaccount'            => 'no',
+      'employee'             => 'no',
+      'tax'                  => 'no',
+      'project'              => 'no',
+      'warehouse'            => 'id',
+      'branch'               => 'id',
+      'department'           => 'id',
+      'sales-order'          => 'number',
+      'purchase-order'       => 'number',
+      'sales-invoice'        => 'number',
+      'purchase-invoice'     => 'number',
+      'delivery-order'       => 'number',
+      'receive-item'         => 'receiveNumber',
+      'sales-quotation'      => 'number',
+      'purchase-requisition' => 'number',
+      'sales-return'         => 'number',
+      'purchase-return'      => 'number',
+      'sales-receipt'        => 'number',
+      'purchase-payment'     => 'number',
+      'item-transfer'        => 'number',
+      'job-order'            => 'number',
+      'work-order'           => 'number',
+      // Modules without a unique number field — use source 'id' as key
+      'item-category'        => 'id',
+      'unit'                 => 'id',
+      'vendor-category'      => 'id',
+      'vendor-claim'         => 'id',
+      'vendor-price'         => 'id',
+      'customer-category'    => 'id',
+      'currency'             => 'id',
+      'fob'                  => 'id',
+      'data-classification'  => 'id',
+      'price-category'       => 'id',
+      'bill-of-material'     => 'id',
+    ];
+
+    if (isset($moduleFieldMap[$module])) {
+      return $moduleFieldMap[$module];
+    }
+
+    // Fallback: detect from first item (excludes 'name' — not a reliable unique key)
+    $possibleFields = ['no', 'vendorNo', 'customerNo', 'number'];
+
+    foreach ($possibleFields as $field) {
+      if (isset($firstItem[$field]) && !empty($firstItem[$field])) {
+        return $field;
+      }
+    }
+
+    return null;
   }
 }

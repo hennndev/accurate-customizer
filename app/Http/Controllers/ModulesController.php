@@ -492,7 +492,6 @@ class ModulesController extends Controller
       }
 
       $savedCount = 0;
-      $skippedCount = 0;
       $failedCount = 0;
       $savedTransactionNumbers = [];
 
@@ -505,9 +504,11 @@ class ModulesController extends Controller
         foreach ($listData as $item) {
           try {
             $itemId = $item['id'] ?? null;
-            $detailDataRaw = $accurate->fetchModuleData($moduleInfo['detail_endpoint'], [
-              'id' => $itemId
-            ]);
+            
+            // Prepare params for detail endpoint
+            $detailParams = ['id' => $itemId];
+            
+            $detailDataRaw = $accurate->fetchModuleData($moduleInfo['detail_endpoint'], $detailParams);
             
             $detailData = $detailDataRaw;
             if (is_array($detailDataRaw) && isset($detailDataRaw[0]) && is_array($detailDataRaw[0])) {
@@ -523,15 +524,6 @@ class ModulesController extends Controller
             $transactionNo = $detailData[$identifierField] ?? $item[$identifierField] ?? "ID-{$itemId}";
             $handler->transformDetail($detailData, $sharedContext, ['itemId' => $itemId, 'module' => $module]);
             
-            $exists = Transaction::where('transaction_no', $transactionNo)
-              ->where('module_id', $moduleRecord->id)
-              ->where('accurate_database_id', $databaseId)
-              ->exists();
-
-            if ($exists) {
-              $skippedCount++;
-              continue;
-            }
             $transaction = Transaction::create([
               'transaction_no' => $transactionNo,
               'accurate_database_id' => $databaseId,
@@ -554,7 +546,7 @@ class ModulesController extends Controller
 
       $logStatus = $failedCount > 0 ? 'warning' : ($hasData ? 'success' : 'info');
       $logMessage = $hasData
-        ? "Capture {$moduleInfo['name']}: {$savedCount} new, {$skippedCount} skipped" . ($failedCount > 0 ? ", {$failedCount} failed" : "")
+        ? "Capture {$moduleInfo['name']}: {$savedCount} saved" . ($failedCount > 0 ? ", {$failedCount} failed" : "")
         : "Module {$moduleInfo['name']} checked but no data available";
 
       SystemLog::create([
@@ -570,7 +562,6 @@ class ModulesController extends Controller
           'detail_endpoint' => $moduleInfo['detail_endpoint'],
           'total_items' => count($listData),
           'saved_count' => $savedCount,
-          'skipped_count' => $skippedCount,
           'failed_count' => $failedCount,
           'transaction_numbers' => $savedTransactionNumbers,
           'module_active' => $moduleRecord->is_active,
@@ -583,13 +574,12 @@ class ModulesController extends Controller
       return response()->json([
         'success' => true,
         'message' => $hasData
-          ? "Successfully captured {$savedCount} new records" . ($skippedCount > 0 ? ", {$skippedCount} already exist" : "") . ($failedCount > 0 ? ", {$failedCount} failed" : "")
+          ? "Successfully captured {$savedCount} records" . ($failedCount > 0 ? ", {$failedCount} failed" : "")
           : "Module {$moduleInfo['name']} created but no data available",
         'module' => $moduleInfo['name'],
         'module_status' => $moduleRecord->is_active ? 'active' : 'inactive',
         'total_records' => count($listData),
         'saved_records' => $savedCount,
-        'skipped_records' => $skippedCount,
         'failed_records' => $failedCount,
       ]);
     } catch (\Exception $e) {

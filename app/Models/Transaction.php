@@ -11,6 +11,18 @@ class Transaction extends Model
 
     protected $guarded = [];
 
+    protected $casts = [
+        'captured_at' => 'datetime',
+        'last_pushed_at' => 'datetime',
+        'push_count' => 'integer',
+    ];
+
+    // Status constants
+    const STATUS_PENDING = 'pending';
+    const STATUS_PUSHED_CREATE = 'pushed_create';
+    const STATUS_PUSHED_UPDATE = 'pushed_update';
+    const STATUS_FAILED = 'failed';
+
     public function accurateDatabase()
     {
         return $this->belongsTo(AccurateDatabase::class, 'accurate_database_id');

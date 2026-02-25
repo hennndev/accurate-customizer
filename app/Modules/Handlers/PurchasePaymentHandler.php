@@ -7,6 +7,25 @@ use Illuminate\Support\Facades\Log;
 
 class PurchasePaymentHandler extends BaseHandler
 {
+  protected array $allowedFields = [
+    'bank',
+    'detailItem',
+    'bankNo',
+    'chequeAmount',
+    'detailInvoice',
+    'transDate',
+    'vendor',
+    'vendorNo',
+    'branchName',
+    'chequeDate',
+    'chequeNo',
+    'currencyCode',
+    'rate',
+    'paymentMethod',
+    'number',
+    'description',
+  ];
+
   public function preCapture(AccurateService $accurate, array &$sharedContext): void
   {
     try {
@@ -27,17 +46,28 @@ class PurchasePaymentHandler extends BaseHandler
 
   public function transformDetail(array &$detailData, array $sharedContext, array $meta = []): void
   {
+    // Transform branchId → branchName
     $branchList = $sharedContext['branchList'] ?? [];
     if (isset($detailData['branchId']) && !empty($branchList)) {
       $branchId = $detailData['branchId'];
       if (isset($branchList[$branchId]['name'])) {
-        $branchName = $branchList[$branchId]['name'];
-        unset($detailData['branchId']);
-        $detailData['branchName'] = $branchName;
+        $detailData['branchName'] = $branchList[$branchId]['name'];
+      } else {
+        Log::warning('PURCHASE_PAYMENT_BRANCH_NOT_FOUND_IN_LIST', [
+          'item_id'            => $meta['itemId'] ?? null,
+          'branch_id'          => $branchId,
+          'available_branches' => array_keys($branchList),
+        ]);
       }
     }
-    // if (isset($detailData['number'])) {
-    //   unset($detailData['number']);
-    // }
+
+    $filteredData = [];
+    foreach ($this->allowedFields as $field) {
+      if (array_key_exists($field, $detailData)) {
+        $filteredData[$field] = $detailData[$field];
+      }
+    }
+
+    $detailData = $filteredData;
   }
 }

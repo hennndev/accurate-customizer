@@ -5,40 +5,20 @@ namespace App\Modules\Handlers;
 use App\Services\AccurateService;
 use Illuminate\Support\Facades\Log;
 
-class CustomerHandler extends BaseHandler
+class WarehouseHandler extends BaseHandler
 {
-    /**
-     * Fields yang ingin disimpan untuk module Customer
-     */
     protected array $allowedFields = [
         'id',
-        'transDate',
-        'billCity',
-        'billProvince',
-        'billCountry',
-        'billStreet',
-        'billZipCode',
-        'categoryName',
-        'customerTaxType',
-        'description',
-        'detailContact',
-        'detailOpenBalance',
-        'detailShipAddress',
-        'fax',
-        'mobilPhone',
-        'npwpNo',
-        'shipCity',
-        'shipProvince',
-        'shipCountry',
-        'shipStreet',
-        'shipZipCode',
-        'shipSameAsBill',
-        'customerNo',
         'name',
-        'address',
-        'workPhone',
-        'email',
-        'taxNumber',
+        'city',
+        'country',
+        'pic',
+        'province',
+        'scrapWarehouse',
+        'street',
+        'suspended',
+        'zipCode',
+        'description',
         'branchName', // hasil transform dari branchId
     ];
 
@@ -69,21 +49,20 @@ class CustomerHandler extends BaseHandler
             $branchId = $detailData['branchId'];
             if (isset($branchList[$branchId]['name'])) {
                 $detailData['branchName'] = $branchList[$branchId]['name'];
-                Log::info('CUSTOMER_BRANCH_TRANSFORMED', [
-                    'item_id' => $meta['itemId'] ?? null,
-                    'old_branch_id' => $branchId,
+                Log::info('WAREHOUSE_BRANCH_TRANSFORMED', [
+                    'item_id'         => $meta['itemId'] ?? null,
+                    'old_branch_id'   => $branchId,
                     'new_branch_name' => $detailData['branchName'],
                 ]);
             } else {
-                Log::warning('CUSTOMER_BRANCH_NOT_FOUND_IN_LIST', [
-                    'item_id' => $meta['itemId'] ?? null,
-                    'branch_id' => $branchId,
+                Log::warning('WAREHOUSE_BRANCH_NOT_FOUND_IN_LIST', [
+                    'item_id'            => $meta['itemId'] ?? null,
+                    'branch_id'          => $branchId,
                     'available_branches' => array_keys($branchList),
                 ]);
             }
         }
 
-        // Filter hanya field yang dibutuhkan
         $filteredData = [];
         foreach ($this->allowedFields as $field) {
             if (array_key_exists($field, $detailData)) {
@@ -91,23 +70,21 @@ class CustomerHandler extends BaseHandler
             }
         }
 
-        // Log jika ada field penting yang missing
         $missingFields = array_diff($this->allowedFields, array_keys($filteredData));
         if (!empty($missingFields)) {
-            Log::warning('CUSTOMER_MISSING_FIELDS', [
-                'item_id' => $meta['itemId'] ?? $detailData['id'] ?? null,
+            Log::warning('WAREHOUSE_MISSING_FIELDS', [
+                'item_id'        => $meta['itemId'] ?? $detailData['id'] ?? null,
                 'missing_fields' => $missingFields,
             ]);
         }
 
-        // Replace detailData dengan filtered data
         $detailData = $filteredData;
 
-        Log::info('CUSTOMER_DETAIL_FILTERED', [
-            'item_id' => $detailData['id'] ?? null,
-            'customer_no' => $detailData['customerNo'] ?? null,
+        Log::info('WAREHOUSE_DETAIL_FILTERED', [
+            'item_id'      => $detailData['id'] ?? null,
+            'name'         => $detailData['name'] ?? null,
             'fields_count' => count($filteredData),
-            'fields' => array_keys($filteredData),
+            'fields'       => array_keys($filteredData),
         ]);
     }
 }
