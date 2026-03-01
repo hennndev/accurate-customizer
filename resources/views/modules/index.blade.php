@@ -28,7 +28,7 @@
            currentModule: '',
            switchingDb: false,
            searchQuery: '',
-           activeFilter: 'all',
+           activeFilter: '{{ in_array(request('filter_type'), ['range', 'equal', 'last_update', 'last_update_equal']) ? 'transaction' : 'all' }}',
            async captureData(moduleName, moduleSlug) {
                this.capturing = true;
                this.progress = 0;
@@ -43,6 +43,8 @@
        
                    const startDate = document.getElementById('start_date')?.value || '';
                    const endDate = document.getElementById('end_date')?.value || '';
+                   const startTime = document.getElementById('start_time')?.value || '00:00';
+                   const endTime = document.getElementById('end_time')?.value || '23:59';
                    const filterType = document.querySelector('input[name=\'filter_type\']:checked')?.value || 'range';
        
                    const response = await fetch(`{{ url('/modules') }}/${moduleSlug}/capture`, {
@@ -54,6 +56,8 @@
                        body: JSON.stringify({
                            start_date: startDate,
                            end_date: endDate,
+                           start_time: startTime,
+                           end_time: endTime,
                            filter_type: filterType
                        })
                    });
@@ -108,6 +112,28 @@
            });
        
            // Show/hide section headers
+           const masterSection = document.getElementById('master-data-section');
+           const transactionSection = document.getElementById('transaction-section');
+           if (activeFilter === 'master') {
+               masterSection.style.display = '';
+               transactionSection.style.display = 'none';
+           } else if (activeFilter === 'transaction') {
+               masterSection.style.display = 'none';
+               transactionSection.style.display = '';
+           } else {
+               masterSection.style.display = '';
+               transactionSection.style.display = '';
+           }
+       });
+       
+       // Apply initial filter on page load (watch only fires on change)
+       $nextTick(() => {
+           const allCards = document.querySelectorAll('[data-module-name]');
+           allCards.forEach(card => {
+               const category = card.dataset.moduleCategory || '';
+               const categoryMatches = activeFilter === 'all' || category === activeFilter;
+               card.style.display = categoryMatches ? '' : 'none';
+           });
            const masterSection = document.getElementById('master-data-section');
            const transactionSection = document.getElementById('transaction-section');
            if (activeFilter === 'master') {
@@ -384,6 +410,24 @@
                        class="w-4 h-4 text-blue-600 focus:ring-blue-500">
                 <span class="text-sm font-medium text-gray-700">Specific Date</span>
               </label>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="radio"
+                       name="filter_type"
+                       value="last_update"
+                       {{ request('filter_type') === 'last_update' ? 'checked' : '' }}
+                       onchange="toggleFilterType(this.value)"
+                       class="w-4 h-4 text-blue-600 focus:ring-blue-500">
+                <span class="text-sm font-medium text-gray-700">Last Update (Range)</span>
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="radio"
+                       name="filter_type"
+                       value="last_update_equal"
+                       {{ request('filter_type') === 'last_update_equal' ? 'checked' : '' }}
+                       onchange="toggleFilterType(this.value)"
+                       class="w-4 h-4 text-blue-600 focus:ring-blue-500">
+                <span class="text-sm font-medium text-gray-700">Last Update (Specific)</span>
+              </label>
             </div>
           </div>
 
@@ -395,22 +439,39 @@
                      class="block text-sm font-medium text-gray-700 mb-2">
                 <span id="start-date-label">Start Date</span>
               </label>
-              <input type="date"
-                     name="start_date"
-                     id="start_date"
-                     value="{{ request('start_date') }}"
-                     class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+              <div class="flex gap-2">
+                <input type="date"
+                       name="start_date"
+                       id="start_date"
+                       value="{{ request('start_date') }}"
+                       class="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                <input type="time"
+                       name="start_time"
+                       id="start_time"
+                       value="{{ request('start_time', '00:00') }}"
+                       style="display:none"
+                       class="w-32 px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+              </div>
             </div>
             <div class="flex-1"
                  id="end-date-container">
               <label for="end_date"
-                     class="block text-sm font-medium text-gray-700 mb-2">End
-                Date</label>
-              <input type="date"
-                     name="end_date"
-                     id="end_date"
-                     value="{{ request('end_date') }}"
-                     class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                     class="block text-sm font-medium text-gray-700 mb-2">
+                <span id="end-date-label">End Date</span>
+              </label>
+              <div class="flex gap-2">
+                <input type="date"
+                       name="end_date"
+                       id="end_date"
+                       value="{{ request('end_date') }}"
+                       class="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                <input type="time"
+                       name="end_time"
+                       id="end_time"
+                       value="{{ request('end_time', '23:59') }}"
+                       style="display:none"
+                       class="w-32 px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+              </div>
             </div>
             <div class="flex gap-2">
               <button type="submit"
@@ -427,7 +488,7 @@
                 </svg>
                 Apply Filter
               </button>
-              @if (request('start_date') || request('end_date'))
+              @if (request('start_date') || request('end_date') || request('filter_type'))
                 <a href="{{ route('modules.index') }}"
                    class="px-6 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium rounded-lg transition-colors flex items-center gap-2">
                   <svg xmlns="http://www.w3.org/2000/svg"
@@ -451,15 +512,39 @@
           function toggleFilterType(type) {
             const endDateContainer = document.getElementById('end-date-container');
             const startDateLabel = document.getElementById('start-date-label');
+            const endDateLabel = document.getElementById('end-date-label');
             const endDateInput = document.getElementById('end_date');
+            const startTimeInput = document.getElementById('start_time');
+            const endTimeInput = document.getElementById('end_time');
+
+            const isLastUpdate = type === 'last_update' || type === 'last_update_equal';
+
+            // Show/hide time inputs
+            startTimeInput.style.display = isLastUpdate ? 'block' : 'none';
+            endTimeInput.style.display = (type === 'last_update') ? 'block' : 'none';
+
+            // Default time values
+            if (isLastUpdate) {
+              if (!startTimeInput.value) startTimeInput.value = '00:00';
+              if (!endTimeInput.value) endTimeInput.value = '23:59';
+            }
 
             if (type === 'equal') {
               endDateContainer.style.display = 'none';
               startDateLabel.textContent = 'Transaction Date';
               endDateInput.value = '';
+            } else if (type === 'last_update_equal') {
+              endDateContainer.style.display = 'none';
+              startDateLabel.textContent = 'Last Updated Date';
+              endDateInput.value = '';
+            } else if (type === 'last_update') {
+              endDateContainer.style.display = '';
+              startDateLabel.textContent = 'Last Updated From';
+              endDateLabel.textContent = 'Last Updated To';
             } else {
-              endDateContainer.style.display = 'block';
+              endDateContainer.style.display = '';
               startDateLabel.textContent = 'Start Date';
+              endDateLabel.textContent = 'End Date';
             }
           }
 
@@ -481,8 +566,21 @@
                     stroke-linejoin="round"
                     d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
             </svg>
-            <span>Filtered from <strong>{{ request('start_date') ?: 'beginning' }}</strong> to
-              <strong>{{ request('end_date') ?: 'now' }}</strong></span>
+            @if (request('filter_type') === 'last_update')
+              <span>Last update filtered from <strong>{{ request('start_date') ?: 'beginning' }}</strong> to
+                <strong>{{ request('end_date') ?: 'now' }}</strong>
+                &mdash; <em class="text-blue-600">showing transaction modules only</em></span>
+            @elseif (request('filter_type') === 'last_update_equal')
+              <span>Last updated on: <strong>{{ request('start_date') }}</strong>
+                &mdash; <em class="text-blue-600">showing transaction modules only</em></span>
+            @elseif (request('filter_type') === 'equal')
+              <span>Transaction date: <strong>{{ request('start_date') }}</strong>
+                &mdash; <em class="text-blue-600">showing transaction modules only</em></span>
+            @else
+              <span>Filtered from <strong>{{ request('start_date') ?: 'beginning' }}</strong> to
+                <strong>{{ request('end_date') ?: 'now' }}</strong>
+                &mdash; <em class="text-blue-600">showing transaction modules only</em></span>
+            @endif
           </div>
         @endif
       </div>

@@ -1214,7 +1214,7 @@
                   <input type="checkbox"
                          x-model="selectAll"
                          @change="selectAllTransactions()"
-                         class="w-3.5 h-3.5 md:w-4 md:h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 cursor-pointer">
+                         class="w-5 h-5 rounded border-2 border-gray-400 text-blue-600 bg-white accent-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 cursor-pointer">
                 </th>
                 <th class="p-2 md:p-4 text-left text-xs md:text-sm font-semibold text-gray-700">
                   Transaction No</th>
@@ -1240,14 +1240,12 @@
             </thead>
             <tbody class="bg-white">
               @forelse ($transactions as $transaction)
-                <tr class="border-b border-gray-100 hover:bg-gray-50 transition"
-                    :class="{{ $transaction->status === 'success' ? 'true' : 'false' }} && 'opacity-60'">
+                <tr class="border-b border-gray-100 hover:bg-gray-50 transition">
                   <td class="p-2 md:p-4">
                     <input type="checkbox"
                            x-model="selected"
                            value="{{ $transaction->id }}"
-                           @if ($transaction->status === 'success') disabled @endif
-                           class="w-3.5 h-3.5 md:w-4 md:h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 {{ $transaction->status === 'success' ? 'cursor-not-allowed opacity-50' : 'cursor-pointer' }}">
+                           class="w-5 h-5 rounded border-2 border-gray-400 bg-white accent-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 cursor-pointer">
                   </td>
                   <td class="p-2 md:p-4 text-xs md:text-sm font-medium text-gray-900">
                     {{ $transaction->transaction_no }}</td>

@@ -12,6 +12,7 @@ use App\Modules\Handlers\CustomerCategoryHandler;
 use App\Modules\Handlers\CustomerHandler;
 use App\Modules\Handlers\DepartmentHandler;
 use App\Modules\Handlers\DeliveryOrderHandler;
+use App\Modules\Handlers\FinishedGoodSlipHandler;
 use App\Modules\Handlers\ItemHandler;
 use App\Modules\Handlers\ItemCategoryHandler;
 use App\Modules\Handlers\ItemTransferHandler;
@@ -63,6 +64,7 @@ class ModuleManager
             'sales-return' => new SalesReturnHandler(),
             'delivery-order' => new DeliveryOrderHandler(),
             'bill-of-material' => new BillOfMaterialHandler(),
+            'finished-good-slip' => new FinishedGoodSlipHandler(),
             'unit' => new UnitHandler(),
             'vendor' => new VendorHandler(),
             'vendor-category' => new VendorCategoryHandler(),
@@ -144,6 +146,9 @@ class ModuleManager
         }
         if (str_contains($endpoint, '/bill-of-material/')) {
             return new BillOfMaterialHandler();
+        }
+        if (str_contains($endpoint, '/finished-good-slip/')) {
+            return new FinishedGoodSlipHandler();
         }
         if (str_contains($endpoint, '/unit/')) {
             return new UnitHandler();
