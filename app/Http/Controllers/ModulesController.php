@@ -448,7 +448,31 @@ class ModulesController extends Controller
       if ($filterType === 'equal') {
         if ($request->filled('start_date')) {
           $params['filter.transDate.op'] = 'EQUAL';
-          $params['filter.transDate.val'] = Carbon::parse($request->start_date)->format('d/m/Y');;
+          $params['filter.transDate.val'] = Carbon::parse($request->start_date)->format('d/m/Y');
+        }
+      } elseif ($filterType === 'last_update_equal') {
+        if ($request->filled('start_date')) {
+          $startTime = $request->input('start_time', '00:00');
+          $params['filter.lastUpdate.op'] = 'BETWEEN';
+          $params['filter.lastUpdate.val[0]'] = Carbon::parse($request->start_date . ' ' . $startTime)->format('d/m/Y H:i:s');
+          $params['filter.lastUpdate.val[1]'] = Carbon::parse($request->start_date . ' 23:59:59')->format('d/m/Y H:i:s');
+        }
+      } elseif ($filterType === 'last_update') {
+        $hasStartDate = $request->filled('start_date');
+        $hasEndDate = $request->filled('end_date');
+        $startTime = $request->input('start_time', '00:00');
+        $endTime = $request->input('end_time', '23:59');
+
+        if ($hasStartDate && $hasEndDate) {
+          $params['filter.lastUpdate.op'] = 'BETWEEN';
+          $params['filter.lastUpdate.val[0]'] = Carbon::parse($request->start_date . ' ' . $startTime)->format('d/m/Y H:i:s');
+          $params['filter.lastUpdate.val[1]'] = Carbon::parse($request->end_date . ' ' . $endTime)->format('d/m/Y H:i:s');
+        } elseif ($hasStartDate) {
+          $params['filter.lastUpdate.op'] = 'GREATER_EQUAL_THAN';
+          $params['filter.lastUpdate.val'] = Carbon::parse($request->start_date . ' ' . $startTime)->format('d/m/Y H:i:s');
+        } elseif ($hasEndDate) {
+          $params['filter.lastUpdate.op'] = 'LESS_EQUAL_THAN';
+          $params['filter.lastUpdate.val'] = Carbon::parse($request->end_date . ' ' . $endTime)->format('d/m/Y H:i:s');
         }
       } else {
         $hasStartDate = $request->filled('start_date');
@@ -456,14 +480,14 @@ class ModulesController extends Controller
         
         if ($hasStartDate && $hasEndDate) {
           $params['filter.transDate.op'] = 'BETWEEN';
-          $params['filter.transDate.val[0]'] = Carbon::parse($request->start_date)->format('d/m/Y');;
-          $params['filter.transDate.val[1]'] = Carbon::parse($request->end_date)->format('d/m/Y');;
+          $params['filter.transDate.val[0]'] = Carbon::parse($request->start_date)->format('d/m/Y');
+          $params['filter.transDate.val[1]'] = Carbon::parse($request->end_date)->format('d/m/Y');
         } elseif ($hasStartDate) {
           $params['filter.transDate.op'] = 'GREATER_EQUAL_THAN';
-          $params['filter.transDate.val'] = Carbon::parse($request->start_date)->format('d/m/Y');;
+          $params['filter.transDate.val'] = Carbon::parse($request->start_date)->format('d/m/Y');
         } elseif ($hasEndDate) {
           $params['filter.transDate.op'] = 'LESS_EQUAL_THAN';
-          $params['filter.transDate.val'] = Carbon::parse($request->end_date)->format('d/m/Y');;
+          $params['filter.transDate.val'] = Carbon::parse($request->end_date)->format('d/m/Y');
         }
       }
       // ===END FILTER TANGGAL===
