@@ -493,14 +493,37 @@ class ModulesController extends Controller
       }
       // ===END FILTER TANGGAL===
 
-      $listData = $accurate->fetchModuleData($moduleInfo['list_endpoint'], $params);
+      $pageSize = (int) env('ACCURATE_CAPTURE_PAGE_SIZE', 20);
+      if ($pageSize < 10) {
+        $pageSize = 10;
+      }
+      if ($pageSize > 100) {
+        $pageSize = 100;
+      }
 
-      $hasData = count($listData) > 0;
-      
-      Log::info("Module list data received", [
+      $capturePage = (int) $request->input('capture_page', 1);
+      if ($capturePage < 1) {
+        $capturePage = 1;
+      }
+
+      $pagesPerRequest = (int) $request->input('pages_per_request', env('ACCURATE_CAPTURE_PAGES_PER_REQUEST', 2));
+      if ($pagesPerRequest < 1) {
+        $pagesPerRequest = 1;
+      }
+      if ($pagesPerRequest > 10) {
+        $pagesPerRequest = 10;
+      }
+
+      $firstPageResult = $accurate->fetchModuleDataPage($moduleInfo['list_endpoint'], $params, $capturePage, $pageSize);
+      $firstPageData = $firstPageResult['data'] ?? [];
+      $hasData = count($firstPageData) > 0;
+
+      Log::info("Module page received", [
         'module' => $module,
-        'total_records' => count($listData),
-        'has_data' => $hasData,
+        'capture_page' => $capturePage,
+        'records_in_first_page' => count($firstPageData),
+        'page_size' => $pageSize,
+        'pages_per_request' => $pagesPerRequest,
       ]);
       $moduleRecord = Module::firstOrCreate(
         [
@@ -519,13 +542,17 @@ class ModulesController extends Controller
 
       if (!$moduleRecord->wasRecentlyCreated) {
         $moduleRecord->update([
-          'is_active' => $hasData,
+          'is_active' => $hasData || $moduleRecord->is_active,
         ]);
       }
 
       $savedCount = 0;
       $failedCount = 0;
       $savedTransactionNumbers = [];
+      $totalItemsProcessed = 0;
+      $totalPagesProcessed = 0;
+      $currentPage = $capturePage;
+      $hasMore = false;
       $endpointFieldProvider = app(EndpointFieldProvider::class);
       $listOnlyByConfig = $endpointFieldProvider->getFieldsForEndpoint($moduleInfo['list_endpoint']) !== null;
       $listOnlyMode = $listOnlyByConfig;
@@ -540,61 +567,83 @@ class ModulesController extends Controller
       if ($hasData) {
         $transactionsToInsert = [];
         $batchSize = 100;
-        $itemCount = 0;
-        
-        foreach ($listData as $index => $item) {
-          try {
-            $itemId = $item['id'] ?? null;
+        for ($pageOffset = 0; $pageOffset < $pagesPerRequest; $pageOffset++) {
+          $pageData = $pageOffset === 0
+            ? $firstPageData
+            : ($accurate->fetchModuleDataPage($moduleInfo['list_endpoint'], $params, $currentPage, $pageSize)['data'] ?? []);
 
-            $detailData = $item;
-            if (!$listOnlyMode) {
-              $detailParams = ['id' => $itemId];
-              $detailDataRaw = $accurate->fetchModuleData($moduleInfo['detail_endpoint'], $detailParams);
+          if (empty($pageData)) {
+            $hasMore = false;
+            break;
+          }
 
-              $detailData = $detailDataRaw;
-              if (is_array($detailDataRaw) && isset($detailDataRaw[0]) && is_array($detailDataRaw[0])) {
-                $detailData = $detailDataRaw[0];
+          $totalPagesProcessed++;
+          $totalItemsProcessed += count($pageData);
+
+          foreach ($pageData as $index => $item) {
+            try {
+              $itemId = $item['id'] ?? null;
+
+              $detailData = $item;
+              if (!$listOnlyMode) {
+                $detailParams = ['id' => $itemId];
+                $detailDataRaw = $accurate->fetchModuleData($moduleInfo['detail_endpoint'], $detailParams);
+
+                $detailData = $detailDataRaw;
+                if (is_array($detailDataRaw) && isset($detailDataRaw[0]) && is_array($detailDataRaw[0])) {
+                  $detailData = $detailDataRaw[0];
+                }
               }
-            }
-            
-            if (empty($detailData) || !is_array($detailData)) {
+
+              if (empty($detailData) || !is_array($detailData)) {
+                $failedCount++;
+                continue;
+              }
+
+              $identifierField = $moduleInfo['identifier_field'] ?? 'number';
+              $transactionNo = $detailData[$identifierField] ?? $item[$identifierField] ?? "ID-{$itemId}";
+
+              if (!$listOnlyMode) {
+                $handler->transformDetail($detailData, $sharedContext, ['itemId' => $itemId, 'module' => $module]);
+              }
+
+              $transactionsToInsert[] = [
+                'transaction_no' => $transactionNo,
+                'accurate_database_id' => $databaseId,
+                'module_id' => $moduleRecord->id,
+                'data' => json_encode($detailData),
+                'description' => $moduleInfo['name'],
+                'captured_at' => now(),
+                'created_at' => now(),
+                'updated_at' => now(),
+              ];
+
+              $savedTransactionNumbers[] = $transactionNo;
+
+              if (count($transactionsToInsert) >= $batchSize) {
+                Transaction::insert($transactionsToInsert);
+                $savedCount += count($transactionsToInsert);
+                $transactionsToInsert = [];
+              }
+
+            } catch (\Exception $e) {
+              Log::error('Error processing module item', [
+                'module' => $module,
+                'page' => $currentPage,
+                'index_in_page' => $index,
+                'item_id' => $item['id'] ?? null,
+                'error' => $e->getMessage(),
+              ]);
               $failedCount++;
               continue;
             }
-            
-            $identifierField = $moduleInfo['identifier_field'] ?? 'number';
-            $transactionNo = $detailData[$identifierField] ?? $item[$identifierField] ?? "ID-{$itemId}";
+          }
 
-            if (!$listOnlyMode) {
-              $handler->transformDetail($detailData, $sharedContext, ['itemId' => $itemId, 'module' => $module]);
-            }
-            
-            $transactionsToInsert[] = [
-              'transaction_no' => $transactionNo,
-              'accurate_database_id' => $databaseId,
-              'module_id' => $moduleRecord->id,
-              'data' => json_encode($detailData),
-              'description' => $moduleInfo['name'],
-              'captured_at' => now(),
-              'created_at' => now(),
-              'updated_at' => now(),
-            ];
-            
-            $savedTransactionNumbers[] = $transactionNo;
-            $itemCount++;
+          $hasMore = count($pageData) === $pageSize;
+          $currentPage++;
 
-            // Insert batch setiap 100 items
-            if (count($transactionsToInsert) >= $batchSize) {
-              Transaction::insert($transactionsToInsert);
-              $savedCount += count($transactionsToInsert);
-              Log::info("Batch inserted: " . count($transactionsToInsert) . " records for module: " . $module);
-              $transactionsToInsert = [];
-            }
-
-          } catch (\Exception $e) {
-            Log::error("Error processing item in {$module}: " . $e->getMessage());
-            $failedCount++;
-            continue;
+          if (!$hasMore) {
+            break;
           }
         }
         
@@ -607,9 +656,13 @@ class ModulesController extends Controller
         
         Log::info("Capture batch insert completed", [
           'module' => $module,
-          'total_items_processed' => count($listData),
+          'start_page' => $capturePage,
+          'total_pages_processed' => $totalPagesProcessed,
+          'total_items_processed' => $totalItemsProcessed,
           'saved_count' => $savedCount,
           'failed_count' => $failedCount,
+          'has_more' => $hasMore,
+          'next_page' => $currentPage,
           'list_only_mode' => $listOnlyMode,
         ]);
       }
@@ -632,9 +685,13 @@ class ModulesController extends Controller
           'list_only_mode' => $listOnlyMode,
           'list_endpoint' => $moduleInfo['list_endpoint'],
           'detail_endpoint' => $moduleInfo['detail_endpoint'],
-          'total_items' => count($listData),
+          'start_page' => $capturePage,
+          'total_pages_processed' => $totalPagesProcessed,
+          'total_items' => $totalItemsProcessed,
           'saved_count' => $savedCount,
           'failed_count' => $failedCount,
+          'has_more' => $hasMore,
+          'next_page' => $currentPage,
           'transaction_numbers' => $savedTransactionNumbers,
           'module_active' => $moduleRecord->is_active,
           'was_created' => $moduleRecord->wasRecentlyCreated,
@@ -646,12 +703,18 @@ class ModulesController extends Controller
       return response()->json([
         'success' => true,
         'message' => $hasData
-          ? "Successfully captured {$savedCount} records" . ($failedCount > 0 ? ", {$failedCount} failed" : "")
+          ? ($hasMore
+              ? "Captured {$savedCount} records (partial batch)" . ($failedCount > 0 ? ", {$failedCount} failed" : "")
+              : "Successfully captured {$savedCount} records" . ($failedCount > 0 ? ", {$failedCount} failed" : ""))
           : "Module {$moduleInfo['name']} created but no data available",
         'module' => $moduleInfo['name'],
         'module_status' => $moduleRecord->is_active ? 'active' : 'inactive',
         'list_only_mode' => $listOnlyMode,
-        'total_records' => count($listData),
+        'total_records' => $totalItemsProcessed,
+        'start_page' => $capturePage,
+        'processed_pages' => $totalPagesProcessed,
+        'has_more' => $hasMore,
+        'next_page' => $currentPage,
         'saved_records' => $savedCount,
         'failed_records' => $failedCount,
       ]);

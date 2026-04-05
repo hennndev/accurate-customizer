@@ -47,31 +47,72 @@
                    const startTime = document.getElementById('start_time')?.value || '00:00';
                    const endTime = document.getElementById('end_time')?.value || '23:59';
                    const filterType = document.querySelector('input[name=\'filter_type\']:checked')?.value || 'range';
+                   let capturePage = 1;
+                   const pagesPerRequest = 2;
+                   let totalSaved = 0;
+                   let totalFailed = 0;
+                   let finalResult = null;
        
-                   const response = await fetch(`/modules/${moduleSlug}/capture`, {
-                       method: 'POST',
-                       credentials: 'same-origin',
-                       headers: {
-                           'Content-Type': 'application/json',
-                           'Accept': 'application/json',
-                           'X-Requested-With': 'XMLHttpRequest',
-                           'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                       },
-                       body: JSON.stringify({
-                           start_date: startDate,
-                           end_date: endDate,
-                           start_time: startTime,
-                           end_time: endTime,
-                           filter_type: filterType,
-                       })
-                   });
+                   while (true) {
+                       const response = await fetch(`/modules/${moduleSlug}/capture`, {
+                           method: 'POST',
+                           credentials: 'same-origin',
+                           headers: {
+                               'Content-Type': 'application/json',
+                               'Accept': 'application/json',
+                               'X-Requested-With': 'XMLHttpRequest',
+                               'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                           },
+                           body: JSON.stringify({
+                               start_date: startDate,
+                               end_date: endDate,
+                               start_time: startTime,
+                               end_time: endTime,
+                               filter_type: filterType,
+                               capture_page: capturePage,
+                               pages_per_request: pagesPerRequest,
+                           })
+                       });
        
-                   const contentType = response.headers.get('content-type') || '';
-                   const responseText = await response.text();
-                   let result = null;
+                       const contentType = response.headers.get('content-type') || '';
+                       const responseText = await response.text();
+                       let result = null;
        
-                   if (contentType.includes('application/json')) {
-                       result = JSON.parse(responseText);
+                       if (contentType.includes('application/json')) {
+                           result = JSON.parse(responseText);
+                       }
+       
+                       if (!(response.ok && result?.success)) {
+                           console.log(response);
+                           let htmlMessage = null;
+                           if (!contentType.includes('application/json')) {
+                               const isAuthRedirect = response.redirected &&
+                                   (response.url.includes('/login') || response.url.includes('/select-database'));
+                               const snippet = (responseText || '').replace(/\s+/g, ' ').trim().slice(0, 180);
+                               htmlMessage = isAuthRedirect ?
+                                   `Sesi habis / database belum dipilih. Redirect ke: ${response.url}` :
+                                   `Server mengembalikan HTML. Status: ${response.status}. URL: ${response.url}. Snippet: ${snippet}`;
+                           }
+       
+                           clearInterval(progressInterval);
+                           this.capturing = false;
+                           this.progress = 0;
+                           this.currentModule = '';
+                           alert(result?.message || htmlMessage || 'Failed to capture data');
+                           return;
+                       }
+       
+                       totalSaved += Number(result?.saved_records || 0);
+                       totalFailed += Number(result?.failed_records || 0);
+                       finalResult = result;
+       
+                       if (result?.has_more) {
+                           capturePage = Number(result?.next_page || (capturePage + pagesPerRequest));
+                           this.progress = Math.min(95, this.progress + 8);
+                           continue;
+                       }
+       
+                       break;
                    }
        
                    clearInterval(progressInterval);
@@ -82,20 +123,10 @@
                        this.progress = 0;
                        this.currentModule = '';
        
-                       if (response.ok && result?.success) {
+                       const summaryMessage = `Capture selesai. Saved: ${totalSaved}, Failed: ${totalFailed}`;
+                       if (finalResult?.success) {
+                           alert(summaryMessage);
                            window.location.reload();
-                       } else {
-                           console.log(response)
-                           let htmlMessage = null;
-                           if (!contentType.includes('application/json')) {
-                               const isAuthRedirect = response.redirected &&
-                                   (response.url.includes('/login') || response.url.includes('/select-database'));
-                               const snippet = (responseText || '').replace(/\s+/g, ' ').trim().slice(0, 180);
-                               htmlMessage = isAuthRedirect ?
-                                   `Sesi habis / database belum dipilih. Redirect ke: ${response.url}` :
-                                   `Server mengembalikan HTML. Status: ${response.status}. URL: ${response.url}. Snippet: ${snippet}`;
-                           }
-                           alert(result?.message || htmlMessage || 'Failed to capture data');
                        }
                    }, 1000);
        

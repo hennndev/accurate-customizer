@@ -61,6 +61,21 @@ class DataFetcher
     public function fetchModuleData(string $endpoint, array $params = []): array
     {
         try {
+            if (str_contains($endpoint, '/detail.do')) {
+                $response = $this->databaseClientManager->getDataClient()->get($endpoint, $params);
+
+                if ($response->failed()) {
+                    Log::error('Failed to fetch detail from Accurate API', [
+                        'endpoint' => $endpoint,
+                        'status' => $response->status(),
+                        'error' => $response->body(),
+                    ]);
+                    throw new Exception('Failed to fetch module detail data from Accurate');
+                }
+
+                return $response->json()['d'] ?? [];
+            }
+
             $allData = [];
             $pageNumber = 1;
             $pageSize = 50;
