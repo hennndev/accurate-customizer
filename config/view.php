@@ -32,5 +32,5 @@ return [
         'VIEW_COMPILED_PATH',
         realpath(storage_path('framework/views'))
     ),
-
+    'domain' => env('SESSION_DOMAIN', null),
 ];
