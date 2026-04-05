@@ -187,7 +187,16 @@ class DataMigrateController extends Controller
       if (!$dbInfo) {
         return redirect()->route('migrate.index')->with('error', 'Failed to connect to target database. Please try again.');
       }
-      $targetDbName = $dbInfo['name'] ?? 'Unknown Database';
+      $targetDbName = $dbInfo['name'] ?? $dbInfo['alias'] ?? 'Unknown Database';
+
+      // Inject the local AccurateDatabase.id so getAccurateDatabaseId always
+      // uses a stable local PK (instead of session-based fallback which may
+      // return the SOURCE database id or the Accurate API's raw db_id).
+      $targetLocalDb = AccurateDatabase::firstOrCreate(
+        ['db_id' => $targetDbId],
+        ['db_name' => $targetDbName]
+      );
+      $dbInfo['_local_db_id'] = $targetLocalDb->id;
     } catch (\Exception $e) {
       return redirect()->route('migrate.index')->with('error', 'Failed to connect to database: ' . $e->getMessage());
     }
@@ -227,11 +236,28 @@ class DataMigrateController extends Controller
           ];
         }
         $bulkData = [];
+        $payloadTransactions = [];
         foreach ($moduleTransactions as $transaction) {
           $data = json_decode($transaction->data, true);
-          if ($data) {
-            $bulkData[] = $data;
+
+          if (json_last_error() !== JSON_ERROR_NONE || !is_array($data) || empty($data)) {
+            $errorText = 'Invalid or empty transaction data JSON';
+            $transaction->update([
+              'status' => 'failed',
+              'error_message' => $errorText,
+              'push_status' => 'failed',
+            ]);
+            $failedCount++;
+            $moduleResults[$module->name]['failed']++;
+
+            if (!in_array($errorText, $moduleResults[$module->name]['errors'])) {
+              $moduleResults[$module->name]['errors'][] = $errorText;
+            }
+            continue;
           }
+
+          $bulkData[] = $data;
+          $payloadTransactions[] = $transaction;
         }
 
         if (empty($bulkData)) {
@@ -243,7 +269,7 @@ class DataMigrateController extends Controller
           // Push to Accurate using bulk-save endpoint
           $endpoint = str_replace('/list.do', '/bulk-save.do', $module->accurate_endpoint);
           $chunks = array_chunk($bulkData, 100);
-          $chunkTransactions = array_chunk($moduleTransactions->all(), 100);
+          $chunkTransactions = array_chunk($payloadTransactions, 100);
 
           // Build lookup: transaction_no yang sudah pernah di-push sebelumnya (termasuk dari row lain)
           // Cek seluruh transactions (bukan hanya yang dipilih) dengan module yang sama dan push_count > 0
@@ -259,6 +285,16 @@ class DataMigrateController extends Controller
             $result = $this->accurateService->bulkSaveToAccurate($endpoint, $chunkData, $dbInfo);
             $isOverallSuccess = isset($result['s']) && $result['s'] === true;
             $itemResults = $result['d'] ?? [];
+
+            Log::info('MIGRATION_CHUNK_RESULT', [
+              'module' => $module->slug,
+              'endpoint' => $endpoint,
+              'chunk_index' => $chunkIndex,
+              'chunk_size' => count($chunkData),
+              'overall_success' => $isOverallSuccess,
+              'result_keys' => is_array($result) ? array_keys($result) : [],
+              'item_results_count' => is_array($itemResults) ? count($itemResults) : 0,
+            ]);
 
             if (!is_array($itemResults)) {
               $itemResults = [];
@@ -305,7 +341,11 @@ class DataMigrateController extends Controller
                   $successCount++;
                   $moduleResults[$module->name]['success']++;
                 } else {
-                  $errorData = $itemResult['d'] ?? ['Unknown error'];
+                  $errorData = $itemResult['d']
+                    ?? $itemResult['e']
+                    ?? $result['d']
+                    ?? $result['e']
+                    ?? ['Unknown error'];
 
                   if (is_array($errorData)) {
                     $flattenedErrors = [];

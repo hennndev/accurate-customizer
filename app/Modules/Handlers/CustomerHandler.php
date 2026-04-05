@@ -63,6 +63,56 @@ class CustomerHandler extends BaseHandler
 
     public function transformDetail(array &$detailData, array $sharedContext, array $meta = []): void
     {
+        // Transform contactInfo object -> single-item detailContact array
+        if (isset($detailData['contactInfo']) && is_array($detailData['contactInfo'])) {
+            $contactInfo = $detailData['contactInfo'];
+
+            $detailData['detailContact'] = [[
+                'id' => $contactInfo['id'] ?? null,
+                'name' => $contactInfo['name'] ?? null,
+                'email' => $contactInfo['email'] ?? null,
+                'mobilePhone' => $contactInfo['mobilePhone'] ?? null,
+                'workPhone' => $contactInfo['workPhone'] ?? null,
+                'homePhone' => $contactInfo['homePhone'] ?? null,
+                'fax' => $contactInfo['fax'] ?? null,
+                'companyName' => $contactInfo['companyName'] ?? null,
+                'position' => $contactInfo['position'] ?? null,
+                'salutation' => $contactInfo['salutation'] ?? null,
+                'website' => $contactInfo['website'] ?? null,
+                'notes' => $contactInfo['notes'] ?? null,
+                'customer' => $contactInfo['customer'] ?? null,
+                'vendor' => $contactInfo['vendor'] ?? null,
+                'project' => $contactInfo['project'] ?? null,
+                'salesman' => $contactInfo['salesman'] ?? null,
+                'branchId' => $contactInfo['branchId'] ?? null,
+                'seq' => $contactInfo['seq'] ?? null,
+                'optLock' => $contactInfo['optLock'] ?? null,
+            ]];
+        }
+
+        // Transform billAddress object -> flat bill* fields
+        if (isset($detailData['billAddress']) && is_array($detailData['billAddress'])) {
+            $billAddress = $detailData['billAddress'];
+
+            $detailData['billCity'] = $billAddress['city'] ?? ($detailData['billCity'] ?? null);
+            $detailData['billCountry'] = $billAddress['country'] ?? ($detailData['billCountry'] ?? null);
+            $detailData['billProvince'] = $billAddress['province'] ?? ($detailData['billProvince'] ?? null);
+            $detailData['billStreet'] = $billAddress['street'] ?? ($detailData['billStreet'] ?? null);
+            $detailData['billZipCode'] = $billAddress['zipCode'] ?? ($detailData['billZipCode'] ?? null);
+        }
+
+        // Transform shipAddress object -> flat ship* fields
+        if (isset($detailData['shipAddress']) && is_array($detailData['shipAddress'])) {
+            $shipAddress = $detailData['shipAddress'];
+
+            $detailData['shipCity'] = $shipAddress['city'] ?? ($detailData['shipCity'] ?? null);
+            $detailData['shipCountry'] = $shipAddress['country'] ?? ($detailData['shipCountry'] ?? null);
+            $detailData['shipProvince'] = $shipAddress['province'] ?? ($detailData['shipProvince'] ?? null);
+            $detailData['shipStreet'] = $shipAddress['street'] ?? ($detailData['shipStreet'] ?? null);
+            $detailData['shipZipCode'] = $shipAddress['zipCode'] ?? ($detailData['shipZipCode'] ?? null);
+        }
+
+        $detailData['shipSameAsBill'] = $detailData['shipSameAsBill'] ?? false; 
         // Transform branchId → branchName
         $branchList = $sharedContext['branchList'] ?? [];
         if (isset($detailData['branchId']) && !empty($branchList)) {
@@ -90,24 +140,7 @@ class CustomerHandler extends BaseHandler
                 $filteredData[$field] = $detailData[$field];
             }
         }
-
-        // Log jika ada field penting yang missing
-        $missingFields = array_diff($this->allowedFields, array_keys($filteredData));
-        if (!empty($missingFields)) {
-            Log::warning('CUSTOMER_MISSING_FIELDS', [
-                'item_id' => $meta['itemId'] ?? $detailData['id'] ?? null,
-                'missing_fields' => $missingFields,
-            ]);
-        }
-
-        // Replace detailData dengan filtered data
         $detailData = $filteredData;
-
-        Log::info('CUSTOMER_DETAIL_FILTERED', [
-            'item_id' => $detailData['id'] ?? null,
-            'customer_no' => $detailData['customerNo'] ?? null,
-            'fields_count' => count($filteredData),
-            'fields' => array_keys($filteredData),
-        ]);
+        Log::info("data customer pushed", ['data' => $detailData]);
     }
 }

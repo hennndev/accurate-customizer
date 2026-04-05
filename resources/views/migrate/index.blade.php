@@ -34,7 +34,7 @@
        x-data="{
            selectAll: false,
            selected: [],
-           allTransactionIds: {{ $transactions->where('status', '!=', 'success')->pluck('id')->toJson() }},
+           allTransactionIds: {{ $transactions->pluck('id')->toJson() }},
            showDeleteModal: false,
            showSingleDeleteModal: false,
            showEditModal: false,
@@ -50,7 +50,7 @@
        
            selectAllTransactions() {
                if (this.selectAll) {
-                   this.selected = [...this.allTransactionIds];
+                   this.selected = this.allTransactionIds.map(id => String(id));
                } else {
                    this.selected = [];
                }
@@ -186,6 +186,15 @@
                    $refs.editForm.submit();
                } catch (e) {
                    alert('Invalid JSON format: ' + e.message);
+               }
+           },
+       
+           formatEditJson() {
+               try {
+                   const parsed = JSON.parse(this.editData);
+                   this.editData = JSON.stringify(parsed, null, 2);
+               } catch (e) {
+                   alert('Invalid JSON: ' + e.message);
                }
            },
        
@@ -1244,7 +1253,7 @@
                   <td class="p-2 md:p-4">
                     <input type="checkbox"
                            x-model="selected"
-                           value="{{ $transaction->id }}"
+                           value="{{ (string) $transaction->id }}"
                            class="w-5 h-5 rounded border-2 border-gray-400 bg-white accent-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 cursor-pointer">
                   </td>
                   <td class="p-2 md:p-4 text-xs md:text-sm font-medium text-gray-900">
@@ -1869,14 +1878,7 @@
                             style="tab-size: 2;"
                             placeholder='{ "key": "value" }'></textarea>
                   <div class="absolute top-2 right-2 flex gap-2">
-                    <button @click="
-                            try {
-                                const parsed = JSON.parse(editData);
-                                editData = JSON.stringify(parsed, null, 2);
-                            } catch (e) {
-                                alert('Invalid JSON: ' + e.message);
-                            }
-                        "
+                    <button @click="formatEditJson()"
                             type="button"
                             class="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-md transition flex items-center gap-1.5"
                             title="Format JSON">

@@ -5,7 +5,7 @@ namespace App\Modules\Handlers;
 use App\Services\AccurateService;
 use Illuminate\Support\Facades\Log;
 
-class FinishedGoodSlipHandler extends BaseHandler
+class OtherDepositHandler extends BaseHandler
 {
   protected array $allowedFields = [
     'number',
@@ -14,9 +14,14 @@ class FinishedGoodSlipHandler extends BaseHandler
     'branchName',
     'description',
     'detailItem',
-    'workOrderId',
-    'workOrderNumber',
-    'itemName',
+    'bank',
+    'bankNo',
+    'chequeAmount',
+    'chequeDate',
+    'chequeNo',
+    'currencyCode',
+    'rate',
+    'paymentMethod',
     'approvalStatus',
     'lastUpdate',
     'optLock',
@@ -34,18 +39,12 @@ class FinishedGoodSlipHandler extends BaseHandler
       }
       $sharedContext['branchList'] = $map;
     } catch (\Exception $e) {
-      Log::error('FGS_FAILED_TO_FETCH_BRANCH_LIST', ['error' => $e->getMessage()]);
+      Log::error('OTHER_DEPOSIT_FAILED_TO_FETCH_BRANCH_LIST', ['error' => $e->getMessage()]);
     }
   }
 
   public function transformDetail(array &$detailData, array $sharedContext, array $meta = []): void
   {
-    // Extract workOrder['number'] → workOrderNumber, remove nested object
-    if (isset($detailData['workOrder']) && is_array($detailData['workOrder'])) {
-      $detailData['workOrderNumber'] = $detailData['workOrder']['number'] ?? null;
-      unset($detailData['workOrder']);
-    }
-
     // Transform branchId → branchName
     $branchList = $sharedContext['branchList'] ?? [];
     if (isset($detailData['branchId']) && !empty($branchList)) {
@@ -53,8 +52,8 @@ class FinishedGoodSlipHandler extends BaseHandler
       if (isset($branchList[$branchId]['name'])) {
         $detailData['branchName'] = $branchList[$branchId]['name'];
       } else {
-        Log::warning('FGS_BRANCH_NOT_FOUND', [
-          'item_id'  => $meta['itemId'] ?? null,
+        Log::warning('OTHER_DEPOSIT_BRANCH_NOT_FOUND', [
+          'item_id'   => $meta['itemId'] ?? null,
           'branch_id' => $branchId,
         ]);
       }
@@ -70,13 +69,13 @@ class FinishedGoodSlipHandler extends BaseHandler
 
     $missingFields = array_diff($this->allowedFields, array_keys($filteredData));
     if (!empty($missingFields)) {
-      Log::warning('FGS_MISSING_FIELDS', [
+      Log::warning('OTHER_DEPOSIT_MISSING_FIELDS', [
         'item_id'        => $meta['itemId'] ?? null,
         'missing_fields' => array_values($missingFields),
       ]);
     }
 
-    Log::info('FGS_DETAIL_FILTERED', [
+    Log::info('OTHER_DEPOSIT_DETAIL_FILTERED', [
       'item_id'      => $meta['itemId'] ?? null,
       'number'       => $filteredData['number'] ?? null,
       'fields_count' => count($filteredData),

@@ -18,7 +18,7 @@ class PurchaseInvoiceHandler extends BaseHandler
         'description',
         'currencyCode',
         'detailItem',
-        'detailDownPayment',
+        // 'detailDownPayment',
         'detailExpense',
         'documentCode',
         'documentTransaction',
@@ -54,9 +54,6 @@ class PurchaseInvoiceHandler extends BaseHandler
       }
       $sharedContext['branchList'] = $map;
     } catch (\Exception $e) {
-      Log::error('FAILED_TO_FETCH_BRANCH_LIST', [
-        'error' => $e->getMessage(),
-      ]);
     }
   }
 
@@ -69,11 +66,6 @@ class PurchaseInvoiceHandler extends BaseHandler
       if (isset($branchList[$branchId]['name'])) {
         $detailData['branchName'] = $branchList[$branchId]['name'];
       } else {
-        Log::warning('PURCHASE_INVOICE_BRANCH_NOT_FOUND_IN_LIST', [
-          'item_id'            => $meta['itemId'] ?? null,
-          'branch_id'          => $branchId,
-          'available_branches' => array_keys($branchList),
-        ]);
       }
     }
 

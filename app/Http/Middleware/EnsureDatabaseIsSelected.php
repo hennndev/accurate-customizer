@@ -16,6 +16,12 @@ class EnsureDatabaseIsSelected
             
             // Pengecualian: Biarkan pengguna mengakses halaman pemilihan database, form-nya, dan proses logout
           if (!$request->routeIs('database.selection') && !$request->routeIs('database.select') && !$request->routeIs('logout') && !$request->routeIs('settings.accurate') && !$request->routeIs('accurate.auth')) {
+                if ($request->expectsJson() || $request->ajax()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Database belum dipilih. Silakan pilih database terlebih dahulu.'
+                    ], 409);
+                }
                 
                 // Jika tidak, paksa alihkan ke halaman pemilihan database
                 return redirect()->route('database.selection');

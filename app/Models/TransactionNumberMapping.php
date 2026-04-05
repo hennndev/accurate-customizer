@@ -40,9 +40,27 @@ class TransactionNumberMapping extends Model
     public static function storeMapping(int $databaseId, string $moduleSlug, string $oldNumber, array $response): void
     {
         // Extract new number from response
-        $newNumber = $response['r']['number'] ?? null;
+        $newNumber = $response['r']['number']
+            ?? $response['r']['receiveNumber']
+            ?? $response['r']['no']
+            ?? $response['d']['number']
+            ?? $response['d']['receiveNumber']
+            ?? $response['d']['no']
+            ?? null;
         
         if ($newNumber) {
+            $responseSummary = [
+                's' => $response['s'] ?? null,
+                'd' => is_string($response['d'] ?? null) ? $response['d'] : null,
+                'r' => [
+                    'id' => $response['r']['id'] ?? $response['d']['id'] ?? null,
+                    'number' => $response['r']['number'] ?? $response['d']['number'] ?? null,
+                    'receiveNumber' => $response['r']['receiveNumber'] ?? $response['d']['receiveNumber'] ?? null,
+                    'no' => $response['r']['no'] ?? $response['d']['no'] ?? null,
+                    'transDate' => $response['r']['transDate'] ?? $response['d']['transDate'] ?? null,
+                ],
+            ];
+
             self::updateOrCreate(
                 [
                     'accurate_database_id' => $databaseId,
@@ -51,7 +69,7 @@ class TransactionNumberMapping extends Model
                 ],
                 [
                     'new_number' => $newNumber,
-                    'response_data' => $response,
+                    'response_data' => $responseSummary,
                 ]
             );
         }
