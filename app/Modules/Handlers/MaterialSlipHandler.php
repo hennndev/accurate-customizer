@@ -3,9 +3,23 @@
 namespace App\Modules\Handlers;
 
 use App\Services\AccurateService;
+use Illuminate\Support\Facades\Log;
 
 class MaterialSlipHandler extends BaseHandler
 {
+  protected array $allowedFields = [
+    'number',
+    'transDate',
+    'branchId',
+    'branchName',
+    'description',
+    'detailItem',
+    'workOrderId',
+    'approvalStatus',
+    'lastUpdate',
+    'optLock',
+  ];
+
   public function preCapture(AccurateService $accurate, array &$sharedContext): void
   {
     try {
@@ -18,19 +32,49 @@ class MaterialSlipHandler extends BaseHandler
       }
       $sharedContext['branchList'] = $map;
     } catch (\Exception $e) {
+      Log::error('MATERIAL_SLIP_FAILED_TO_FETCH_BRANCH_LIST', ['error' => $e->getMessage()]);
     }
   }
 
   public function transformDetail(array &$detailData, array $sharedContext, array $meta = []): void
   {
+    // Transform branchId → branchName
     $branchList = $sharedContext['branchList'] ?? [];
     if (isset($detailData['branchId']) && !empty($branchList)) {
       $branchId = $detailData['branchId'];
       if (isset($branchList[$branchId]['name'])) {
-        $branchName = $branchList[$branchId]['name'];
-        unset($detailData['branchId']);
-        $detailData['branchName'] = $branchName;
+        $detailData['branchName'] = $branchList[$branchId]['name'];
+      } else {
+        Log::warning('MATERIAL_SLIP_BRANCH_NOT_FOUND', [
+          'item_id'   => $meta['itemId'] ?? null,
+          'branch_id' => $branchId,
+        ]);
       }
     }
+
+    // Filter to allowed fields only
+    $filteredData = [];
+    foreach ($this->allowedFields as $field) {
+      if (array_key_exists($field, $detailData)) {
+        $filteredData[$field] = $detailData[$field];
+      }
+    }
+
+    $missingFields = array_diff($this->allowedFields, array_keys($filteredData));
+    if (!empty($missingFields)) {
+      Log::warning('MATERIAL_SLIP_MISSING_FIELDS', [
+        'item_id'        => $meta['itemId'] ?? null,
+        'missing_fields' => array_values($missingFields),
+      ]);
+    }
+
+    Log::info('MATERIAL_SLIP_DETAIL_FILTERED', [
+      'item_id'      => $meta['itemId'] ?? null,
+      'number'       => $filteredData['number'] ?? null,
+      'fields_count' => count($filteredData),
+      'fields'       => array_keys($filteredData),
+    ]);
+
+    $detailData = $filteredData;
   }
 }

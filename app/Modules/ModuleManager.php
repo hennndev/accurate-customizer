@@ -13,11 +13,13 @@ use App\Modules\Handlers\CustomerHandler;
 use App\Modules\Handlers\DepartmentHandler;
 use App\Modules\Handlers\DeliveryOrderHandler;
 use App\Modules\Handlers\FinishedGoodSlipHandler;
+use App\Modules\Handlers\MaterialSlipHandler;
+use App\Modules\Handlers\WorkOrderHandler;
 use App\Modules\Handlers\ItemHandler;
 use App\Modules\Handlers\ItemCategoryHandler;
+use App\Modules\Handlers\ItemAdjustmentHandler;
 use App\Modules\Handlers\ItemTransferHandler;
 use App\Modules\Handlers\JournalVoucherHandler;
-use App\Modules\Handlers\MaterialSlipHandler;
 use App\Modules\Handlers\PurchaseInvoiceHandler;
 use App\Modules\Handlers\UnitHandler;
 use App\Modules\Handlers\VendorCategoryHandler;
@@ -50,6 +52,7 @@ class ModuleManager
             'journal-voucher' => new JournalVoucherHandler(),
             'item' => new ItemHandler(),
             'item-category' => new ItemCategoryHandler(),
+            'item-adjustment' => new ItemAdjustmentHandler(),
             'item-transfer' => new ItemTransferHandler(),
             'purchase-invoice' => new PurchaseInvoiceHandler(),
             'purchase-order' => new PurchaseOrderHandler(),
@@ -65,13 +68,14 @@ class ModuleManager
             'delivery-order' => new DeliveryOrderHandler(),
             'bill-of-material' => new BillOfMaterialHandler(),
             'finished-good-slip' => new FinishedGoodSlipHandler(),
+            'material-slip' => new MaterialSlipHandler(),
+            'work-order' => new WorkOrderHandler(),
             'unit' => new UnitHandler(),
             'vendor' => new VendorHandler(),
             'vendor-category' => new VendorCategoryHandler(),
             'vendor-claim' => new VendorClaimHandler(),
             'vendor-price' => new VendorPriceHandler(),
             'warehouse' => new WarehouseHandler(),
-            // 'material-slip' => new MaterialSlipHandler(),
             default => new BaseHandler(),
         };
     }
@@ -101,6 +105,9 @@ class ModuleManager
         }
         if (str_contains($endpoint, '/item-category/')) {
             return new ItemCategoryHandler();
+        }
+        if (str_contains($endpoint, '/item-adjustment/')) {
+            return new ItemAdjustmentHandler();
         }
         if (str_contains($endpoint, '/item/')) {
             return new ItemHandler();
@@ -150,6 +157,12 @@ class ModuleManager
         if (str_contains($endpoint, '/finished-good-slip/')) {
             return new FinishedGoodSlipHandler();
         }
+        if (str_contains($endpoint, '/material-slip/')) {
+            return new MaterialSlipHandler();
+        }
+        if (str_contains($endpoint, '/work-order/')) {
+            return new WorkOrderHandler();
+        }
         if (str_contains($endpoint, '/unit/')) {
             return new UnitHandler();
         }
@@ -168,9 +181,6 @@ class ModuleManager
         if (str_contains($endpoint, '/warehouse/')) {
             return new WarehouseHandler();
         }
-        // if (str_contains($endpoint, '/material-slip/')) {
-        //     return new MaterialSlipHandler();
-        // }
         return new BaseHandler();
     }
 }

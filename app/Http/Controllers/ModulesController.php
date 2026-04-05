@@ -6,6 +6,7 @@ use App\Models\Module;
 use App\Models\Transaction;
 use App\Models\SystemLog;
 use App\Services\AccurateService;
+use App\Services\Accurate\EndpointFieldProvider;
 use App\Modules\ModuleManager;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -49,7 +50,7 @@ class ModulesController extends Controller
 
   public function captureData(Request $request, AccurateService $accurate, $module)
   {
-    set_time_limit(6000);
+    set_time_limit(0);
 
     $moduleMapping = [
       // Transaction Modules
@@ -491,9 +492,16 @@ class ModulesController extends Controller
         }
       }
       // ===END FILTER TANGGAL===
+
       $listData = $accurate->fetchModuleData($moduleInfo['list_endpoint'], $params);
 
       $hasData = count($listData) > 0;
+      
+      Log::info("Module list data received", [
+        'module' => $module,
+        'total_records' => count($listData),
+        'has_data' => $hasData,
+      ]);
       $moduleRecord = Module::firstOrCreate(
         [
           'accurate_database_id' => $databaseId,
@@ -518,25 +526,35 @@ class ModulesController extends Controller
       $savedCount = 0;
       $failedCount = 0;
       $savedTransactionNumbers = [];
+      $endpointFieldProvider = app(EndpointFieldProvider::class);
+      $listOnlyByConfig = $endpointFieldProvider->getFieldsForEndpoint($moduleInfo['list_endpoint']) !== null;
+      $listOnlyMode = $listOnlyByConfig;
 
       $handler = ModuleManager::forSlug($module);
       $sharedContext = [];
-    
-      $handler->preCapture($accurate, $sharedContext);
+
+      if (!$listOnlyMode) {
+        $handler->preCapture($accurate, $sharedContext);
+      }
 
       if ($hasData) {
-        foreach ($listData as $item) {
+        $transactionsToInsert = [];
+        $batchSize = 100;
+        $itemCount = 0;
+        
+        foreach ($listData as $index => $item) {
           try {
             $itemId = $item['id'] ?? null;
-            
-            // Prepare params for detail endpoint
-            $detailParams = ['id' => $itemId];
-            
-            $detailDataRaw = $accurate->fetchModuleData($moduleInfo['detail_endpoint'], $detailParams);
-            
-            $detailData = $detailDataRaw;
-            if (is_array($detailDataRaw) && isset($detailDataRaw[0]) && is_array($detailDataRaw[0])) {
-              $detailData = $detailDataRaw[0];
+
+            $detailData = $item;
+            if (!$listOnlyMode) {
+              $detailParams = ['id' => $itemId];
+              $detailDataRaw = $accurate->fetchModuleData($moduleInfo['detail_endpoint'], $detailParams);
+
+              $detailData = $detailDataRaw;
+              if (is_array($detailDataRaw) && isset($detailDataRaw[0]) && is_array($detailDataRaw[0])) {
+                $detailData = $detailDataRaw[0];
+              }
             }
             
             if (empty($detailData) || !is_array($detailData)) {
@@ -546,25 +564,54 @@ class ModulesController extends Controller
             
             $identifierField = $moduleInfo['identifier_field'] ?? 'number';
             $transactionNo = $detailData[$identifierField] ?? $item[$identifierField] ?? "ID-{$itemId}";
-            $handler->transformDetail($detailData, $sharedContext, ['itemId' => $itemId, 'module' => $module]);
+
+            if (!$listOnlyMode) {
+              $handler->transformDetail($detailData, $sharedContext, ['itemId' => $itemId, 'module' => $module]);
+            }
             
-            $transaction = Transaction::create([
+            $transactionsToInsert[] = [
               'transaction_no' => $transactionNo,
               'accurate_database_id' => $databaseId,
               'module_id' => $moduleRecord->id,
               'data' => json_encode($detailData),
               'description' => $moduleInfo['name'],
               'captured_at' => now(),
-            ]);
+              'created_at' => now(),
+              'updated_at' => now(),
+            ];
+            
+            $savedTransactionNumbers[] = $transactionNo;
+            $itemCount++;
 
-            $savedCount++;
-            $savedTransactionNumbers[] = $transaction->transaction_no;
+            // Insert batch setiap 100 items
+            if (count($transactionsToInsert) >= $batchSize) {
+              Transaction::insert($transactionsToInsert);
+              $savedCount += count($transactionsToInsert);
+              Log::info("Batch inserted: " . count($transactionsToInsert) . " records for module: " . $module);
+              $transactionsToInsert = [];
+            }
 
           } catch (\Exception $e) {
+            Log::error("Error processing item in {$module}: " . $e->getMessage());
             $failedCount++;
             continue;
           }
         }
+        
+        // Insert sisa records di akhir
+        if (count($transactionsToInsert) > 0) {
+          Transaction::insert($transactionsToInsert);
+          $savedCount += count($transactionsToInsert);
+          Log::info("Final batch inserted: " . count($transactionsToInsert) . " records for module: " . $module);
+        }
+        
+        Log::info("Capture batch insert completed", [
+          'module' => $module,
+          'total_items_processed' => count($listData),
+          'saved_count' => $savedCount,
+          'failed_count' => $failedCount,
+          'list_only_mode' => $listOnlyMode,
+        ]);
       }
 
 
@@ -582,6 +629,7 @@ class ModulesController extends Controller
           'module_slug' => $module,
           'database_id' => $databaseId,
           'database_name' => $accurateDatabase->db_name,
+          'list_only_mode' => $listOnlyMode,
           'list_endpoint' => $moduleInfo['list_endpoint'],
           'detail_endpoint' => $moduleInfo['detail_endpoint'],
           'total_items' => count($listData),
@@ -602,6 +650,7 @@ class ModulesController extends Controller
           : "Module {$moduleInfo['name']} created but no data available",
         'module' => $moduleInfo['name'],
         'module_status' => $moduleRecord->is_active ? 'active' : 'inactive',
+        'list_only_mode' => $listOnlyMode,
         'total_records' => count($listData),
         'saved_records' => $savedCount,
         'failed_records' => $failedCount,

@@ -43,6 +43,21 @@ class WarehouseHandler extends BaseHandler
 
     public function transformDetail(array &$detailData, array $sharedContext, array $meta = []): void
     {
+        // Transform nested address object -> top-level warehouse address fields
+        if (isset($detailData['address']) && is_array($detailData['address'])) {
+            $warehouseAddress = $detailData['address'];
+
+            $detailData['city'] = $warehouseAddress['city'] ?? ($detailData['city'] ?? null);
+            $detailData['country'] = $warehouseAddress['country'] ?? ($detailData['country'] ?? null);
+            $detailData['province'] = $warehouseAddress['province'] ?? ($detailData['province'] ?? null);
+            $detailData['street'] = $warehouseAddress['street'] ?? ($detailData['street'] ?? null);
+            $detailData['zipCode'] = $warehouseAddress['zipCode'] ?? ($detailData['zipCode'] ?? null);
+
+            if (!isset($detailData['name']) || $detailData['name'] === '') {
+                $detailData['name'] = $warehouseAddress['name'] ?? null;
+            }
+        }
+
         // Transform branchId → branchName
         $branchList = $sharedContext['branchList'] ?? [];
         if (isset($detailData['branchId']) && !empty($branchList)) {

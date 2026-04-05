@@ -33,9 +33,10 @@
                this.capturing = true;
                this.progress = 0;
                this.currentModule = moduleName;
+               let progressInterval = null;
        
                try {
-                   const progressInterval = setInterval(() => {
+                   progressInterval = setInterval(() => {
                        if (this.progress < 90) {
                            this.progress += Math.floor(Math.random() * 15) + 5;
                        }
@@ -47,10 +48,12 @@
                    const endTime = document.getElementById('end_time')?.value || '23:59';
                    const filterType = document.querySelector('input[name=\'filter_type\']:checked')?.value || 'range';
        
-                   const response = await fetch(`{{ url('/modules') }}/${moduleSlug}/capture`, {
+                   const response = await fetch(`/modules/${moduleSlug}/capture`, {
                        method: 'POST',
                        headers: {
                            'Content-Type': 'application/json',
+                           'Accept': 'application/json',
+                           'X-Requested-With': 'XMLHttpRequest',
                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
                        },
                        body: JSON.stringify({
@@ -58,11 +61,17 @@
                            end_date: endDate,
                            start_time: startTime,
                            end_time: endTime,
-                           filter_type: filterType
+                           filter_type: filterType,
                        })
                    });
        
-                   const result = await response.json();
+                   const contentType = response.headers.get('content-type') || '';
+                   const responseText = await response.text();
+                   let result = null;
+       
+                   if (contentType.includes('application/json')) {
+                       result = JSON.parse(responseText);
+                   }
        
                    clearInterval(progressInterval);
                    this.progress = 100;
@@ -72,18 +81,24 @@
                        this.progress = 0;
                        this.currentModule = '';
        
-                       if (result.success) {
+                       if (response.ok && result?.success) {
                            window.location.reload();
                        } else {
-                           alert(result.message || 'Failed to capture data');
+                           const htmlMessage = !contentType.includes('application/json') ?
+                               'Server mengembalikan HTML (kemungkinan redirect/session expired).' :
+                               null;
+                           alert(result?.message || htmlMessage || 'Failed to capture data');
                        }
                    }, 1000);
        
                } catch (error) {
                    console.error('Capture error:', error);
+                   if (progressInterval) {
+                       clearInterval(progressInterval);
+                   }
                    this.capturing = false;
                    this.progress = 0;
-                   alert('An error occurred while capturing data');
+                   alert(error?.message || 'An error occurred while capturing data');
                }
            }
        }"
@@ -1026,7 +1041,7 @@
                   'icon' => '<path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />',
               ],
               [
-                  'name' => 'Expense Accrual',
+                  'name' => 'Expense',
                   'slug' => 'expense-accrual',
                   'color' => 'red',
                   'description' => 'Accrued expenses tracking',
