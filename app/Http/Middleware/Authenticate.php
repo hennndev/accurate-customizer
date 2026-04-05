@@ -12,6 +12,10 @@ class Authenticate extends Middleware
      */
     protected function redirectTo(Request $request): ?string
     {
+        if ($request->is('modules/*/capture')) {
+            return null;
+        }
+
         return $request->expectsJson() ? null : route('login');
     }
 }

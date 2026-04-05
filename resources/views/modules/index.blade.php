@@ -50,6 +50,7 @@
        
                    const response = await fetch(`/modules/${moduleSlug}/capture`, {
                        method: 'POST',
+                       credentials: 'same-origin',
                        headers: {
                            'Content-Type': 'application/json',
                            'Accept': 'application/json',
@@ -84,9 +85,16 @@
                        if (response.ok && result?.success) {
                            window.location.reload();
                        } else {
-                           const htmlMessage = !contentType.includes('application/json') ?
-                               'Server mengembalikan HTML (kemungkinan redirect/session expired).' :
-                               null;
+                           console.log(response)
+                           let htmlMessage = null;
+                           if (!contentType.includes('application/json')) {
+                               const isAuthRedirect = response.redirected &&
+                                   (response.url.includes('/login') || response.url.includes('/select-database'));
+                               const snippet = (responseText || '').replace(/\s+/g, ' ').trim().slice(0, 180);
+                               htmlMessage = isAuthRedirect ?
+                                   `Sesi habis / database belum dipilih. Redirect ke: ${response.url}` :
+                                   `Server mengembalikan HTML. Status: ${response.status}. URL: ${response.url}. Snippet: ${snippet}`;
+                           }
                            alert(result?.message || htmlMessage || 'Failed to capture data');
                        }
                    }, 1000);
