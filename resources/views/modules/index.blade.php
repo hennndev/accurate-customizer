@@ -26,248 +26,297 @@
            capturing: false,
            progress: 0,
            currentModule: '',
+           monitorId: null,
+           monitorVisible: false,
+           monitorStatus: 'idle',
+           monitorMessage: '',
+           monitorSaved: 0,
+           monitorFailed: 0,
+           monitorItems: 0,
+           monitorPages: 0,
            switchingDb: false,
            searchQuery: '',
-           activeFilter: '{{ in_array(request('filter_type'), ['range', 'equal', 'last_update', 'last_update_equal']) ? 'transaction' : 'all' }}',
+           activeFilter: 'all',
+           restoreMonitorFromStorage() {
+               const stored = localStorage.getItem('activeMonitorId');
+               if (stored) {
+                   try {
+                       const data = JSON.parse(stored);
+                       if (data.monitorId && data.currentModule) {
+                           this.monitorId = data.monitorId;
+                           this.currentModule = data.currentModule;
+                           this.monitorVisible = true;
+                           this.capturing = true;
+                           this.progress = data.progress || 0;
+                           this.monitorStatus = data.monitorStatus || 'running';
+                           this.monitorMessage = 'Restoring from previous session...';
+                           this.resumePolling();
+                       }
+                   } catch (e) {
+                       console.error('Failed to restore monitor:', e);
+                       localStorage.removeItem('activeMonitorId');
+                   }
+               }
+           },
+           saveMonitorToStorage() {
+               localStorage.setItem('activeMonitorId', JSON.stringify({
+                   monitorId: this.monitorId,
+                   currentModule: this.currentModule,
+                   progress: this.progress,
+                   monitorStatus: this.monitorStatus
+               }));
+           },
+           clearMonitorFromStorage() {
+               localStorage.removeItem('activeMonitorId');
+           },
+           async resumePolling() {
+               if (!this.monitorId) return;
+               try {
+                   while (true) {
+                       await new Promise(resolve => setTimeout(resolve, 1500));
+                       const statusResponse = await fetch(`/system-logs/${this.monitorId}/status`, {
+                           method: 'GET',
+                           credentials: 'same-origin',
+                           headers: {
+                               'Accept': 'application/json',
+                               'X-Requested-With': 'XMLHttpRequest',
+                           },
+                       });
+       
+                       if (!statusResponse.ok) {
+                           continue;
+                       }
+       
+                       const statusResult = await statusResponse.json();
+                       const payload = statusResult?.payload || {};
+                       const trackerStatus = statusResult?.status;
+       
+                       if (typeof payload?.progress === 'number') {
+                           this.progress = Math.max(this.progress, Math.min(100, payload.progress));
+                       }
+                       this.monitorSaved = Number(payload?.saved_count || 0);
+                       this.monitorFailed = Number(payload?.failed_count || 0);
+                       this.monitorItems = Number(payload?.processed_items || 0);
+                       this.monitorPages = Number(payload?.processed_pages || 0);
+                       this.monitorMessage = statusResult?.message || this.monitorMessage;
+                       this.saveMonitorToStorage();
+       
+                       if (['success', 'warning', 'info', 'failed'].includes(trackerStatus)) {
+                           this.progress = 100;
+                           this.monitorStatus = trackerStatus;
+       
+                           setTimeout(() => {
+                               this.capturing = false;
+                               this.currentModule = '';
+                               this.monitorMessage = trackerStatus === 'failed' ?
+                                   (statusResult?.message || 'Capture gagal') :
+                                   `Capture selesai. Saved: ${this.monitorSaved}, Failed: ${this.monitorFailed}`;
+                               this.clearMonitorFromStorage();
+                           }, 800);
+                           break;
+                       }
+                   }
+               } catch (error) {
+                   console.error('Resume polling error:', error);
+                   this.capturing = false;
+                   this.monitorStatus = 'failed';
+                   this.monitorMessage = error?.message || 'An error occurred while monitoring';
+                   this.clearMonitorFromStorage();
+               }
+           },
            async captureData(moduleName, moduleSlug) {
                this.capturing = true;
                this.progress = 0;
                this.currentModule = moduleName;
-               let progressInterval = null;
+               this.monitorVisible = true;
+               this.monitorStatus = 'queued';
+               this.monitorMessage = 'Menyiapkan capture job...';
+               this.monitorSaved = 0;
+               this.monitorFailed = 0;
+               this.monitorItems = 0;
+               this.monitorPages = 0;
        
                try {
-                   progressInterval = setInterval(() => {
-                       if (this.progress < 90) {
-                           this.progress += Math.floor(Math.random() * 15) + 5;
-                       }
-                   }, 300);
-       
                    const startDate = document.getElementById('start_date')?.value || '';
                    const endDate = document.getElementById('end_date')?.value || '';
                    const startTime = document.getElementById('start_time')?.value || '00:00';
                    const endTime = document.getElementById('end_time')?.value || '23:59';
                    const filterType = document.querySelector('input[name=\'filter_type\']:checked')?.value || 'range';
-                   let capturePage = 1;
-                   const pagesPerRequest = 2;
-                   let totalSaved = 0;
-                   let totalFailed = 0;
-                   let finalResult = null;
+                   const response = await fetch(`/modules/${moduleSlug}/capture`, {
+                       method: 'POST',
+                       credentials: 'same-origin',
+                       headers: {
+                           'Content-Type': 'application/json',
+                           'Accept': 'application/json',
+                           'X-Requested-With': 'XMLHttpRequest',
+                           'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                       },
+                       body: JSON.stringify({
+                           start_date: startDate,
+                           end_date: endDate,
+                           start_time: startTime,
+                           end_time: endTime,
+                           filter_type: filterType,
+                           capture_page: 1,
+                       })
+                   });
+       
+                   const result = await response.json();
+                   if (!(response.ok && result?.success && result?.queued && result?.monitor_id)) {
+                       throw new Error(result?.message || 'Failed to queue capture job');
+                   }
+       
+                   this.monitorId = result.monitor_id;
+                   this.monitorStatus = 'running';
+                   this.monitorMessage = 'Capture job sedang diproses...';
+                   this.progress = Math.max(this.progress, 1);
+                   this.saveMonitorToStorage();
        
                    while (true) {
-                       const response = await fetch(`/modules/${moduleSlug}/capture`, {
-                           method: 'POST',
+                       await new Promise(resolve => setTimeout(resolve, 1500));
+                       const statusResponse = await fetch(`/system-logs/${this.monitorId}/status`, {
+                           method: 'GET',
                            credentials: 'same-origin',
                            headers: {
-                               'Content-Type': 'application/json',
                                'Accept': 'application/json',
                                'X-Requested-With': 'XMLHttpRequest',
-                               'X-CSRF-TOKEN': '{{ csrf_token() }}'
                            },
-                           body: JSON.stringify({
-                               start_date: startDate,
-                               end_date: endDate,
-                               start_time: startTime,
-                               end_time: endTime,
-                               filter_type: filterType,
-                               capture_page: capturePage,
-                               pages_per_request: pagesPerRequest,
-                           })
                        });
        
-                       const contentType = response.headers.get('content-type') || '';
-                       const responseText = await response.text();
-                       let result = null;
-       
-                       if (contentType.includes('application/json')) {
-                           result = JSON.parse(responseText);
-                       }
-       
-                       if (!(response.ok && result?.success)) {
-                           console.log(response);
-                           let htmlMessage = null;
-                           if (!contentType.includes('application/json')) {
-                               const isAuthRedirect = response.redirected &&
-                                   (response.url.includes('/login') || response.url.includes('/select-database'));
-                               const snippet = (responseText || '').replace(/\s+/g, ' ').trim().slice(0, 180);
-                               htmlMessage = isAuthRedirect ?
-                                   `Sesi habis / database belum dipilih. Redirect ke: ${response.url}` :
-                                   `Server mengembalikan HTML. Status: ${response.status}. URL: ${response.url}. Snippet: ${snippet}`;
-                           }
-       
-                           clearInterval(progressInterval);
-                           this.capturing = false;
-                           this.progress = 0;
-                           this.currentModule = '';
-                           alert(result?.message || htmlMessage || 'Failed to capture data');
-                           return;
-                       }
-       
-                       totalSaved += Number(result?.saved_records || 0);
-                       totalFailed += Number(result?.failed_records || 0);
-                       finalResult = result;
-       
-                       if (result?.has_more) {
-                           capturePage = Number(result?.next_page || (capturePage + pagesPerRequest));
-                           this.progress = Math.min(95, this.progress + 8);
+                       if (!statusResponse.ok) {
                            continue;
                        }
        
-                       break;
-                   }
+                       const statusResult = await statusResponse.json();
+                       const payload = statusResult?.payload || {};
+                       const trackerStatus = statusResult?.status;
        
-                   clearInterval(progressInterval);
-                   this.progress = 100;
-       
-                   setTimeout(() => {
-                       this.capturing = false;
-                       this.progress = 0;
-                       this.currentModule = '';
-       
-                       const summaryMessage = `Capture selesai. Saved: ${totalSaved}, Failed: ${totalFailed}`;
-                       if (finalResult?.success) {
-                           alert(summaryMessage);
-                           window.location.reload();
+                       if (typeof payload?.progress === 'number') {
+                           this.progress = Math.max(this.progress, Math.min(100, payload.progress));
                        }
-                   }, 1000);
+                       this.monitorSaved = Number(payload?.saved_count || 0);
+                       this.monitorFailed = Number(payload?.failed_count || 0);
+                       this.monitorItems = Number(payload?.processed_items || 0);
+                       this.monitorPages = Number(payload?.processed_pages || 0);
+                       this.monitorMessage = statusResult?.message || this.monitorMessage;
+                       this.saveMonitorToStorage();
+       
+                       if (['success', 'warning', 'info', 'failed'].includes(trackerStatus)) {
+                           this.progress = 100;
+                           this.monitorStatus = trackerStatus;
+       
+                           setTimeout(() => {
+                               this.capturing = false;
+                               this.currentModule = '';
+                               this.monitorMessage = trackerStatus === 'failed' ?
+                                   (statusResult?.message || 'Capture gagal') :
+                                   `Capture selesai. Saved: ${this.monitorSaved}, Failed: ${this.monitorFailed}`;
+                               this.clearMonitorFromStorage();
+                           }, 800);
+                           break;
+                       }
+                   }
        
                } catch (error) {
                    console.error('Capture error:', error);
-                   if (progressInterval) {
-                       clearInterval(progressInterval);
-                   }
                    this.capturing = false;
-                   this.progress = 0;
-                   alert(error?.message || 'An error occurred while capturing data');
+                   this.monitorStatus = 'failed';
+                   this.monitorMessage = error?.message || 'An error occurred while capturing data';
+                   this.clearMonitorFromStorage();
                }
+           },
+           applyModuleFilters() {
+               const allCards = document.querySelectorAll('[data-module-name]');
+               allCards.forEach(card => {
+                   const category = card.dataset.moduleCategory || '';
+                   const name = card.dataset.moduleName?.toLowerCase() || '';
+                   const description = card.dataset.moduleDescription?.toLowerCase() || '';
+                   const searchMatches = !this.searchQuery || name.includes(this.searchQuery.toLowerCase()) || description.includes(this.searchQuery.toLowerCase());
+                   const categoryMatches = this.activeFilter === 'all' || category === this.activeFilter;
+                   card.style.display = (searchMatches && categoryMatches) ? '' : 'none';
+               });
+       
+               const masterSection = document.getElementById('master-data-section');
+               const transactionSection = document.getElementById('transaction-section');
+       
+               if (masterSection && transactionSection) {
+                   if (this.activeFilter === 'master') {
+                       masterSection.style.display = '';
+                       transactionSection.style.display = 'none';
+                   } else if (this.activeFilter === 'transaction') {
+                       masterSection.style.display = 'none';
+                       transactionSection.style.display = '';
+                   } else {
+                       masterSection.style.display = '';
+                       transactionSection.style.display = '';
+                   }
+               }
+           },
+           initMonitoring() {
+               const filterType = new URLSearchParams(window.location.search).get('filter_type') || 'all';
+               if (['range', 'equal', 'last_update', 'last_update_equal'].includes(filterType)) {
+                   this.activeFilter = 'transaction';
+               } else if (filterType === 'master') {
+                   this.activeFilter = 'master';
+               }
+       
+               this.$watch('searchQuery', () => this.applyModuleFilters());
+               this.$watch('activeFilter', () => this.applyModuleFilters());
+       
+               this.$nextTick(() => {
+                   this.applyModuleFilters();
+                   this.restoreMonitorFromStorage();
+               });
            }
        }"
-       x-init="$watch('searchQuery', () => {
-           // Search in both grids
-           const masterGrid = document.querySelectorAll('[data-module-name]');
-           masterGrid.forEach(card => {
-               const name = card.dataset.moduleName?.toLowerCase() || '';
-               const description = card.dataset.moduleDescription?.toLowerCase() || '';
-               const category = card.dataset.moduleCategory || '';
-               const matches = !searchQuery || name.includes(searchQuery.toLowerCase()) || description.includes(searchQuery.toLowerCase());
-               const categoryMatches = activeFilter === 'all' || category === activeFilter;
-               card.style.display = (matches && categoryMatches) ? '' : 'none';
-           });
-       });
-       $watch('activeFilter', () => {
-           // Filter by category
-           const allCards = document.querySelectorAll('[data-module-name]');
-           allCards.forEach(card => {
-               const category = card.dataset.moduleCategory || '';
-               const name = card.dataset.moduleName?.toLowerCase() || '';
-               const description = card.dataset.moduleDescription?.toLowerCase() || '';
-               const searchMatches = !searchQuery || name.includes(searchQuery.toLowerCase()) || description.includes(searchQuery.toLowerCase());
-               const categoryMatches = activeFilter === 'all' || category === activeFilter;
-               card.style.display = (searchMatches && categoryMatches) ? '' : 'none';
-           });
-       
-           // Show/hide section headers
-           const masterSection = document.getElementById('master-data-section');
-           const transactionSection = document.getElementById('transaction-section');
-           if (activeFilter === 'master') {
-               masterSection.style.display = '';
-               transactionSection.style.display = 'none';
-           } else if (activeFilter === 'transaction') {
-               masterSection.style.display = 'none';
-               transactionSection.style.display = '';
-           } else {
-               masterSection.style.display = '';
-               transactionSection.style.display = '';
-           }
-       });
-       
-       // Apply initial filter on page load (watch only fires on change)
-       $nextTick(() => {
-           const allCards = document.querySelectorAll('[data-module-name]');
-           allCards.forEach(card => {
-               const category = card.dataset.moduleCategory || '';
-               const categoryMatches = activeFilter === 'all' || category === activeFilter;
-               card.style.display = categoryMatches ? '' : 'none';
-           });
-           const masterSection = document.getElementById('master-data-section');
-           const transactionSection = document.getElementById('transaction-section');
-           if (activeFilter === 'master') {
-               masterSection.style.display = '';
-               transactionSection.style.display = 'none';
-           } else if (activeFilter === 'transaction') {
-               masterSection.style.display = 'none';
-               transactionSection.style.display = '';
-           } else {
-               masterSection.style.display = '';
-               transactionSection.style.display = '';
-           }
-       })">
-    {{-- Progress Modal --}}
-    <div x-show="capturing"
-         x-transition:enter="transition ease-out duration-300"
-         x-transition:enter-start="opacity-0"
-         x-transition:enter-end="opacity-100"
-         x-transition:leave="transition ease-in duration-200"
-         x-transition:leave-start="opacity-100"
-         x-transition:leave-end="opacity-0"
-         class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center px-4"
-         style="display: none;">
-      <div class="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl"
-           x-transition:enter="transition ease-out duration-300"
-           x-transition:enter-start="opacity-0 scale-95"
-           x-transition:enter-end="opacity-100 scale-100">
-        <div class="flex flex-col gap-6">
-          <div class="flex items-center gap-4">
-            <div class="relative">
-              <svg class="animate-spin h-12 w-12 text-blue-600"
-                   xmlns="http://www.w3.org/2000/svg"
-                   fill="none"
-                   viewBox="0 0 24 24">
-                <circle class="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        stroke-width="4"></circle>
-                <path class="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
-                </path>
-              </svg>
-            </div>
-            <div class="flex-1">
-              <p class="text-lg font-semibold text-gray-900">Capturing Data...</p>
-              <p class="text-sm text-gray-600"
-                 x-text="currentModule"></p>
-            </div>
-          </div>
+       x-init="initMonitoring()">
+    <div x-show="monitorVisible"
+         x-transition
+         class="w-full rounded-xl border border-blue-200 bg-blue-50 p-4 flex flex-col gap-3">
+      <div class="flex items-center justify-between gap-3">
+        <div class="flex flex-col">
+          <p class="text-sm font-semibold text-blue-900">Capture Monitor</p>
+          <p class="text-sm text-blue-700"
+             x-text="currentModule || 'Queue job'"></p>
+        </div>
+        <button type="button"
+                x-show="!capturing"
+                @click="monitorVisible = false; clearMonitorFromStorage();"
+                class="text-xs px-2 py-1 rounded border border-blue-300 text-blue-700 hover:bg-blue-100">Tutup</button>
+      </div>
 
-          <div class="space-y-2">
-            <div class="flex justify-between text-sm">
-              <span class="text-gray-600">Progress</span>
-              <span class="font-semibold text-blue-600"
-                    x-text="progress + '%'"></span>
-            </div>
-            <div class="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-              <div class="bg-gradient-to-r from-blue-600 to-blue-400 h-3 rounded-full transition-all duration-300 ease-out"
-                   :style="`width: ${progress}%`"></div>
-            </div>
-          </div>
+      <div class="space-y-1">
+        <div class="flex justify-between text-xs text-blue-800">
+          <span x-text="monitorMessage || 'Menunggu progress...' "></span>
+          <span class="font-semibold"
+                x-text="progress + '%' "></span>
+        </div>
+        <div class="w-full bg-blue-100 rounded-full h-2 overflow-hidden">
+          <div class="bg-blue-600 h-2 rounded-full transition-all duration-300"
+               :style="`width: ${progress}%`"></div>
+        </div>
+      </div>
 
-          <div x-show="progress === 100"
-               x-transition:enter="transition ease-out duration-300"
-               x-transition:enter-start="opacity-0 scale-95"
-               x-transition:enter-end="opacity-100 scale-100"
-               class="flex items-center gap-2 text-green-600">
-            <svg xmlns="http://www.w3.org/2000/svg"
-                 viewBox="0 0 24 24"
-                 fill="currentColor"
-                 class="size-6">
-              <path fill-rule="evenodd"
-                    d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12Zm13.36-1.814a.75.75 0 1 0-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 0 0-1.06 1.06l2.25 2.25a.75.75 0 0 0 1.14-.094l3.75-5.25Z"
-                    clip-rule="evenodd" />
-            </svg>
-            <span class="font-semibold">Complete!</span>
-          </div>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+        <div class="rounded-lg bg-white border border-blue-100 px-3 py-2">
+          <p class="text-gray-500">Saved</p>
+          <p class="font-semibold text-green-600"
+             x-text="monitorSaved"></p>
+        </div>
+        <div class="rounded-lg bg-white border border-blue-100 px-3 py-2">
+          <p class="text-gray-500">Failed</p>
+          <p class="font-semibold text-red-600"
+             x-text="monitorFailed"></p>
+        </div>
+        <div class="rounded-lg bg-white border border-blue-100 px-3 py-2">
+          <p class="text-gray-500">Items</p>
+          <p class="font-semibold text-blue-700"
+             x-text="monitorItems"></p>
+        </div>
+        <div class="rounded-lg bg-white border border-blue-100 px-3 py-2">
+          <p class="text-gray-500">Pages</p>
+          <p class="font-semibold text-blue-700"
+             x-text="monitorPages"></p>
         </div>
       </div>
     </div>
@@ -710,7 +759,7 @@
         </svg>
         <span>All Modules</span>
         <span x-show="activeFilter === 'all'"
-              class="ml-1 px-2 py-0.5 bg-white/20 rounded-full text-xs font-semibold">49</span>
+              class="ml-1 px-2 py-0.5 bg-white/20 rounded-full text-xs font-semibold">51</span>
       </button>
 
       <button @click="activeFilter = 'master'"
@@ -746,7 +795,7 @@
         </svg>
         <span>Transactions</span>
         <span x-show="activeFilter === 'transaction'"
-              class="ml-1 px-2 py-0.5 bg-white/20 rounded-full text-xs font-semibold">29</span>
+              class="ml-1 px-2 py-0.5 bg-white/20 rounded-full text-xs font-semibold">31</span>
       </button>
     </div>
 
@@ -1153,6 +1202,14 @@
                   'icon' => '<path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25ZM6.75 12h.008v.008H6.75V12Zm0 3h.008v.008H6.75V15Zm0 3h.008v.008H6.75V18Z" />',
               ],
               [
+                  'name' => 'Down Payment Purchase Invoice',
+                  'slug' => 'down-payment-purchase-invoice',
+                  'color' => 'amber',
+                  'description' => 'Down payment purchase invoices',
+                  'scope' => 'purchase_invoice_view',
+                  'icon' => '<path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25ZM6.75 12h.008v.008H6.75V12Zm0 3h.008v.008H6.75V15Zm0 3h.008v.008H6.75V18Z" />',
+              ],
+              [
                   'name' => 'Purchase Order',
                   'slug' => 'purchase-order',
                   'color' => 'purple',
@@ -1205,6 +1262,14 @@
                   'slug' => 'sales-invoice',
                   'color' => 'green',
                   'description' => 'Sales invoices and billing',
+                  'scope' => 'sales_invoice_view',
+                  'icon' => '<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />',
+              ],
+              [
+                  'name' => 'Down Payment Sales Invoice',
+                  'slug' => 'down-payment-sales-invoice',
+                  'color' => 'emerald',
+                  'description' => 'Down payment sales invoices',
                   'scope' => 'sales_invoice_view',
                   'icon' => '<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />',
               ],
@@ -1354,7 +1419,8 @@
                   <p class="text-gray-500 text-xs mt-1">Last captured:
                     {{ $lastCaptured->diffForHumans() }}</p>
                 </div>
-                <button @click="captureData('{{ $card['name'] }}', '{{ $card['slug'] }}')"
+                <button type="button"
+                        @click.prevent="captureData('{{ $card['name'] }}', '{{ $card['slug'] }}')"
                         :disabled="capturing || switchingDb"
                         class="flex items-center justify-center gap-3 text-white font-semibold px-4 py-2 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
                         style="background: linear-gradient(to right, {{ $colors['from'] }}, {{ $colors['to'] }});"
@@ -1374,7 +1440,8 @@
                 <div class="bg-gray-50 rounded-xl p-3 text-center">
                   <p class="text-gray-500 font-medium text-[15px]">No data captured yet</p>
                 </div>
-                <button @click="captureData('{{ $card['name'] }}', '{{ $card['slug'] }}')"
+                <button type="button"
+                        @click.prevent="captureData('{{ $card['name'] }}', '{{ $card['slug'] }}')"
                         :disabled="capturing || switchingDb"
                         class="flex items-center justify-center gap-3 text-white font-semibold px-4 py-2 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
                         style="background: linear-gradient(to right, {{ $colors['from'] }}, {{ $colors['to'] }});"
@@ -1488,7 +1555,8 @@
                   <p class="text-gray-500 text-xs mt-1">Last captured:
                     {{ $lastCaptured->diffForHumans() }}</p>
                 </div>
-                <button @click="captureData('{{ $card['name'] }}', '{{ $card['slug'] }}')"
+                <button type="button"
+                        @click.prevent="captureData('{{ $card['name'] }}', '{{ $card['slug'] }}')"
                         :disabled="capturing || switchingDb"
                         class="flex items-center justify-center gap-3 text-white font-semibold px-4 py-2 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
                         style="background: linear-gradient(to right, {{ $colors['from'] }}, {{ $colors['to'] }});"
@@ -1508,7 +1576,8 @@
                 <div class="bg-gray-50 rounded-xl p-3 text-center">
                   <p class="text-gray-500 font-medium text-[15px]">No data captured yet</p>
                 </div>
-                <button @click="captureData('{{ $card['name'] }}', '{{ $card['slug'] }}')"
+                <button type="button"
+                        @click.prevent="captureData('{{ $card['name'] }}', '{{ $card['slug'] }}')"
                         :disabled="capturing || switchingDb"
                         class="flex items-center justify-center gap-3 text-white font-semibold px-4 py-2 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
                         style="background: linear-gradient(to right, {{ $colors['from'] }}, {{ $colors['to'] }});"

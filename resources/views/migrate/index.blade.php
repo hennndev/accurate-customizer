@@ -45,8 +45,13 @@
            parsedData: {},
            searchField: '',
            migrating: false,
+           migrateMonitorVisible: false,
+           migrateMonitorId: null,
            progress: 0,
            currentStatus: 'Preparing migration...',
+           migrateSuccessCount: 0,
+           migrateFailedCount: 0,
+           migrateTotalSelected: 0,
        
            selectAllTransactions() {
                if (this.selectAll) {
@@ -198,6 +203,92 @@
                }
            },
        
+           saveMigrateMonitorState() {
+               localStorage.setItem('migrateMonitorState', JSON.stringify({
+                   migrateMonitorId: this.migrateMonitorId,
+                   migrateMonitorVisible: this.migrateMonitorVisible,
+                   migrating: this.migrating,
+                   progress: this.progress,
+                   currentStatus: this.currentStatus,
+                   migrateSuccessCount: this.migrateSuccessCount,
+                   migrateFailedCount: this.migrateFailedCount,
+                   migrateTotalSelected: this.migrateTotalSelected,
+               }));
+           },
+       
+           clearMigrateMonitorState() {
+               localStorage.removeItem('migrateMonitorState');
+           },
+       
+           restoreMigrateMonitorState() {
+               const raw = localStorage.getItem('migrateMonitorState');
+               if (!raw) return;
+       
+               try {
+                   const state = JSON.parse(raw);
+                   if (!state?.migrateMonitorId) return;
+       
+                   this.migrateMonitorId = state.migrateMonitorId;
+                   this.migrateMonitorVisible = true;
+                   this.migrating = true;
+                   this.progress = Number(state.progress || 0);
+                   this.currentStatus = state.currentStatus || 'Resuming migration monitor...';
+                   this.migrateSuccessCount = Number(state.migrateSuccessCount || 0);
+                   this.migrateFailedCount = Number(state.migrateFailedCount || 0);
+                   this.migrateTotalSelected = Number(state.migrateTotalSelected || 0);
+       
+                   this.pollMigrateStatus();
+               } catch (e) {
+                   this.clearMigrateMonitorState();
+               }
+           },
+       
+           async pollMigrateStatus() {
+               if (!this.migrateMonitorId) return;
+       
+               while (true) {
+                   await new Promise(resolve => setTimeout(resolve, 1500));
+                   const statusResponse = await fetch(`/system-logs/${this.migrateMonitorId}/status`, {
+                       method: 'GET',
+                       credentials: 'same-origin',
+                       headers: {
+                           'Accept': 'application/json',
+                           'X-Requested-With': 'XMLHttpRequest',
+                       },
+                   });
+       
+                   if (!statusResponse.ok) {
+                       continue;
+                   }
+       
+                   const statusResult = await statusResponse.json();
+                   const payload = statusResult?.payload || {};
+                   const trackerStatus = statusResult?.status;
+       
+                   if (typeof payload?.progress === 'number') {
+                       this.progress = Math.max(this.progress, Math.min(100, payload.progress));
+                   }
+       
+                   this.migrateSuccessCount = Number(payload?.success_count || 0);
+                   this.migrateFailedCount = Number(payload?.failed_count || 0);
+                   this.migrateTotalSelected = Number(payload?.total_selected || this.migrateTotalSelected);
+                   this.currentStatus = statusResult?.message || this.currentStatus;
+                   this.saveMigrateMonitorState();
+       
+                   if (['success', 'warning', 'info', 'failed'].includes(trackerStatus)) {
+                       this.progress = 100;
+                       this.migrating = false;
+       
+                       if (trackerStatus === 'success' || trackerStatus === 'warning' || trackerStatus === 'info') {
+                           this.clearAll();
+                       }
+       
+                       this.clearMigrateMonitorState();
+                       break;
+                   }
+               }
+           },
+       
            async migrateSelected() {
                // Validate target database is selected
                const targetDbSelect = document.getElementById('targetDatabaseSelect');
@@ -206,38 +297,55 @@
                    return;
                }
        
-               // Set target database ID in hidden form
-               document.getElementById('targetDbIdInput').value = targetDbSelect.value;
+               if (!this.selected.length) {
+                   alert('Pilih minimal 1 transaksi untuk migrate.');
+                   return;
+               }
        
                this.migrating = true;
+               this.migrateMonitorVisible = true;
+               this.migrateMonitorId = null;
                this.progress = 0;
                this.currentStatus = 'Preparing migration...';
+               this.migrateSuccessCount = 0;
+               this.migrateFailedCount = 0;
+               this.migrateTotalSelected = this.selected.length;
        
-               // Submit form immediately (parallel with progress animation)
-               setTimeout(() => {
-                   $refs.migrateForm.submit();
-               }, 100);
+               try {
+                   const response = await fetch('{{ route('migrate.toAccurate') }}', {
+                       method: 'POST',
+                       credentials: 'same-origin',
+                       headers: {
+                           'Content-Type': 'application/json',
+                           'Accept': 'application/json',
+                           'X-Requested-With': 'XMLHttpRequest',
+                           'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                       },
+                       body: JSON.stringify({
+                           target_database_id: Number(targetDbSelect.value),
+                           ids: this.selected.map(id => Number(id)),
+                       }),
+                   });
        
-               // Simulate progress animation (slower and smoother)
-               const progressInterval = setInterval(() => {
-                   if (this.progress < 95) {
-                       this.progress += Math.floor(Math.random() * 3) + 1; // Slower increment (1-3%)
-       
-                       // Update status based on progress
-                       if (this.progress < 30) {
-                           this.currentStatus = 'Preparing migration...';
-                       } else if (this.progress < 60) {
-                           this.currentStatus = 'Processing transactions...';
-                       } else if (this.progress < 90) {
-                           this.currentStatus = 'Syncing with Accurate...';
-                       } else {
-                           this.currentStatus = 'Finalizing...';
-                       }
+                   const result = await response.json();
+                   if (!(response.ok && result?.success && result?.queued && result?.monitor_id)) {
+                       throw new Error(result?.message || 'Failed to queue migration');
                    }
-               }, 800); // Slower interval (800ms instead of 300ms)
+       
+                   this.migrateMonitorId = result.monitor_id;
+                   this.currentStatus = result?.message || 'Migration queued';
+                   this.saveMigrateMonitorState();
+                   await this.pollMigrateStatus();
+               } catch (error) {
+                   this.migrating = false;
+                   this.currentStatus = error?.message || 'Migration request failed';
+                   this.clearMigrateMonitorState();
+                   alert(this.currentStatus);
+               }
            }
        }"
-       x-init="$watch('selected', value => selectAll = value.length === allTransactionIds.length && allTransactionIds.length > 0)">
+       x-init="restoreMigrateMonitorState();
+       $watch('selected', value => selectAll = value.length === allTransactionIds.length && allTransactionIds.length > 0)">
     <div class="w-full bg-gradient-to-r from-green-600 to-green-700 rounded-xl p-5 md:p-8 lg:p-10 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 lg:gap-4">
       <div class="flex flex-col gap-4 md:gap-5 w-full lg:w-auto">
         <div class="flex items-center gap-3 md:gap-4">
@@ -738,7 +846,8 @@
 
     <div class="flex flex-col gap-4 md:gap-5 rounded-xl bg-white shadow-lg p-4 md:p-5 border border-gray-200">
       <div class="flex max-sm:flex-col max-sm:items-start max-sm:gap-3 items-center justify-between">
-        <div class="flex flex-col gap-1">
+        <div x-show="selected.length > 0 && !migrating"
+             class="flex flex-col gap-1">
           <div class="flex items-center gap-2">
             <svg xmlns="http://www.w3.org/2000/svg"
                  fill="none"
@@ -758,7 +867,7 @@
           </p>
         </div>
 
-        <div x-show="selected.length > 0"
+        <div x-show="selected.length > 0 && !migrating"
              x-cloak
              class="flex self-end gap-2">
           <button @click="confirmDelete()"
@@ -776,10 +885,12 @@
             </svg>
             <span>Remove <span x-text="selected.length"></span> Selected</span>
           </button>
-          <button @click="migrateSelected()"
+          <button @click.prevent="migrateSelected()"
                   type="button"
-                  class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 md:px-6 py-2 md:py-2.5 rounded-lg transition flex items-center gap-2 text-sm md:text-base">
-            <svg xmlns="http://www.w3.org/2000/svg"
+                  :disabled="migrating"
+                  class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 md:px-6 py-2 md:py-2.5 rounded-lg transition flex items-center gap-2 text-sm md:text-base disabled:opacity-60 disabled:cursor-not-allowed">
+            <svg x-show="!migrating"
+                 xmlns="http://www.w3.org/2000/svg"
                  fill="none"
                  viewBox="0 0 24 24"
                  stroke-width="1.5"
@@ -789,77 +900,93 @@
                     stroke-linejoin="round"
                     d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
             </svg>
-            <span>Migrate <span x-text="selected.length"></span> Selected</span>
+            <svg x-show="migrating"
+                 class="animate-spin w-5 h-5"
+                 xmlns="http://www.w3.org/2000/svg"
+                 fill="none"
+                 viewBox="0 0 24 24">
+              <circle class="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      stroke-width="4"></circle>
+              <path class="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+            </svg>
+            <span x-show="!migrating">Migrate <span x-text="selected.length"></span> Selected</span>
+            <span x-show="migrating">Migrating...</span>
           </button>
         </div>
 
-        {{-- Migration Progress Modal --}}
-        <div x-show="migrating"
-             x-transition:enter="transition ease-out duration-300"
-             x-transition:enter-start="opacity-0"
-             x-transition:enter-end="opacity-100"
-             x-transition:leave="transition ease-in duration-200"
-             x-transition:leave-start="opacity-100"
-             x-transition:leave-end="opacity-0"
-             class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center px-4"
-             style="display: none;">
-          <div class="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl"
-               x-transition:enter="transition ease-out duration-300"
-               x-transition:enter-start="opacity-0 scale-95"
-               x-transition:enter-end="opacity-100 scale-100">
-            <div class="flex flex-col gap-6">
-              <div class="flex items-center gap-4">
-                <div class="relative">
-                  <svg class="animate-spin h-12 w-12 text-blue-600"
-                       xmlns="http://www.w3.org/2000/svg"
-                       fill="none"
-                       viewBox="0 0 24 24">
-                    <circle class="opacity-25"
-                            cx="12"
-                            cy="12"
-                            r="10"
-                            stroke="currentColor"
-                            stroke-width="4"></circle>
-                    <path class="opacity-75"
-                          fill="currentColor"
-                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
-                    </path>
-                  </svg>
-                </div>
-                <div class="flex-1">
-                  <p class="text-lg font-semibold text-gray-900">Migrating Data...</p>
-                  <p class="text-sm text-gray-600"
-                     x-text="currentStatus"></p>
-                </div>
+        <div x-show="migrateMonitorVisible"
+             x-transition
+             class="w-full rounded-xl border border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 p-4 md:p-5 flex flex-col gap-4 mt-4">
+          <div class="flex items-start justify-between gap-3">
+            <div class="flex flex-col">
+              <div class="flex items-center gap-2">
+                <p class="text-sm font-semibold text-blue-900">Migrate Monitor</p>
+                <span class="text-[11px] px-2 py-0.5 rounded-full border"
+                      :class="migrating
+                          ?
+                          'bg-blue-100 border-blue-200 text-blue-700' :
+                          (migrateFailedCount > 0 ?
+                              'bg-amber-100 border-amber-200 text-amber-700' :
+                              'bg-green-100 border-green-200 text-green-700')"
+                      x-text="migrating ? 'Running' : (migrateFailedCount > 0 ? 'Done with warning' : 'Completed')"></span>
               </div>
+              <p class="text-sm text-blue-700"
+                 x-text="currentStatus || 'Menunggu progress...' "></p>
+              <p class="text-xs text-blue-600 mt-1">
+                Processed
+                <span class="font-semibold"
+                      x-text="migrateSuccessCount + migrateFailedCount"></span>
+                /
+                <span class="font-semibold"
+                      x-text="migrateTotalSelected"></span>
+              </p>
+            </div>
+            <button type="button"
+                    x-show="!migrating"
+                    @click="migrateMonitorVisible = false; clearMigrateMonitorState()"
+                    class="text-xs px-2 py-1 rounded border border-blue-300 text-blue-700 hover:bg-blue-100">Tutup</button>
+          </div>
 
-              <div class="space-y-2">
-                <div class="flex justify-between text-sm">
-                  <span class="text-gray-600">Progress</span>
-                  <span class="font-semibold text-blue-600"
-                        x-text="progress + '%'"></span>
-                </div>
-                <div class="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-                  <div class="bg-gradient-to-r from-blue-600 to-blue-400 h-3 rounded-full transition-all duration-300 ease-out"
-                       :style="`width: ${progress}%`"></div>
-                </div>
-              </div>
+          <div class="space-y-1">
+            <div class="flex justify-between text-xs text-blue-800">
+              <span>Progress</span>
+              <span class="font-semibold"
+                    x-text="progress + '%' "></span>
+            </div>
+            <div class="w-full bg-blue-100 rounded-full h-2.5 overflow-hidden">
+              <div class="bg-gradient-to-r from-blue-600 to-indigo-500 h-2.5 rounded-full transition-all duration-500"
+                   :style="`width: ${progress}%`"></div>
+            </div>
+          </div>
 
-              <div x-show="progress === 100"
-                   x-transition:enter="transition ease-out duration-300"
-                   x-transition:enter-start="opacity-0 scale-95"
-                   x-transition:enter-end="opacity-100 scale-100"
-                   class="flex items-center gap-2 text-green-600">
-                <svg xmlns="http://www.w3.org/2000/svg"
-                     viewBox="0 0 24 24"
-                     fill="currentColor"
-                     class="size-6">
-                  <path fill-rule="evenodd"
-                        d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12Zm13.36-1.814a.75.75 0 1 0-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 0 0-1.06 1.06l2.25 2.25a.75.75 0 0 0 1.14-.094l3.75-5.25Z"
-                        clip-rule="evenodd" />
-                </svg>
-                <span class="font-semibold">Complete!</span>
-              </div>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+            <div class="rounded-lg bg-white border border-blue-100 px-3 py-2">
+              <p class="text-gray-500">Success</p>
+              <p class="font-semibold text-green-600"
+                 x-text="migrateSuccessCount"></p>
+            </div>
+            <div class="rounded-lg bg-white border border-blue-100 px-3 py-2">
+              <p class="text-gray-500">Failed</p>
+              <p class="font-semibold text-red-600"
+                 x-text="migrateFailedCount"></p>
+            </div>
+            <div class="rounded-lg bg-white border border-blue-100 px-3 py-2">
+              <p class="text-gray-500">Selected</p>
+              <p class="font-semibold text-blue-700"
+                 x-text="migrateTotalSelected"></p>
+            </div>
+            <div class="rounded-lg bg-white border border-blue-100 px-3 py-2">
+              <p class="text-gray-500">Success Rate</p>
+              <p class="font-semibold text-blue-700"
+                 x-text="(migrateSuccessCount + migrateFailedCount) > 0
+                  ? Math.round((migrateSuccessCount / (migrateSuccessCount + migrateFailedCount)) * 100) + '%'
+                  : '0%'"></p>
             </div>
           </div>
         </div>

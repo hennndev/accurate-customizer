@@ -32,9 +32,9 @@ class AccurateService
         return $this->databaseClientManager->getDatabaseHost();
     }
 
-    public function bulkSaveToAccurate(string $endpoint, array $data, ?array $targetDbInfo = null)
+    public function bulkSaveToAccurate(string $endpoint, array $data, ?array $targetDbInfo = null, ?string $accessToken = null)
     {
-        return $this->transactionSaver->bulkSaveToAccurate($endpoint, $data, $targetDbInfo);
+        return $this->transactionSaver->bulkSaveToAccurate($endpoint, $data, $targetDbInfo, $accessToken);
     }
 
     public function openDatabaseById(int $dbId): ?array
@@ -42,13 +42,25 @@ class AccurateService
         return $this->databaseClientManager->openDatabaseById($dbId);
     }
 
-    public function fetchModuleDataPage(string $endpoint, array $params = [], int $pageNumber = 1, int $pageSize = 50): array
+    public function fetchModuleDataPage(
+        string $endpoint,
+        array $params = [],
+        int $pageNumber = 1,
+        int $pageSize = 50,
+        ?array $targetDbInfo = null,
+        ?string $accessToken = null
+    ): array
     {
-        return $this->dataFetcher->fetchModuleDataPage($endpoint, $params, $pageNumber, $pageSize);
+        return $this->dataFetcher->fetchModuleDataPage($endpoint, $params, $pageNumber, $pageSize, $targetDbInfo, $accessToken);
     }
 
-    public function fetchModuleData(string $endpoint, array $params = []): array
+    public function fetchModuleData(
+        string $endpoint,
+        array $params = [],
+        ?array $targetDbInfo = null,
+        ?string $accessToken = null
+    ): array
     {
-        return $this->dataFetcher->fetchModuleData($endpoint, $params);
+        return $this->dataFetcher->fetchModuleData($endpoint, $params, $targetDbInfo, $accessToken);
     }
 }

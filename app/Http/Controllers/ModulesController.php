@@ -2,15 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\CaptureModuleJob;
 use App\Models\Module;
 use App\Models\Transaction;
 use App\Models\SystemLog;
 use App\Services\AccurateService;
-use App\Services\Accurate\EndpointFieldProvider;
-use App\Modules\ModuleManager;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
 
 class ModulesController extends Controller
@@ -75,12 +73,28 @@ class ModulesController extends Controller
         'identifier_field' => 'number',
         'type' => 'transaction',
       ],
+      'down-payment-sales-invoice' => [
+        'name' => 'Down Payment Sales Invoice',
+        'list_endpoint' => '/api/sales-invoice/list.do',
+        'detail_endpoint' => '/api/sales-invoice/detail.do',
+        'identifier_field' => 'number',
+        'type' => 'transaction',
+        'filter_invoice_dp' => true,
+      ],
       'purchase-invoice' => [
         'name' => 'Purchase Invoice',
         'list_endpoint' => '/api/purchase-invoice/list.do',
         'detail_endpoint' => '/api/purchase-invoice/detail.do',
         'identifier_field' => 'number',
         'type' => 'transaction',
+      ],
+      'down-payment-purchase-invoice' => [
+        'name' => 'Down Payment Purchase Invoice',
+        'list_endpoint' => '/api/purchase-invoice/list.do',
+        'detail_endpoint' => '/api/purchase-invoice/detail.do',
+        'identifier_field' => 'number',
+        'type' => 'transaction',
+        'filter_invoice_dp' => true,
       ],
       'delivery-order' => [
         'name' => 'Delivery Order',
@@ -425,7 +439,6 @@ class ModulesController extends Controller
     try {
       $moduleInfo = $moduleMapping[$module];
       $accurateDbId = session()->get('database_id');
-
       if (!$accurateDbId) {
         return response()->json([
           'success' => false,
@@ -442,9 +455,13 @@ class ModulesController extends Controller
       }
 
       $databaseId = $accurateDatabase->id;
-      
-      // ===FILTER TANGGAL===
+
       $params = [];
+      if (!empty($moduleInfo['filter_invoice_dp'])) {
+        $params['filter.invoiceDp'] = true;
+      }
+
+      // ===FILTER TANGGAL===
       $filterType = $request->input('filter_type', 'range');    
       if ($filterType === 'equal') {
         if ($request->filled('start_date')) {
@@ -514,209 +531,52 @@ class ModulesController extends Controller
         $pagesPerRequest = 10;
       }
 
-      $firstPageResult = $accurate->fetchModuleDataPage($moduleInfo['list_endpoint'], $params, $capturePage, $pageSize);
-      $firstPageData = $firstPageResult['data'] ?? [];
-      $hasData = count($firstPageData) > 0;
+      $accessToken = session('accurate_access_token');
+      $sourceDbInfo = session('accurate_database');
 
-      Log::info("Module page received", [
-        'module' => $module,
-        'capture_page' => $capturePage,
-        'records_in_first_page' => count($firstPageData),
-        'page_size' => $pageSize,
-        'pages_per_request' => $pagesPerRequest,
-      ]);
-      $moduleRecord = Module::firstOrCreate(
-        [
-          'accurate_database_id' => $databaseId,
-          'slug' => $module,
-        ],
-        [
-          'name' => $moduleInfo['name'],
-          'icon' => 'heroicon-o-document-text', 
-          'description' => $moduleInfo['name'],
-          'accurate_endpoint' => $moduleInfo['list_endpoint'],
-          'is_active' => $hasData, 
-          'order' => 0,
-        ]
-      );
-
-      if (!$moduleRecord->wasRecentlyCreated) {
-        $moduleRecord->update([
-          'is_active' => $hasData || $moduleRecord->is_active,
-        ]);
+      if (!$accessToken || !$sourceDbInfo) {
+        return response()->json([
+          'success' => false,
+          'message' => 'Session Accurate tidak ditemukan. Silakan login ulang dan pilih database lagi.'
+        ], 401);
       }
 
-      $savedCount = 0;
-      $failedCount = 0;
-      $savedTransactionNumbers = [];
-      $totalItemsProcessed = 0;
-      $totalPagesProcessed = 0;
-      $currentPage = $capturePage;
-      $hasMore = false;
-      $endpointFieldProvider = app(EndpointFieldProvider::class);
-      $listOnlyByConfig = $endpointFieldProvider->getFieldsForEndpoint($moduleInfo['list_endpoint']) !== null;
-      $listOnlyMode = $listOnlyByConfig;
-
-      $handler = ModuleManager::forSlug($module);
-      $sharedContext = [];
-
-      if (!$listOnlyMode) {
-        $handler->preCapture($accurate, $sharedContext);
-      }
-
-      if ($hasData) {
-        $transactionsToInsert = [];
-        $batchSize = 100;
-        for ($pageOffset = 0; $pageOffset < $pagesPerRequest; $pageOffset++) {
-          $pageData = $pageOffset === 0
-            ? $firstPageData
-            : ($accurate->fetchModuleDataPage($moduleInfo['list_endpoint'], $params, $currentPage, $pageSize)['data'] ?? []);
-
-          if (empty($pageData)) {
-            $hasMore = false;
-            break;
-          }
-
-          $totalPagesProcessed++;
-          $totalItemsProcessed += count($pageData);
-
-          foreach ($pageData as $index => $item) {
-            try {
-              $itemId = $item['id'] ?? null;
-
-              $detailData = $item;
-              if (!$listOnlyMode) {
-                $detailParams = ['id' => $itemId];
-                $detailDataRaw = $accurate->fetchModuleData($moduleInfo['detail_endpoint'], $detailParams);
-
-                $detailData = $detailDataRaw;
-                if (is_array($detailDataRaw) && isset($detailDataRaw[0]) && is_array($detailDataRaw[0])) {
-                  $detailData = $detailDataRaw[0];
-                }
-              }
-
-              if (empty($detailData) || !is_array($detailData)) {
-                $failedCount++;
-                continue;
-              }
-
-              $identifierField = $moduleInfo['identifier_field'] ?? 'number';
-              $transactionNo = $detailData[$identifierField] ?? $item[$identifierField] ?? "ID-{$itemId}";
-
-              if (!$listOnlyMode) {
-                $handler->transformDetail($detailData, $sharedContext, ['itemId' => $itemId, 'module' => $module]);
-              }
-
-              $transactionsToInsert[] = [
-                'transaction_no' => $transactionNo,
-                'accurate_database_id' => $databaseId,
-                'module_id' => $moduleRecord->id,
-                'data' => json_encode($detailData),
-                'description' => $moduleInfo['name'],
-                'captured_at' => now(),
-                'created_at' => now(),
-                'updated_at' => now(),
-              ];
-
-              $savedTransactionNumbers[] = $transactionNo;
-
-              if (count($transactionsToInsert) >= $batchSize) {
-                Transaction::insert($transactionsToInsert);
-                $savedCount += count($transactionsToInsert);
-                $transactionsToInsert = [];
-              }
-
-            } catch (\Exception $e) {
-              Log::error('Error processing module item', [
-                'module' => $module,
-                'page' => $currentPage,
-                'index_in_page' => $index,
-                'item_id' => $item['id'] ?? null,
-                'error' => $e->getMessage(),
-              ]);
-              $failedCount++;
-              continue;
-            }
-          }
-
-          $hasMore = count($pageData) === $pageSize;
-          $currentPage++;
-
-          if (!$hasMore) {
-            break;
-          }
-        }
-        
-        // Insert sisa records di akhir
-        if (count($transactionsToInsert) > 0) {
-          Transaction::insert($transactionsToInsert);
-          $savedCount += count($transactionsToInsert);
-          Log::info("Final batch inserted: " . count($transactionsToInsert) . " records for module: " . $module);
-        }
-        
-        Log::info("Capture batch insert completed", [
-          'module' => $module,
-          'start_page' => $capturePage,
-          'total_pages_processed' => $totalPagesProcessed,
-          'total_items_processed' => $totalItemsProcessed,
-          'saved_count' => $savedCount,
-          'failed_count' => $failedCount,
-          'has_more' => $hasMore,
-          'next_page' => $currentPage,
-          'list_only_mode' => $listOnlyMode,
-        ]);
-      }
-
-
-      $logStatus = $failedCount > 0 ? 'warning' : ($hasData ? 'success' : 'info');
-      $logMessage = $hasData
-        ? "Capture {$moduleInfo['name']}: {$savedCount} saved" . ($failedCount > 0 ? ", {$failedCount} failed" : "")
-        : "Module {$moduleInfo['name']} checked but no data available";
-
-      SystemLog::create([
-        'event_type' => 'capture',
+      $tracker = SystemLog::create([
+        'event_type' => 'capture_queue',
         'module' => $moduleInfo['name'],
         'transaction_id' => null,
-        'status' => $logStatus,
+        'status' => 'queued',
         'payload' => [
           'module_slug' => $module,
           'database_id' => $databaseId,
           'database_name' => $accurateDatabase->db_name,
-          'list_only_mode' => $listOnlyMode,
-          'list_endpoint' => $moduleInfo['list_endpoint'],
-          'detail_endpoint' => $moduleInfo['detail_endpoint'],
           'start_page' => $capturePage,
-          'total_pages_processed' => $totalPagesProcessed,
-          'total_items' => $totalItemsProcessed,
-          'saved_count' => $savedCount,
-          'failed_count' => $failedCount,
-          'has_more' => $hasMore,
-          'next_page' => $currentPage,
-          'transaction_numbers' => $savedTransactionNumbers,
-          'module_active' => $moduleRecord->is_active,
-          'was_created' => $moduleRecord->wasRecentlyCreated,
+          'page_size' => $pageSize,
+          'progress' => 0,
         ],
-        'message' => $logMessage,
+        'message' => "Queue capture {$moduleInfo['name']} created",
         'user_id' => Auth::id(),
       ]);
 
+      CaptureModuleJob::dispatch(
+        module: $module,
+        moduleInfo: $moduleInfo,
+        params: $params,
+        pageSize: $pageSize,
+        startPage: $capturePage,
+        databaseId: $databaseId,
+        databaseName: $accurateDatabase->db_name,
+        userId: Auth::id(),
+        trackerLogId: $tracker->id,
+        accessToken: $accessToken,
+        sourceDbInfo: $sourceDbInfo,
+      )->onQueue('capture');
+
       return response()->json([
         'success' => true,
-        'message' => $hasData
-          ? ($hasMore
-              ? "Captured {$savedCount} records (partial batch)" . ($failedCount > 0 ? ", {$failedCount} failed" : "")
-              : "Successfully captured {$savedCount} records" . ($failedCount > 0 ? ", {$failedCount} failed" : ""))
-          : "Module {$moduleInfo['name']} created but no data available",
-        'module' => $moduleInfo['name'],
-        'module_status' => $moduleRecord->is_active ? 'active' : 'inactive',
-        'list_only_mode' => $listOnlyMode,
-        'total_records' => $totalItemsProcessed,
-        'start_page' => $capturePage,
-        'processed_pages' => $totalPagesProcessed,
-        'has_more' => $hasMore,
-        'next_page' => $currentPage,
-        'saved_records' => $savedCount,
-        'failed_records' => $failedCount,
+        'queued' => true,
+        'message' => "Capture {$moduleInfo['name']} dimasukkan ke queue",
+        'monitor_id' => $tracker->id,
       ]);
     } catch (\Exception $e) {
       // Create system log untuk error

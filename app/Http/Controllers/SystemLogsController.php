@@ -52,4 +52,18 @@ class SystemLogsController extends Controller
             'successRate'
         ));
     }
+
+    public function status(SystemLog $log)
+    {
+        return response()->json([
+            'success' => true,
+            'id' => $log->id,
+            'event_type' => $log->event_type,
+            'module' => $log->module,
+            'status' => $log->status,
+            'message' => $log->message,
+            'payload' => $log->payload,
+            'updated_at' => $log->updated_at,
+        ]);
+    }
 }
