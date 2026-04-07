@@ -18,7 +18,14 @@ class DataFetcher
         $this->databaseClientManager = $databaseClientManager;
     }
 
-    public function fetchModuleDataPage(string $endpoint, array $params = [], int $pageNumber = 1, int $pageSize = 50): array
+    public function fetchModuleDataPage(
+        string $endpoint,
+        array $params = [],
+        int $pageNumber = 1,
+        int $pageSize = 50,
+        ?array $targetDbInfo = null,
+        ?string $accessToken = null
+    ): array
     {
         $fields = $this->endpointFieldProvider->getFieldsForEndpoint($endpoint);
         if ($fields && !isset($params['fields']) && !isset($params['sp.fields'])) {
@@ -28,15 +35,17 @@ class DataFetcher
 
         $params['sp.pageSize'] = $pageSize;
         $params['sp.page'] = $pageNumber;
-        $params['filter.invoiceDp'] = false;
+        if (!array_key_exists('filter.invoiceDp', $params)) {
+            $params['filter.invoiceDp'] = false;
+        }
 
-        Log::debug('Fetching page (no-merge mode) from Accurate', [
-            'endpoint' => $endpoint,
-            'page' => $pageNumber,
-            'page_size' => $pageSize,
-        ]);
+        Log::info("dataparamsssss", ["params" => $params]);
 
-        $response = $this->databaseClientManager->getDataClient()->get($endpoint, $params);
+        $client = $targetDbInfo
+            ? $this->databaseClientManager->getDataClientForDatabase($targetDbInfo, $accessToken)
+            : $this->databaseClientManager->getDataClient();
+
+        $response = $client->get($endpoint, $params);
         if ($response->failed()) {
             Log::error('Failed to fetch page (no-merge mode) from Accurate', [
                 'endpoint' => $endpoint,
@@ -58,11 +67,20 @@ class DataFetcher
         ];
     }
 
-    public function fetchModuleData(string $endpoint, array $params = []): array
+    public function fetchModuleData(
+        string $endpoint,
+        array $params = [],
+        ?array $targetDbInfo = null,
+        ?string $accessToken = null
+    ): array
     {
         try {
+            $client = $targetDbInfo
+                ? $this->databaseClientManager->getDataClientForDatabase($targetDbInfo, $accessToken)
+                : $this->databaseClientManager->getDataClient();
+
             if (str_contains($endpoint, '/detail.do')) {
-                $response = $this->databaseClientManager->getDataClient()->get($endpoint, $params);
+                $response = $client->get($endpoint, $params);
 
                 if ($response->failed()) {
                     Log::error('Failed to fetch detail from Accurate API', [
@@ -95,7 +113,9 @@ class DataFetcher
             ]);
 
             $params['sp.pageSize'] = $pageSize;
-            $params['filter.invoiceDp'] = false;
+            if (!array_key_exists('filter.invoiceDp', $params)) {
+                $params['filter.invoiceDp'] = false;
+            }
 
             do {
                 $params['sp.page'] = $pageNumber;
@@ -105,7 +125,7 @@ class DataFetcher
                     'page_size' => $pageSize,
                 ]);
                 
-                $response = $this->databaseClientManager->getDataClient()->get($endpoint, $params);
+                $response = $client->get($endpoint, $params);
 
                 if ($response->failed()) {
                     Log::error("Failed to fetch from Accurate API", [

@@ -84,17 +84,16 @@ class DatabaseClientManager
             ->baseUrl($host . '/accurate');
     }
 
-    public function getDataClientForDatabase(array $dbInfo)
+    public function getDataClientForDatabase(array $dbInfo, ?string $accessToken = null)
     {
-        if (!session()->has('accurate_access_token')) {
+        $resolvedAccessToken = $accessToken ?? session('accurate_access_token');
+        if (!$resolvedAccessToken) {
             throw new Exception('Token Akses Accurate tidak ditemukan di session.');
         }
 
         $host = $dbInfo['host'];
         $sessionId = $dbInfo['session'];
-        $accessToken = session('accurate_access_token');
-
-        return Http::withToken($accessToken)
+        return Http::withToken($resolvedAccessToken)
             ->withHeaders(['X-Session-ID' => $sessionId])
             ->timeout(600)
             ->connectTimeout(60)

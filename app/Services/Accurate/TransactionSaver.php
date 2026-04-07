@@ -27,7 +27,7 @@ class TransactionSaver
         $this->entityMappingManager = $entityMappingManager;
     }
 
-    public function bulkSaveToAccurate(string $endpoint, array $data, ?array $targetDbInfo = null)
+    public function bulkSaveToAccurate(string $endpoint, array $data, ?array $targetDbInfo = null, ?string $accessToken = null)
     {
         set_time_limit(0);
         if (
@@ -36,7 +36,7 @@ class TransactionSaver
             str_contains($endpoint, 'work-order') ||
             str_contains($endpoint, 'bill-of-material')
         ) {
-            return $this->saveOneByOne($endpoint, $data, $targetDbInfo);
+            return $this->saveOneByOne($endpoint, $data, $targetDbInfo, $accessToken);
         }
 
         preg_match('/\/api\/([^\/]+)\//', $endpoint, $matches);
@@ -75,7 +75,9 @@ class TransactionSaver
             }
         }
 
-        $client = $targetDbInfo ? $this->databaseClientManager->getDataClientForDatabase($targetDbInfo) : $this->databaseClientManager->getDataClient();
+        $client = $targetDbInfo
+            ? $this->databaseClientManager->getDataClientForDatabase($targetDbInfo, $accessToken)
+            : $this->databaseClientManager->getDataClient();
 
         if (str_contains($endpoint, '/tax/')) {
             $data = array_map(function ($item) use ($client) {
@@ -139,7 +141,7 @@ class TransactionSaver
         return $responseData;
     }
 
-    protected function saveOneByOne(string $endpoint, array $data, ?array $targetDbInfo = null)
+    protected function saveOneByOne(string $endpoint, array $data, ?array $targetDbInfo = null, ?string $accessToken = null)
     {
         set_time_limit(0);
 
@@ -148,7 +150,9 @@ class TransactionSaver
 
         $accurateDatabaseId = $this->databaseClientManager->getAccurateDatabaseId($targetDbInfo);
 
-        $client = $targetDbInfo ? $this->databaseClientManager->getDataClientForDatabase($targetDbInfo) : $this->databaseClientManager->getDataClient();
+        $client = $targetDbInfo
+            ? $this->databaseClientManager->getDataClientForDatabase($targetDbInfo, $accessToken)
+            : $this->databaseClientManager->getDataClient();
 
         if ($module && $accurateDatabaseId) {
             $numberField = $this->moduleFieldProvider->getNumberFieldForModule($module, $data[0] ?? []);

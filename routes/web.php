@@ -9,6 +9,7 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\SystemLogsController;
 use App\Http\Controllers\UsersController;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -85,6 +86,7 @@ Route::middleware('auth')->group(function () {
     });
     Route::controller(SystemLogsController::class)->prefix('system-logs')->group(function () {
       Route::get('/', 'index')->name('system-logs.index');
+      Route::get('/{log}/status', 'status')->name('system-logs.status');
     });
     Route::controller(UsersController::class)->middleware('can:manage_users')->prefix('users')->group(function () {
       Route::get('/', 'index')->name('users.index');
