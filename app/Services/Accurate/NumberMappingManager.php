@@ -19,10 +19,6 @@ class NumberMappingManager
         array $responseData,
         int $accurateDatabaseId
     ): void {
-        if (!isset($responseData['s']) || $responseData['s'] !== true) {
-            return;
-        }
-
         preg_match('/\/api\/([^\/]+)\//', $endpoint, $matches);
         $moduleSlug = $matches[1] ?? null;
 
@@ -98,15 +94,7 @@ class NumberMappingManager
 
     public function getMappedNumber(string $moduleSlug, string $oldNumber): string
     {
-        $accurateDatabaseId = session('accurate_database.id') ?? null;
-
-        if (!$accurateDatabaseId) {
-            $dbId = session('database_id');
-            if ($dbId && ($moduleSlug !== "employee")) {
-                $accurateDb = \App\Models\AccurateDatabase::where('db_id', $dbId)->first();
-                $accurateDatabaseId = $accurateDb?->id;
-            }
-        }
+        $accurateDatabaseId = $this->resolveLocalAccurateDatabaseId();
 
         if (!$accurateDatabaseId) {
             return $oldNumber;
@@ -118,5 +106,30 @@ class NumberMappingManager
             $oldNumber
         );
         return $newNumber ?? $oldNumber;
+    }
+
+    private function resolveLocalAccurateDatabaseId(): ?int
+    {
+        $localId = session('accurate_database._local_db_id');
+        if ($localId) {
+            return (int) $localId;
+        }
+
+        $sessionDbId = session('database_id') ?? session('accurate_database.id');
+        if (!$sessionDbId) {
+            return null;
+        }
+
+        $accurateDb = \App\Models\AccurateDatabase::where('db_id', $sessionDbId)->first();
+        if ($accurateDb) {
+            return (int) $accurateDb->id;
+        }
+
+        $accurateDbByPk = \App\Models\AccurateDatabase::find($sessionDbId);
+        if ($accurateDbByPk) {
+            return (int) $accurateDbByPk->id;
+        }
+
+        return null;
     }
 }

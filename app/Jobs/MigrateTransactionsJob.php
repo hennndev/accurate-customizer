@@ -35,6 +35,14 @@ class MigrateTransactionsJob implements ShouldQueue
 			session(['accurate_access_token' => $this->accessToken]);
 		}
 
+		if (!empty($this->targetDbInfo)) {
+			session(['accurate_database' => $this->targetDbInfo]);
+		}
+
+		if (!empty($this->targetDbInfo['id'])) {
+			session(['database_id' => $this->targetDbInfo['id']]);
+		}
+
 		$this->updateTracker('running', 'Migration started', [
 			'progress' => 0,
 			'total_selected' => count($this->transactionIds),
@@ -95,6 +103,11 @@ class MigrateTransactionsJob implements ShouldQueue
 					$failedCount++;
 					$moduleResults[$module->name]['failed']++;
 					continue;
+				}
+
+				if ($this->isDownPaymentModule($moduleSlug)) {
+					$data['invoiceDp'] = true;
+					$data['invoiceDP'] = true;
 				}
 
 				$bulkData[] = $data;
@@ -253,5 +266,13 @@ class MigrateTransactionsJob implements ShouldQueue
 			'message' => $message,
 			'payload' => array_merge($existingPayload, $payload),
 		]);
+	}
+
+	private function isDownPaymentModule(string $moduleSlug): bool
+	{
+		return in_array($moduleSlug, [
+			'down-payment-sales-invoice',
+			'down-payment-purchase-invoice',
+		], true);
 	}
 }

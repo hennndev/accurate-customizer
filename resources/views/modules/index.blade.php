@@ -34,6 +34,9 @@
            monitorFailed: 0,
            monitorItems: 0,
            monitorPages: 0,
+           monitorLastUpdateAt: null,
+           monitorStaleSince: null,
+           monitorStaleTimeoutMs: 180000,
            switchingDb: false,
            searchQuery: '',
            activeFilter: 'all',
@@ -56,6 +59,50 @@
                        console.error('Failed to restore monitor:', e);
                        localStorage.removeItem('activeMonitorId');
                    }
+               }
+           },
+           async restoreActiveMonitorFromServer() {
+               try {
+                   const response = await fetch('/system-logs/active?event_type=capture_queue', {
+                       method: 'GET',
+                       credentials: 'same-origin',
+                       headers: {
+                           'Accept': 'application/json',
+                           'X-Requested-With': 'XMLHttpRequest',
+                       },
+                   });
+       
+                   if (!response.ok) {
+                       return false;
+                   }
+       
+                   const result = await response.json();
+                   if (!(result?.success && result?.active && result?.log?.id)) {
+                       return false;
+                   }
+       
+                   const log = result.log;
+                   const payload = log?.payload || {};
+       
+                   this.monitorId = log.id;
+                   this.currentModule = log.module || this.currentModule || 'Queue job';
+                   this.monitorVisible = true;
+                   this.capturing = true;
+                   this.monitorStatus = log.status || 'running';
+                   this.monitorMessage = log.message || 'Capture job sedang diproses...';
+                   this.progress = Number(payload?.progress || 0);
+                   this.monitorSaved = Number(payload?.saved_count || 0);
+                   this.monitorFailed = Number(payload?.failed_count || 0);
+                   this.monitorItems = Number(payload?.processed_items || 0);
+                   this.monitorPages = Number(payload?.processed_pages || 0);
+                   this.monitorLastUpdateAt = log.updated_at || null;
+                   this.monitorStaleSince = Date.now();
+                   this.saveMonitorToStorage();
+                   this.resumePolling();
+       
+                   return true;
+               } catch (error) {
+                   return false;
                }
            },
            saveMonitorToStorage() {
@@ -90,6 +137,14 @@
                        const statusResult = await statusResponse.json();
                        const payload = statusResult?.payload || {};
                        const trackerStatus = statusResult?.status;
+                       const updatedAt = statusResult?.updated_at || null;
+       
+                       if (updatedAt && updatedAt !== this.monitorLastUpdateAt) {
+                           this.monitorLastUpdateAt = updatedAt;
+                           this.monitorStaleSince = Date.now();
+                       } else if (!this.monitorStaleSince) {
+                           this.monitorStaleSince = Date.now();
+                       }
        
                        if (typeof payload?.progress === 'number') {
                            this.progress = Math.max(this.progress, Math.min(100, payload.progress));
@@ -100,6 +155,16 @@
                        this.monitorPages = Number(payload?.processed_pages || 0);
                        this.monitorMessage = statusResult?.message || this.monitorMessage;
                        this.saveMonitorToStorage();
+       
+                       if (['queued', 'running'].includes(trackerStatus) &&
+                           this.monitorStaleSince &&
+                           (Date.now() - this.monitorStaleSince) > this.monitorStaleTimeoutMs) {
+                           this.capturing = false;
+                           this.monitorStatus = 'failed';
+                           this.monitorMessage = 'Capture monitor dihentikan otomatis karena worker/job tidak update progress. Silakan jalankan ulang capture atau restart worker.';
+                           this.clearMonitorFromStorage();
+                           break;
+                       }
        
                        if (['success', 'warning', 'info', 'failed'].includes(trackerStatus)) {
                            this.progress = 100;
@@ -135,6 +200,8 @@
                this.monitorFailed = 0;
                this.monitorItems = 0;
                this.monitorPages = 0;
+               this.monitorLastUpdateAt = null;
+               this.monitorStaleSince = Date.now();
        
                try {
                    const startDate = document.getElementById('start_date')?.value || '';
@@ -190,6 +257,14 @@
                        const statusResult = await statusResponse.json();
                        const payload = statusResult?.payload || {};
                        const trackerStatus = statusResult?.status;
+                       const updatedAt = statusResult?.updated_at || null;
+       
+                       if (updatedAt && updatedAt !== this.monitorLastUpdateAt) {
+                           this.monitorLastUpdateAt = updatedAt;
+                           this.monitorStaleSince = Date.now();
+                       } else if (!this.monitorStaleSince) {
+                           this.monitorStaleSince = Date.now();
+                       }
        
                        if (typeof payload?.progress === 'number') {
                            this.progress = Math.max(this.progress, Math.min(100, payload.progress));
@@ -200,6 +275,16 @@
                        this.monitorPages = Number(payload?.processed_pages || 0);
                        this.monitorMessage = statusResult?.message || this.monitorMessage;
                        this.saveMonitorToStorage();
+       
+                       if (['queued', 'running'].includes(trackerStatus) &&
+                           this.monitorStaleSince &&
+                           (Date.now() - this.monitorStaleSince) > this.monitorStaleTimeoutMs) {
+                           this.capturing = false;
+                           this.monitorStatus = 'failed';
+                           this.monitorMessage = 'Capture monitor dihentikan otomatis karena worker/job tidak update progress. Silakan jalankan ulang capture atau restart worker.';
+                           this.clearMonitorFromStorage();
+                           break;
+                       }
        
                        if (['success', 'warning', 'info', 'failed'].includes(trackerStatus)) {
                            this.progress = 100;
@@ -263,9 +348,12 @@
                this.$watch('searchQuery', () => this.applyModuleFilters());
                this.$watch('activeFilter', () => this.applyModuleFilters());
        
-               this.$nextTick(() => {
+               this.$nextTick(async () => {
                    this.applyModuleFilters();
-                   this.restoreMonitorFromStorage();
+                   const restored = await this.restoreActiveMonitorFromServer();
+                   if (!restored) {
+                       this.restoreMonitorFromStorage();
+                   }
                });
            }
        }"

@@ -105,3 +105,103 @@ GET /system-logs/{log}/status
 - VPS 2 vCPU: mulai `numprocs=2` atau `3`
 - VPS 4 vCPU: mulai `numprocs=4` atau `6`
 - Pantau CPU/RAM + durasi job; naikkan bertahap.
+
+## 8) Konsep implementasi queue (Migrate ke Accurate)
+
+Tujuan utama: proses migrate tidak berjalan di request HTTP user (non-blocking), tapi dipindah ke worker background.
+
+### Arsitektur ringkas
+
+1. User klik **Migrate Selected** di UI.
+2. Controller validasi input, buat tracker log (`event_type = migrate_queue`), lalu `dispatch` job ke queue `migrate`.
+3. HTTP response langsung balik cepat (`queued`, `monitor_id`) tanpa menunggu push selesai.
+4. Worker memproses job `MigrateTransactionsJob` di background (batch/chunk).
+5. Job update progress ke `system_logs.payload` (success/failed/progress).
+6. UI polling `GET /system-logs/{id}/status` untuk render progress realtime.
+7. Saat selesai/gagal, tracker status final diset (`success`/`warning`/`failed`).
+
+### Kontrak payload tracker (disarankan)
+
+Gunakan payload konsisten agar UI monitoring reusable lintas project:
+
+- `progress` (0..100)
+- `total_selected`
+- `success_count`
+- `failed_count`
+- `module_results` (opsional, per modul)
+- `error` (opsional, saat failed)
+
+### Prinsip penting untuk project lain
+
+- Endpoint HTTP **hanya enqueue**, jangan proses berat di controller.
+- Job harus **idempotent** (aman jika retry).
+- Update tracker dilakukan bertahap (mis. per chunk/page), bukan hanya di akhir.
+- UI monitor baca tracker, bukan menebak progress random.
+
+## 9) SOP setup VPS (production)
+
+### Prasyarat
+
+- Queue driver: `QUEUE_CONNECTION=database`
+- Tabel queue sudah ada (`jobs`, `job_batches`, `failed_jobs`)
+- Supervisor terpasang dan aktif
+
+### Langkah sekali setup
+
+1. Install supervisor:
+
+```bash
+sudo apt update
+sudo apt install -y supervisor
+sudo systemctl enable supervisor
+sudo systemctl start supervisor
+```
+
+2. Pastikan Laravel queue aktif:
+
+```bash
+php artisan migrate
+php artisan config:clear
+php artisan cache:clear
+```
+
+3. Buat config supervisor (single program atau split queue; lihat section 4).
+
+4. Apply config:
+
+```bash
+sudo supervisorctl reread
+sudo supervisorctl update
+sudo supervisorctl start accurate-worker:*
+sudo supervisorctl status
+```
+
+## 10) Operasional harian (deploy)
+
+Setelah deploy code baru:
+
+```bash
+php artisan optimize:clear
+php artisan config:cache
+php artisan queue:restart
+```
+
+Kenapa `queue:restart` penting: worker lama tidak otomatis reload code terbaru.
+
+## 11) Checklist reliability (wajib untuk high-volume)
+
+- Gunakan `timeout` worker yang realistis untuk job panjang.
+- `stopwaitsecs` supervisor harus > `timeout` worker.
+- Pantau `failed_jobs` dan buat prosedur retry.
+- Simpan log worker terpisah per queue untuk debugging cepat.
+- Untuk beban besar, split worker `capture` vs `migrate`.
+
+## 12) Template adaptasi untuk project lain
+
+Saat meniru pattern ini ke project lain, minimal siapkan:
+
+1. **Tracker table/log** untuk progress persisten.
+2. **Status endpoint** (`/system-logs/{id}/status` atau setara).
+3. **Queued job** per use case berat (import/sync/export/migrate).
+4. **UI polling** yang membaca tracker real-time.
+5. **Supervisor config** agar worker tetap hidup setelah reboot/crash.

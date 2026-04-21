@@ -22,7 +22,7 @@ class ModuleFieldProvider
         'purchase-invoice' => 'number',
         'down-payment-purchase-invoice' => 'number',
         'delivery-order' => 'number',
-        'receive-item' => 'receiveNumber',
+        'receive-item' => 'number',
         'sales-quotation' => 'number',
         'purchase-requisition' => 'number',
         'sales-return' => 'number',

@@ -7,6 +7,7 @@ use App\Models\Transaction;
 use App\Models\SystemLog;
 use App\Models\AccurateDatabase;
 use App\Models\Module;
+use App\Models\Setting;
 use App\Services\AccurateService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -55,12 +56,42 @@ class DataMigrateController extends Controller
       $query->where('status', strtolower($request->status));
     }
 
-    // Paginate transactions - 100 per page
-    $transactions = $query->paginate(100)->appends($request->except('page'));
+    $perPageOptions = [100, 200, 300, 400, 500];
+
+    $setting = Setting::first();
+    if (!$setting) {
+      $setting = Setting::create([
+        'retention_days' => 7,
+        'migrate_per_page' => 100,
+      ]);
+    }
+
+    $requestedPerPage = (int) $request->input('per_page', 0);
+
+    if (in_array($requestedPerPage, $perPageOptions, true)) {
+      $currentPerPage = $requestedPerPage;
+      if ((int) $setting->migrate_per_page !== $currentPerPage) {
+        $setting->migrate_per_page = $currentPerPage;
+        $setting->save();
+      }
+    } else {
+      $storedPerPage = (int) ($setting->migrate_per_page ?? 100);
+      $currentPerPage = in_array($storedPerPage, $perPageOptions, true) ? $storedPerPage : 100;
+    }
+
+    $transactions = $query->paginate($currentPerPage)->appends($request->except('page'));
 
     $filter_databases = AccurateDatabase::pluck('db_name');
     $modules = Module::pluck('name')->unique();
-    return view('migrate.index', compact('transactions', 'databases', 'filter_databases', 'modules', 'current_database_name'));
+    return view('migrate.index', compact(
+      'transactions',
+      'databases',
+      'filter_databases',
+      'modules',
+      'current_database_name',
+      'currentPerPage',
+      'perPageOptions'
+    ));
   }
 
 

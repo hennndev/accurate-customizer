@@ -86,6 +86,7 @@ Route::middleware('auth')->group(function () {
     });
     Route::controller(SystemLogsController::class)->prefix('system-logs')->group(function () {
       Route::get('/', 'index')->name('system-logs.index');
+      Route::get('/active', 'active')->name('system-logs.active');
       Route::get('/{log}/status', 'status')->name('system-logs.status');
     });
     Route::controller(UsersController::class)->middleware('can:manage_users')->prefix('users')->group(function () {

@@ -56,6 +56,7 @@ class CaptureModuleJob implements ShouldQueue
 
         $savedCount = 0;
         $failedCount = 0;
+        $skippedDuplicateCount = 0;
         $processedPages = 0;
         $processedItems = 0;
         $savedTransactionNumbers = [];
@@ -86,6 +87,55 @@ class CaptureModuleJob implements ShouldQueue
         $currentPage = $this->startPage;
         $batchSize = 100;
         $transactionsToInsert = [];
+
+        $flushInsertBatch = function () use (&$transactionsToInsert, &$savedCount, &$skippedDuplicateCount, &$savedTransactionNumbers, $moduleRecord): void {
+            if (empty($transactionsToInsert)) {
+                return;
+            }
+
+            $dedupedByNumber = [];
+            foreach ($transactionsToInsert as $row) {
+                $number = $row['transaction_no'] ?? null;
+                if ($number && !isset($dedupedByNumber[$number])) {
+                    $dedupedByNumber[$number] = $row;
+                }
+            }
+
+            $candidateRows = array_values($dedupedByNumber);
+            $candidateNumbers = array_column($candidateRows, 'transaction_no');
+            if (empty($candidateNumbers)) {
+                $transactionsToInsert = [];
+                return;
+            }
+
+            $existingNumbers = Transaction::query()
+                ->where('capture_log_id', $this->trackerLogId)
+                ->where('module_id', $moduleRecord->id)
+                ->where('accurate_database_id', $this->databaseId)
+                ->whereIn('transaction_no', $candidateNumbers)
+                ->pluck('transaction_no')
+                ->all();
+
+            $existingMap = array_flip($existingNumbers);
+            $rowsToInsert = [];
+
+            foreach ($candidateRows as $row) {
+                $number = $row['transaction_no'];
+                if (isset($existingMap[$number])) {
+                    $skippedDuplicateCount++;
+                    continue;
+                }
+                $rowsToInsert[] = $row;
+            }
+
+            if (!empty($rowsToInsert)) {
+                Transaction::insert($rowsToInsert);
+                $savedCount += count($rowsToInsert);
+                $savedTransactionNumbers = array_merge($savedTransactionNumbers, array_column($rowsToInsert, 'transaction_no'));
+            }
+
+            $transactionsToInsert = [];
+        };
 
         while (true) {
             $pageResult = $accurate->fetchModuleDataPage(
@@ -142,6 +192,7 @@ class CaptureModuleJob implements ShouldQueue
 
                     $transactionsToInsert[] = [
                         'transaction_no' => $transactionNo,
+                        'capture_log_id' => $this->trackerLogId,
                         'accurate_database_id' => $this->databaseId,
                         'module_id' => $moduleRecord->id,
                         'data' => json_encode($detailData),
@@ -151,12 +202,8 @@ class CaptureModuleJob implements ShouldQueue
                         'updated_at' => now(),
                     ];
 
-                    $savedTransactionNumbers[] = $transactionNo;
-
                     if (count($transactionsToInsert) >= $batchSize) {
-                        Transaction::insert($transactionsToInsert);
-                        $savedCount += count($transactionsToInsert);
-                        $transactionsToInsert = [];
+                        $flushInsertBatch();
                     }
                 } catch (\Exception $exception) {
                     Log::error('Capture item failed', [
@@ -176,6 +223,7 @@ class CaptureModuleJob implements ShouldQueue
                 'progress' => min(95, 10 + ($processedPages * 5)),
                 'saved_count' => $savedCount,
                 'failed_count' => $failedCount,
+                'skipped_duplicate_count' => $skippedDuplicateCount,
                 'processed_pages' => $processedPages,
                 'processed_items' => $processedItems,
                 'next_page' => $currentPage,
@@ -186,10 +234,7 @@ class CaptureModuleJob implements ShouldQueue
             }
         }
 
-        if (!empty($transactionsToInsert)) {
-            Transaction::insert($transactionsToInsert);
-            $savedCount += count($transactionsToInsert);
-        }
+        $flushInsertBatch();
 
         $finalStatus = $failedCount > 0 ? 'warning' : ($savedCount > 0 ? 'success' : 'info');
 
@@ -210,6 +255,7 @@ class CaptureModuleJob implements ShouldQueue
                 'total_items' => $processedItems,
                 'saved_count' => $savedCount,
                 'failed_count' => $failedCount,
+                'skipped_duplicate_count' => $skippedDuplicateCount,
                 'next_page' => $currentPage,
                 'transaction_numbers' => $savedTransactionNumbers,
             ],
@@ -221,6 +267,7 @@ class CaptureModuleJob implements ShouldQueue
             'progress' => 100,
             'saved_count' => $savedCount,
             'failed_count' => $failedCount,
+            'skipped_duplicate_count' => $skippedDuplicateCount,
             'processed_pages' => $processedPages,
             'processed_items' => $processedItems,
             'next_page' => $currentPage,

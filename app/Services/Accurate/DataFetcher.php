@@ -3,6 +3,9 @@
 namespace App\Services\Accurate;
 
 use Exception;
+use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Http\Client\Response;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 class DataFetcher
@@ -45,7 +48,16 @@ class DataFetcher
             ? $this->databaseClientManager->getDataClientForDatabase($targetDbInfo, $accessToken)
             : $this->databaseClientManager->getDataClient();
 
-        $response = $client->get($endpoint, $params);
+        $response = $this->sendGetWithRetry(
+            $client,
+            $endpoint,
+            $params,
+            [
+                'endpoint' => $endpoint,
+                'mode' => 'page',
+                'page' => $pageNumber,
+            ]
+        );
         if ($response->failed()) {
             Log::error('Failed to fetch page (no-merge mode) from Accurate', [
                 'endpoint' => $endpoint,
@@ -80,7 +92,15 @@ class DataFetcher
                 : $this->databaseClientManager->getDataClient();
 
             if (str_contains($endpoint, '/detail.do')) {
-                $response = $client->get($endpoint, $params);
+                $response = $this->sendGetWithRetry(
+                    $client,
+                    $endpoint,
+                    $params,
+                    [
+                        'endpoint' => $endpoint,
+                        'mode' => 'detail',
+                    ]
+                );
 
                 if ($response->failed()) {
                     Log::error('Failed to fetch detail from Accurate API', [
@@ -125,7 +145,16 @@ class DataFetcher
                     'page_size' => $pageSize,
                 ]);
                 
-                $response = $client->get($endpoint, $params);
+                $response = $this->sendGetWithRetry(
+                    $client,
+                    $endpoint,
+                    $params,
+                    [
+                        'endpoint' => $endpoint,
+                        'mode' => 'list',
+                        'page' => $pageNumber,
+                    ]
+                );
 
                 if ($response->failed()) {
                     Log::error("Failed to fetch from Accurate API", [
@@ -168,5 +197,93 @@ class DataFetcher
             ]);
             throw $e;
         }
+    }
+
+    private function sendGetWithRetry(PendingRequest $client, string $endpoint, array $params, array $context = []): Response
+    {
+        $maxRetries = (int) env('ACCURATE_API_MAX_RETRIES', 5);
+        if ($maxRetries < 0) {
+            $maxRetries = 0;
+        }
+
+        $baseDelayMs = (int) env('ACCURATE_API_RETRY_BASE_DELAY_MS', 300);
+        if ($baseDelayMs < 50) {
+            $baseDelayMs = 50;
+        }
+
+        $throttleIntervalMs = (int) env('ACCURATE_API_THROTTLE_INTERVAL_MS', 180);
+        if ($throttleIntervalMs < 0) {
+            $throttleIntervalMs = 0;
+        }
+
+        $attempt = 0;
+
+        do {
+            $this->applyGlobalThrottle($throttleIntervalMs);
+
+            $response = $client->get($endpoint, $params);
+            if (!$response->failed()) {
+                return $response;
+            }
+
+            $status = $response->status();
+            $isRetryable = in_array($status, [408, 429, 500, 502, 503, 504], true);
+
+            if (!$isRetryable || $attempt >= $maxRetries) {
+                return $response;
+            }
+
+            $retryAfterHeader = $response->header('Retry-After');
+            $retryAfterMs = is_numeric($retryAfterHeader) ? ((int) $retryAfterHeader * 1000) : 0;
+
+            $backoffMs = $retryAfterMs > 0
+                ? $retryAfterMs
+                : (int) ($baseDelayMs * (2 ** $attempt));
+
+            $jitterMs = random_int(50, 200);
+            $sleepMs = min(5000, $backoffMs + $jitterMs);
+
+            Log::warning('Accurate API retry scheduled', array_merge($context, [
+                'status' => $status,
+                'attempt' => $attempt + 1,
+                'max_retries' => $maxRetries,
+                'sleep_ms' => $sleepMs,
+            ]));
+
+            usleep($sleepMs * 1000);
+            $attempt++;
+        } while (true);
+    }
+
+    private function applyGlobalThrottle(int $intervalMs): void
+    {
+        if ($intervalMs <= 0) {
+            return;
+        }
+
+        $token = session('accurate_access_token');
+        if (!$token) {
+            usleep($intervalMs * 1000);
+            return;
+        }
+
+        $tokenHash = sha1($token);
+        $lockKey = 'accurate:throttle:lock:' . $tokenHash;
+        $lastRequestKey = 'accurate:throttle:last:' . $tokenHash;
+
+        Cache::lock($lockKey, 5)->block(5, function () use ($intervalMs, $lastRequestKey) {
+            $nowMicro = (int) round(microtime(true) * 1000000);
+            $lastMicro = (int) Cache::get($lastRequestKey, 0);
+            $minGapMicro = $intervalMs * 1000;
+
+            if ($lastMicro > 0) {
+                $elapsedMicro = $nowMicro - $lastMicro;
+                if ($elapsedMicro < $minGapMicro) {
+                    usleep($minGapMicro - $elapsedMicro);
+                }
+            }
+
+            Cache::put($lastRequestKey, (int) round(microtime(true) * 1000000), now()->addMinutes(10));
+        });
     }
 }

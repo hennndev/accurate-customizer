@@ -457,8 +457,15 @@ class ModulesController extends Controller
       $databaseId = $accurateDatabase->id;
 
       $params = [];
-      if (!empty($moduleInfo['filter_invoice_dp'])) {
-        $params['filter.invoiceDp'] = true;
+      $invoiceDpSlugs = [
+        'purchase-invoice',
+        'sales-invoice',
+        'down-payment-purchase-invoice',
+        'down-payment-sales-invoice',
+      ];
+
+      if (in_array($module, $invoiceDpSlugs, true)) {
+        $params['filter.invoiceDp'] = !empty($moduleInfo['filter_invoice_dp']);
       }
 
       // ===FILTER TANGGAL===

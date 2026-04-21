@@ -243,6 +243,53 @@
                }
            },
        
+           async restoreMigrateMonitorFromServer() {
+               try {
+                   const response = await fetch('/system-logs/active?event_type=migrate_queue', {
+                       method: 'GET',
+                       credentials: 'same-origin',
+                       headers: {
+                           'Accept': 'application/json',
+                           'X-Requested-With': 'XMLHttpRequest',
+                       },
+                   });
+       
+                   if (!response.ok) {
+                       return false;
+                   }
+       
+                   const result = await response.json();
+                   if (!(result?.success && result?.active && result?.log?.id)) {
+                       return false;
+                   }
+       
+                   const log = result.log;
+                   const payload = log?.payload || {};
+       
+                   this.migrateMonitorId = log.id;
+                   this.migrateMonitorVisible = true;
+                   this.migrating = true;
+                   this.progress = Number(payload?.progress || 0);
+                   this.currentStatus = log.message || 'Migration in progress';
+                   this.migrateSuccessCount = Number(payload?.success_count || 0);
+                   this.migrateFailedCount = Number(payload?.failed_count || 0);
+                   this.migrateTotalSelected = Number(payload?.total_selected || 0);
+       
+                   this.saveMigrateMonitorState();
+                   this.pollMigrateStatus();
+                   return true;
+               } catch (e) {
+                   return false;
+               }
+           },
+       
+           async initMigrateMonitor() {
+               const restoredFromServer = await this.restoreMigrateMonitorFromServer();
+               if (!restoredFromServer) {
+                   this.restoreMigrateMonitorState();
+               }
+           },
+       
            async pollMigrateStatus() {
                if (!this.migrateMonitorId) return;
        
@@ -344,7 +391,7 @@
                }
            }
        }"
-       x-init="restoreMigrateMonitorState();
+       x-init="initMigrateMonitor();
        $watch('selected', value => selectAll = value.length === allTransactionIds.length && allTransactionIds.length > 0)">
     <div class="w-full bg-gradient-to-r from-green-600 to-green-700 rounded-xl p-5 md:p-8 lg:p-10 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 lg:gap-4">
       <div class="flex flex-col gap-4 md:gap-5 w-full lg:w-auto">
@@ -1325,6 +1372,19 @@
               </li>
             </ul>
           </div>
+        </div>
+
+        <div class="relative w-full md:w-auto">
+          <select name="per_page"
+                  onchange="this.form.submit()"
+                  class="bg-white w-full md:min-w-[110px] border border-gray-200 text-gray-700 text-xs md:text-sm rounded-md py-2 px-3 md:px-4 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium">
+            @foreach ($perPageOptions ?? [100, 200, 300, 400, 500] as $option)
+              <option value="{{ $option }}"
+                      {{ (int) ($currentPerPage ?? request('per_page', 100)) === (int) $option ? 'selected' : '' }}>
+                {{ $option }} / page
+              </option>
+            @endforeach
+          </select>
         </div>
 
         <button type="button"
