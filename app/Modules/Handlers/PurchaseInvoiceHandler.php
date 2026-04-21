@@ -69,6 +69,18 @@ class PurchaseInvoiceHandler extends BaseHandler
       }
     }
 
+    if (isset($detailData['detailItem']) && is_array($detailData['detailItem'])) {
+      foreach ($detailData['detailItem'] as $index => $item) {
+        if (is_array($item) && array_key_exists('receiveItemId', $item)) {
+          unset($detailData['detailItem'][$index]['receiveItemId']);
+        }
+        if (is_array($item) && array_key_exists('receiveItemDetail', $item)) {
+          unset($detailData['detailItem'][$index]['receiveItemDetail']);
+          unset($detailData['detailItem'][$index]['receiveItemDetailId']);
+        }
+      }
+    }
+
     $filteredData = [];
     foreach ($this->allowedFields as $field) {
       if (array_key_exists($field, $detailData)) {

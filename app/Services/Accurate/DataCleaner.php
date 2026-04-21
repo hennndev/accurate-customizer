@@ -2,6 +2,8 @@
 
 namespace App\Services\Accurate;
 
+use Illuminate\Support\Facades\Log;
+
 class DataCleaner
 {
     protected ModuleFieldProvider $moduleFieldProvider;
@@ -339,6 +341,24 @@ class DataCleaner
                                     );
                                     unset($cleanedSubItem['salesQuotation']);
                                 }
+
+                                if (str_contains($endpoint, 'purchase-invoice')) {
+                                    $sourceReceiveItemNumber = $this->resolvePurchaseInvoiceReceiveItemNumber(
+                                        $subValue,
+                                        $cleanedSubItem
+                                    );
+
+                                    if ($sourceReceiveItemNumber !== null && $sourceReceiveItemNumber !== '') {
+                                        $cleanedSubItem['receiveItemNumber'] = $this->numberMappingManager->getMappedNumber(
+                                            'receive-item',
+                                            (string) $sourceReceiveItemNumber
+                                        );
+                                    }
+
+                                    unset($cleanedSubItem['receiveItem']);
+                                    unset($cleanedSubItem['receiveItemId']);
+                                    unset($cleanedSubItem['receiveItemDetail']);
+                                }
                             }
 
                             if ($key === 'detailItem' && str_contains($endpoint, 'item-adjustment')) {
@@ -500,5 +520,27 @@ class DataCleaner
             $cleaned[$key] = $value;
         }
         return $cleaned;
+    }
+
+    private function resolvePurchaseInvoiceReceiveItemNumber(array $rawSubValue, array $cleanedSubItem): ?string
+    {
+        $candidates = [
+            $rawSubValue['receiveItem']['number'] ?? null,
+            $rawSubValue['receiveItem']['no'] ?? null,
+            $rawSubValue['receiveItemDetail']['receiveItem']['number'] ?? null,
+            $rawSubValue['receiveItemDetail']['receiveItem']['no'] ?? null,
+            $rawSubValue['receiveItemNumber'] ?? null,
+            $cleanedSubItem['receiveItemNumber'] ?? null,
+            $cleanedSubItem['receiveItem']['number'] ?? null,
+            $cleanedSubItem['receiveItem']['no'] ?? null,
+        ];
+
+        foreach ($candidates as $candidate) {
+            if ($candidate !== null && $candidate !== '') {
+                return (string) $candidate;
+            }
+        }
+
+        return null;
     }
 }

@@ -124,14 +124,13 @@ class TransactionSaver
             $isUpdate = isset($item['_isUpdate']) && $item['_isUpdate'] === true;
             return $this->dataCleaner->cleanDataItem($item, $endpoint, $isUpdate);
         }, $data);
-
         $requestBody = [
             'data' => $cleanedData
         ];
         $response = $client->post($endpoint, $requestBody);
         $responseData = $response->json();
 
-        if (isset($responseData['s']) && $responseData['s'] === true && $module && $accurateDatabaseId) {
+        if ($module && $accurateDatabaseId) {
             $this->entityMappingManager->storeEntityMappings($module, $data, $responseData, $accurateDatabaseId);
         }
 

@@ -10,10 +10,12 @@ class Setting extends Model
     use HasFactory;
     
     protected $fillable = [
-        'retention_days'
+        'retention_days',
+        'migrate_per_page',
     ];
     
     protected $casts = [
-        'retention_days' => 'integer'
+        'retention_days' => 'integer',
+        'migrate_per_page' => 'integer',
     ];
 }
