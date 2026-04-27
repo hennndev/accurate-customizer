@@ -40,6 +40,7 @@
            switchingDb: false,
            searchQuery: '',
            activeFilter: 'all',
+           captureModes: {},
            restoreMonitorFromStorage() {
                const stored = localStorage.getItem('activeMonitorId');
                if (stored) {
@@ -210,13 +211,22 @@
                    this.clearMonitorFromStorage();
                }
            },
-           async captureData(moduleName, moduleSlug) {
+           async captureData(moduleName, moduleSlug, moduleType = 'transaction') {
+               const captureMode = this.captureModes[moduleSlug] || (moduleType === 'transaction' ? 'list_and_detail' : 'list_only');
+       
+               if (moduleType !== 'transaction' && captureMode === 'list_and_detail') {
+                   this.monitorVisible = true;
+                   this.monitorStatus = 'failed';
+                   this.monitorMessage = 'Mode list + detail hanya tersedia untuk module transaction.';
+                   return;
+               }
+       
                this.capturing = true;
                this.progress = 0;
                this.currentModule = moduleName;
                this.monitorVisible = true;
                this.monitorStatus = 'queued';
-               this.monitorMessage = 'Menyiapkan capture job...';
+               this.monitorMessage = 'Menyiapkan capture job (' + captureMode.replaceAll('_', ' ') + ')...';
                this.monitorSaved = 0;
                this.monitorFailed = 0;
                this.monitorItems = 0;
@@ -246,6 +256,7 @@
                            end_time: endTime,
                            filter_type: filterType,
                            capture_page: 1,
+                           capture_mode: captureMode,
                        })
                    });
        
@@ -1527,6 +1538,17 @@
             </div>
 
             <div class="flex flex-col gap-4">
+              <div class="flex flex-col gap-1">
+                <label class="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Mode Capture</label>
+                <select x-model="captureModes['{{ $card['slug'] }}']"
+                        x-init="if (!captureModes['{{ $card['slug'] }}']) captureModes['{{ $card['slug'] }}'] = 'list_only'"
+                        :disabled="capturing || switchingDb"
+                        class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                  <option value="list_only">Capture List Saja</option>
+                  <option value="detail_only">Capture Detail (Dari Cache ID)</option>
+                </select>
+              </div>
+
               @if ($isCaptured)
                 <div class="bg-gray-50 rounded-xl p-3">
                   <p class="text-gray-700 font-semibold text-sm">{{ $transactionCount }} transactions
@@ -1535,7 +1557,7 @@
                     {{ $lastCaptured->diffForHumans() }}</p>
                 </div>
                 <button type="button"
-                        @click.prevent="captureData('{{ $card['name'] }}', '{{ $card['slug'] }}')"
+                        @click.prevent="captureData('{{ $card['name'] }}', '{{ $card['slug'] }}', 'master')"
                         :disabled="capturing || switchingDb"
                         class="flex items-center justify-center gap-3 text-white font-semibold px-4 py-2 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
                         style="background: linear-gradient(to right, {{ $colors['from'] }}, {{ $colors['to'] }});"
@@ -1556,7 +1578,7 @@
                   <p class="text-gray-500 font-medium text-[15px]">No data captured yet</p>
                 </div>
                 <button type="button"
-                        @click.prevent="captureData('{{ $card['name'] }}', '{{ $card['slug'] }}')"
+                        @click.prevent="captureData('{{ $card['name'] }}', '{{ $card['slug'] }}', 'master')"
                         :disabled="capturing || switchingDb"
                         class="flex items-center justify-center gap-3 text-white font-semibold px-4 py-2 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
                         style="background: linear-gradient(to right, {{ $colors['from'] }}, {{ $colors['to'] }});"
@@ -1663,6 +1685,18 @@
             </div>
 
             <div class="flex flex-col gap-4">
+              <div class="flex flex-col gap-1">
+                <label class="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Mode Capture</label>
+                <select x-model="captureModes['{{ $card['slug'] }}']"
+                        x-init="if (!captureModes['{{ $card['slug'] }}']) captureModes['{{ $card['slug'] }}'] = 'list_and_detail'"
+                        :disabled="capturing || switchingDb"
+                        class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                  <option value="list_only">Capture List Saja</option>
+                  <option value="list_and_detail">Capture List + Detail</option>
+                  <option value="detail_only">Capture Detail (Dari Cache ID)</option>
+                </select>
+              </div>
+
               @if ($isCaptured)
                 <div class="bg-gray-50 rounded-xl p-3">
                   <p class="text-gray-700 font-semibold text-sm">{{ $transactionCount }} transactions
@@ -1671,7 +1705,7 @@
                     {{ $lastCaptured->diffForHumans() }}</p>
                 </div>
                 <button type="button"
-                        @click.prevent="captureData('{{ $card['name'] }}', '{{ $card['slug'] }}')"
+                        @click.prevent="captureData('{{ $card['name'] }}', '{{ $card['slug'] }}', 'transaction')"
                         :disabled="capturing || switchingDb"
                         class="flex items-center justify-center gap-3 text-white font-semibold px-4 py-2 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
                         style="background: linear-gradient(to right, {{ $colors['from'] }}, {{ $colors['to'] }});"
@@ -1692,7 +1726,7 @@
                   <p class="text-gray-500 font-medium text-[15px]">No data captured yet</p>
                 </div>
                 <button type="button"
-                        @click.prevent="captureData('{{ $card['name'] }}', '{{ $card['slug'] }}')"
+                        @click.prevent="captureData('{{ $card['name'] }}', '{{ $card['slug'] }}', 'transaction')"
                         :disabled="capturing || switchingDb"
                         class="flex items-center justify-center gap-3 text-white font-semibold px-4 py-2 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
                         style="background: linear-gradient(to right, {{ $colors['from'] }}, {{ $colors['to'] }});"
