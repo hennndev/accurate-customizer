@@ -32,7 +32,8 @@ class CaptureModuleJob implements ShouldQueue
         public ?int $userId,
         public int $trackerLogId,
         public ?string $accessToken,
-        public ?array $sourceDbInfo
+        public ?array $sourceDbInfo,
+        public ?string $cancelToken = null,
     ) {
     }
 
@@ -46,19 +47,24 @@ class CaptureModuleJob implements ShouldQueue
             ]);
         }
 
+        $existingTracker = SystemLog::find($this->trackerLogId);
+        $existingPayload = is_array($existingTracker?->payload) ? $existingTracker->payload : [];
+
+        $savedCount = (int) ($existingPayload['saved_count'] ?? 0);
+        $failedCount = (int) ($existingPayload['failed_count'] ?? 0);
+        $skippedDuplicateCount = (int) ($existingPayload['skipped_duplicate_count'] ?? 0);
+        $processedPages = (int) ($existingPayload['processed_pages'] ?? 0);
+        $processedItems = (int) ($existingPayload['processed_items'] ?? 0);
+
         $this->updateTracker('running', 'Capture started', [
-            'progress' => 0,
-            'saved_count' => 0,
-            'failed_count' => 0,
-            'processed_pages' => 0,
-            'processed_items' => 0,
+            'progress' => (int) ($existingPayload['progress'] ?? 0),
+            'saved_count' => $savedCount,
+            'failed_count' => $failedCount,
+            'skipped_duplicate_count' => $skippedDuplicateCount,
+            'processed_pages' => $processedPages,
+            'processed_items' => $processedItems,
         ]);
 
-        $savedCount = 0;
-        $failedCount = 0;
-        $skippedDuplicateCount = 0;
-        $processedPages = 0;
-        $processedItems = 0;
         $savedTransactionNumbers = [];
 
         $moduleRecord = Module::firstOrCreate(
@@ -80,11 +86,20 @@ class CaptureModuleJob implements ShouldQueue
         $handler = ModuleManager::forSlug($this->module);
         $sharedContext = [];
 
+        if ($this->isCancelled()) {
+            $this->updateTracker('failed', 'Capture dibatalkan sebelum mulai', [
+                'progress' => 100,
+                'cancelled' => true,
+            ]);
+            return;
+        }
+
         if (!$listOnlyMode) {
             $handler->preCapture($accurate, $sharedContext);
         }
 
         $currentPage = $this->startPage;
+        $pageFetchFailures = 0;
         $batchSize = 100;
         $transactionsToInsert = [];
 
@@ -138,14 +153,47 @@ class CaptureModuleJob implements ShouldQueue
         };
 
         while (true) {
-            $pageResult = $accurate->fetchModuleDataPage(
-                $this->moduleInfo['list_endpoint'],
-                $this->params,
-                $currentPage,
-                $this->pageSize,
-                $this->sourceDbInfo,
-                $this->accessToken
-            );
+            if ($this->isCancelled()) {
+                $this->updateTracker('failed', 'Capture dibatalkan', [
+                    'progress' => 100,
+                    'cancelled' => true,
+                    'next_page' => $currentPage,
+                ]);
+                return;
+            }
+
+            try {
+                $pageResult = $accurate->fetchModuleDataPage(
+                    $this->moduleInfo['list_endpoint'],
+                    $this->params,
+                    $currentPage,
+                    $this->pageSize,
+                    $this->sourceDbInfo,
+                    $this->accessToken
+                );
+            } catch (\Throwable $exception) {
+                $pageFetchFailures++;
+                Log::error('Capture page failed', [
+                    'module' => $this->module,
+                    'page' => $currentPage,
+                    'error' => $exception->getMessage(),
+                ]);
+
+                $failedCount++;
+                $this->updateTracker('running', 'Capture page failed, continuing', [
+                    'progress' => min(95, 10 + ($processedPages * 5)),
+                    'saved_count' => $savedCount,
+                    'failed_count' => $failedCount,
+                    'skipped_duplicate_count' => $skippedDuplicateCount,
+                    'processed_pages' => $processedPages,
+                    'processed_items' => $processedItems,
+                    'next_page' => $currentPage + 1,
+                    'page_fetch_failures' => $pageFetchFailures,
+                ]);
+
+                $currentPage++;
+                continue;
+            }
 
             $pageData = $pageResult['data'] ?? [];
             if (empty($pageData)) {
@@ -163,6 +211,14 @@ class CaptureModuleJob implements ShouldQueue
                     $detailData = $item;
 
                     if (!$listOnlyMode) {
+                        Log::info('Capture detail fetch started', [
+                            'module' => $this->module,
+                            'page' => $currentPage,
+                            'index' => $index,
+                            'item_id' => $itemId,
+                            'endpoint' => $this->moduleInfo['detail_endpoint'],
+                        ]);
+
                         $detailParams = ['id' => $itemId];
                         $detailDataRaw = $accurate->fetchModuleData(
                             $this->moduleInfo['detail_endpoint'],
@@ -176,6 +232,13 @@ class CaptureModuleJob implements ShouldQueue
                         } else {
                             $detailData = $detailDataRaw;
                         }
+
+                        Log::info('Capture detail fetch completed', [
+                            'module' => $this->module,
+                            'page' => $currentPage,
+                            'index' => $index,
+                            'item_id' => $itemId,
+                        ]);
                     }
 
                     if (empty($detailData) || !is_array($detailData)) {
@@ -217,7 +280,7 @@ class CaptureModuleJob implements ShouldQueue
                 }
             }
 
-            $currentPage++;
+            $nextPage = $currentPage + 1;
 
             $this->updateTracker('running', 'Capture in progress', [
                 'progress' => min(95, 10 + ($processedPages * 5)),
@@ -226,12 +289,16 @@ class CaptureModuleJob implements ShouldQueue
                 'skipped_duplicate_count' => $skippedDuplicateCount,
                 'processed_pages' => $processedPages,
                 'processed_items' => $processedItems,
-                'next_page' => $currentPage,
+                'next_page' => $nextPage,
+                'page_fetch_failures' => $pageFetchFailures,
             ]);
 
             if (count($pageData) < $this->pageSize) {
+                $currentPage = $nextPage;
                 break;
             }
+
+            $currentPage = $nextPage;
         }
 
         $flushInsertBatch();
@@ -296,5 +363,14 @@ class CaptureModuleJob implements ShouldQueue
             'message' => $message,
             'payload' => array_merge($existingPayload, $payload),
         ]);
+    }
+
+    private function isCancelled(): bool
+    {
+        if (!$this->cancelToken) {
+            return $this->cancelToken ? cache()->has($this->cancelToken) : false;
+        }
+
+        return cache()->has($this->cancelToken);
     }
 }

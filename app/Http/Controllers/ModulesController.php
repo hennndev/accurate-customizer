@@ -565,6 +565,9 @@ class ModulesController extends Controller
         'user_id' => Auth::id(),
       ]);
 
+      $cancelToken = 'capture-cancel:' . $tracker->id;
+      cache()->forget($cancelToken);
+
       CaptureModuleJob::dispatch(
         module: $module,
         moduleInfo: $moduleInfo,
@@ -577,6 +580,7 @@ class ModulesController extends Controller
         trackerLogId: $tracker->id,
         accessToken: $accessToken,
         sourceDbInfo: $sourceDbInfo,
+        cancelToken: $cancelToken,
       )->onQueue('capture');
 
       return response()->json([

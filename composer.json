@@ -49,8 +49,10 @@
             "@php artisan key:generate --ansi"
         ],
         "queue:work-4": [
+            "Composer\\Config::disableProcessTimeout",
             "chmod +x start-queue-worker.sh",
-            "WORKER_COUNT=4 QUEUE_LIST=capture,migrate,default ./start-queue-worker.sh"
+            "mkdir -p storage/logs",
+            "nohup env WORKER_COUNT=4 WORKER_TIMEOUT=0 QUEUE_LIST=capture,migrate,default ./start-queue-worker.sh >> storage/logs/queue-worker.log 2>&1 & echo 'Queue workers started in background (timeout 0). Log: storage/logs/queue-worker.log'"
         ]
     },
     "extra": {

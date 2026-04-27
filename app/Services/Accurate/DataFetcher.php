@@ -45,8 +45,8 @@ class DataFetcher
         Log::info("dataparamsssss", ["params" => $params]);
 
         $client = $targetDbInfo
-            ? $this->databaseClientManager->getDataClientForDatabase($targetDbInfo, $accessToken)
-            : $this->databaseClientManager->getDataClient();
+            ? $this->databaseClientManager->getDataClientForDatabase($targetDbInfo, $accessToken, 600)
+            : $this->databaseClientManager->getDataClient(600);
 
         $response = $this->sendGetWithRetry(
             $client,
@@ -87,11 +87,20 @@ class DataFetcher
     ): array
     {
         try {
-            $client = $targetDbInfo
-                ? $this->databaseClientManager->getDataClientForDatabase($targetDbInfo, $accessToken)
-                : $this->databaseClientManager->getDataClient();
+            $isDetailEndpoint = str_contains($endpoint, '/detail.do');
+            $timeoutSeconds = $isDetailEndpoint ? (int) env('ACCURATE_DETAIL_TIMEOUT_SECONDS', 120) : 600;
 
-            if (str_contains($endpoint, '/detail.do')) {
+            $client = $targetDbInfo
+                ? $this->databaseClientManager->getDataClientForDatabase($targetDbInfo, $accessToken, $timeoutSeconds)
+                : $this->databaseClientManager->getDataClient($timeoutSeconds);
+
+            if ($isDetailEndpoint) {
+                Log::debug('Fetching Accurate detail', [
+                    'endpoint' => $endpoint,
+                    'timeout_seconds' => $timeoutSeconds,
+                    'params' => $params,
+                ]);
+
                 $response = $this->sendGetWithRetry(
                     $client,
                     $endpoint,
@@ -105,6 +114,7 @@ class DataFetcher
                 if ($response->failed()) {
                     Log::error('Failed to fetch detail from Accurate API', [
                         'endpoint' => $endpoint,
+                        'timeout_seconds' => $timeoutSeconds,
                         'status' => $response->status(),
                         'error' => $response->body(),
                     ]);
