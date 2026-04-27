@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Models\CaptureListItemId;
 use App\Models\Module;
 use App\Models\SystemLog;
 use App\Models\Transaction;
@@ -36,6 +37,9 @@ class CaptureModuleJob implements ShouldQueue
         public ?string $accessToken,
         public ?array $sourceDbInfo,
         public ?string $cancelToken = null,
+        public string $captureMode = 'list_and_detail',
+        public bool $useListIdCache = true,
+        public bool $refreshListIdCache = false,
     ) {
     }
 
@@ -84,9 +88,20 @@ class CaptureModuleJob implements ShouldQueue
             ]
         );
 
-        $listOnlyMode = $endpointFieldProvider->getFieldsForEndpoint($this->moduleInfo['list_endpoint']) !== null;
+        $endpointListOnlyMode = $endpointFieldProvider->getFieldsForEndpoint($this->moduleInfo['list_endpoint']) !== null;
+        $forceListOnlyMode = $this->captureMode === 'list_only';
+        $detailOnlyMode = $this->captureMode === 'detail_only';
+        $listOnlyMode = $endpointListOnlyMode || $forceListOnlyMode;
         $handler = ModuleManager::forSlug($this->module);
         $sharedContext = [];
+
+        if ($detailOnlyMode && $endpointListOnlyMode) {
+            $this->updateTracker('failed', 'Mode detail only tidak didukung untuk module ini', [
+                'progress' => 100,
+                'capture_mode' => $this->captureMode,
+            ]);
+            return;
+        }
 
         if ($this->isCancelled()) {
             $this->updateTracker('failed', 'Capture dibatalkan sebelum mulai', [
@@ -139,7 +154,6 @@ class CaptureModuleJob implements ShouldQueue
 
             try {
                 $existingNumbers = Transaction::query()
-                    ->where('capture_log_id', $this->trackerLogId)
                     ->where('module_id', $moduleRecord->id)
                     ->where('accurate_database_id', $this->databaseId)
                     ->whereIn('transaction_no', $candidateNumbers)
@@ -154,7 +168,6 @@ class CaptureModuleJob implements ShouldQueue
                 DB::reconnect();
 
                 $existingNumbers = Transaction::query()
-                    ->where('capture_log_id', $this->trackerLogId)
                     ->where('module_id', $moduleRecord->id)
                     ->where('accurate_database_id', $this->databaseId)
                     ->whereIn('transaction_no', $candidateNumbers)
@@ -176,7 +189,7 @@ class CaptureModuleJob implements ShouldQueue
 
             if (!empty($rowsToInsert)) {
                 try {
-                    Transaction::insert($rowsToInsert);
+                    $insertedCount = Transaction::query()->insertOrIgnore($rowsToInsert);
                 } catch (QueryException $exception) {
                     if (!$isGoneAwayError($exception)) {
                         throw $exception;
@@ -184,11 +197,15 @@ class CaptureModuleJob implements ShouldQueue
 
                     DB::purge();
                     DB::reconnect();
-                    Transaction::insert($rowsToInsert);
+                    $insertedCount = Transaction::query()->insertOrIgnore($rowsToInsert);
                 }
 
-                $savedCount += count($rowsToInsert);
-                $savedTransactionNumbers = array_merge($savedTransactionNumbers, array_column($rowsToInsert, 'transaction_no'));
+                $savedCount += (int) $insertedCount;
+                $skippedDuplicateCount += max(0, count($rowsToInsert) - (int) $insertedCount);
+
+                if ((int) $insertedCount > 0) {
+                    $savedTransactionNumbers = array_merge($savedTransactionNumbers, array_column($rowsToInsert, 'transaction_no'));
+                }
             }
 
             $transactionsToInsert = [];
@@ -205,7 +222,85 @@ class CaptureModuleJob implements ShouldQueue
             $listParams['sp.fields'] = 'id';
         }
 
-        while (true) {
+        $globalUseListIdCache = filter_var(
+            (string) env('ACCURATE_CAPTURE_USE_LIST_ID_CACHE', 'true'),
+            FILTER_VALIDATE_BOOLEAN
+        );
+        $cacheFeatureEnabled = $this->useListIdCache && $globalUseListIdCache;
+        $useListIdCache = !$listOnlyMode && $cacheFeatureEnabled;
+        $shouldLoadFromCache = $useListIdCache && $detailOnlyMode;
+        $shouldPersistListIds = $cacheFeatureEnabled && !$detailOnlyMode;
+        $loadedCandidatesFromCache = false;
+        $listParamsHash = null;
+        $listIdCacheRows = [];
+
+        $flushListIdCacheBatch = function () use (&$listIdCacheRows, $shouldPersistListIds, &$listParamsHash): void {
+            if (!$shouldPersistListIds || empty($listIdCacheRows) || !$listParamsHash) {
+                return;
+            }
+
+            CaptureListItemId::upsert(
+                $listIdCacheRows,
+                ['accurate_database_id', 'module_slug', 'params_hash', 'list_item_id'],
+                ['fallback_number', 'captured_from_list_at', 'updated_at']
+            );
+
+            $listIdCacheRows = [];
+        };
+
+        if ($cacheFeatureEnabled) {
+            $hashParams = $listParams;
+            unset($hashParams['fields'], $hashParams['sp.fields']);
+            $listParamsHash = $this->buildParamsHash($hashParams);
+
+            if ($this->refreshListIdCache && !$detailOnlyMode) {
+                CaptureListItemId::query()
+                    ->where('accurate_database_id', $this->databaseId)
+                    ->where('module_slug', $this->module)
+                    ->where('params_hash', $listParamsHash)
+                    ->delete();
+            }
+
+            if ($shouldLoadFromCache) {
+                $cachedRows = CaptureListItemId::query()
+                    ->where('accurate_database_id', $this->databaseId)
+                    ->where('module_slug', $this->module)
+                    ->where('params_hash', $listParamsHash)
+                    ->orderBy('id')
+                    ->get(['list_item_id', 'fallback_number']);
+
+                if ($cachedRows->isNotEmpty()) {
+                    $detailCandidates = $cachedRows
+                        ->map(static fn (CaptureListItemId $item): array => [
+                            'id' => $item->list_item_id,
+                            'fallback_number' => $item->fallback_number,
+                        ])
+                        ->all();
+
+                    $loadedCandidatesFromCache = true;
+
+                    $this->updateTracker('running', 'Capture memakai cache list ID', [
+                        'progress' => 15,
+                        'saved_count' => $savedCount,
+                        'failed_count' => $failedCount,
+                        'skipped_duplicate_count' => $skippedDuplicateCount,
+                        'processed_pages' => $processedPages,
+                        'processed_items' => $processedItems,
+                        'list_total_ids' => count($detailCandidates),
+                        'used_cached_list_ids' => true,
+                    ]);
+                } else {
+                    $this->updateTracker('failed', 'Mode detail only membutuhkan cache ID list, tetapi data cache belum ada', [
+                        'progress' => 100,
+                        'capture_mode' => $this->captureMode,
+                        'used_cached_list_ids' => false,
+                    ]);
+                    return;
+                }
+            }
+        }
+
+        while (!$loadedCandidatesFromCache) {
             if ($this->isCancelled()) {
                 $this->updateTracker('failed', 'Capture dibatalkan', [
                     'progress' => 100,
@@ -280,6 +375,23 @@ class CaptureModuleJob implements ShouldQueue
                         $flushInsertBatch();
                     }
 
+                    if ($shouldPersistListIds && $itemId !== null && $listParamsHash) {
+                        $listIdCacheRows[] = [
+                            'accurate_database_id' => $this->databaseId,
+                            'module_slug' => $this->module,
+                            'params_hash' => $listParamsHash,
+                            'list_item_id' => $itemId,
+                            'fallback_number' => $item[$identifierField] ?? null,
+                            'captured_from_list_at' => now(),
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ];
+
+                        if (count($listIdCacheRows) >= 200) {
+                            $flushListIdCacheBatch();
+                        }
+                    }
+
                     continue;
                 }
 
@@ -294,6 +406,23 @@ class CaptureModuleJob implements ShouldQueue
                     'id' => $itemId,
                     'fallback_number' => $item[$identifierField] ?? null,
                 ];
+
+                if ($shouldPersistListIds && $listParamsHash) {
+                    $listIdCacheRows[] = [
+                        'accurate_database_id' => $this->databaseId,
+                        'module_slug' => $this->module,
+                        'params_hash' => $listParamsHash,
+                        'list_item_id' => $itemId,
+                        'fallback_number' => $item[$identifierField] ?? null,
+                        'captured_from_list_at' => now(),
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ];
+
+                    if (count($listIdCacheRows) >= 200) {
+                        $flushListIdCacheBatch();
+                    }
+                }
             }
 
             $nextPage = $currentPage + 1;
@@ -317,6 +446,8 @@ class CaptureModuleJob implements ShouldQueue
 
             $currentPage = $nextPage;
         }
+
+        $flushListIdCacheBatch();
 
         if (!$listOnlyMode && !empty($detailCandidates)) {
             $detailProcessed = 0;
@@ -431,6 +562,7 @@ class CaptureModuleJob implements ShouldQueue
                 'module_slug' => $this->module,
                 'database_id' => $this->databaseId,
                 'database_name' => $this->databaseName,
+                'capture_mode' => $this->captureMode,
                 'list_only_mode' => $listOnlyMode,
                 'list_endpoint' => $this->moduleInfo['list_endpoint'],
                 'detail_endpoint' => $this->moduleInfo['detail_endpoint'],
@@ -442,6 +574,9 @@ class CaptureModuleJob implements ShouldQueue
                 'skipped_duplicate_count' => $skippedDuplicateCount,
                 'next_page' => $currentPage,
                 'transaction_numbers' => $savedTransactionNumbers,
+                'list_id_cache_enabled' => $useListIdCache,
+                'used_cached_list_ids' => $loadedCandidatesFromCache,
+                'list_params_hash' => $listParamsHash,
             ],
             'message' => "Capture {$this->moduleInfo['name']}: {$savedCount} saved" . ($failedCount > 0 ? ", {$failedCount} failed" : ''),
             'user_id' => $this->userId,
@@ -480,6 +615,26 @@ class CaptureModuleJob implements ShouldQueue
             'message' => $message,
             'payload' => array_merge($existingPayload, $payload),
         ]);
+    }
+
+    private function buildParamsHash(array $params): string
+    {
+        $normalized = $this->normalizeArray($params);
+
+        return hash('sha256', json_encode($normalized, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+    }
+
+    private function normalizeArray(array $input): array
+    {
+        ksort($input);
+
+        foreach ($input as $key => $value) {
+            if (is_array($value)) {
+                $input[$key] = $this->normalizeArray($value);
+            }
+        }
+
+        return $input;
     }
 
     private function isCancelled(): bool

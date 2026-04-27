@@ -530,6 +530,36 @@ class ModulesController extends Controller
         $capturePage = 1;
       }
 
+      $isTransactionModule = ($moduleInfo['type'] ?? 'transaction') === 'transaction';
+      $defaultCaptureMode = $isTransactionModule ? 'list_and_detail' : 'list_only';
+      $captureMode = (string) $request->input('capture_mode', $defaultCaptureMode);
+      $allowedCaptureModes = ['list_only', 'list_and_detail', 'detail_only'];
+      if (!in_array($captureMode, $allowedCaptureModes, true)) {
+        $captureMode = $defaultCaptureMode;
+      }
+
+      if ($captureMode === 'list_and_detail' && !$isTransactionModule) {
+        return response()->json([
+          'success' => false,
+          'message' => 'Mode list + detail hanya tersedia untuk module transaction.'
+        ], 422);
+      }
+
+      $useListIdCache = filter_var(
+        (string) $request->input('use_list_id_cache', 'true'),
+        FILTER_VALIDATE_BOOLEAN
+      );
+
+      $refreshListIdCache = filter_var(
+        (string) $request->input('refresh_list_id_cache', 'false'),
+        FILTER_VALIDATE_BOOLEAN
+      );
+
+      if ($captureMode === 'detail_only') {
+        $useListIdCache = true;
+        $refreshListIdCache = false;
+      }
+
       $pagesPerRequest = (int) $request->input('pages_per_request', env('ACCURATE_CAPTURE_PAGES_PER_REQUEST', 2));
       if ($pagesPerRequest < 1) {
         $pagesPerRequest = 1;
@@ -559,6 +589,9 @@ class ModulesController extends Controller
           'database_name' => $accurateDatabase->db_name,
           'start_page' => $capturePage,
           'page_size' => $pageSize,
+          'capture_mode' => $captureMode,
+          'use_list_id_cache' => $useListIdCache,
+          'refresh_list_id_cache' => $refreshListIdCache,
           'progress' => 0,
         ],
         'message' => "Queue capture {$moduleInfo['name']} created",
@@ -581,6 +614,9 @@ class ModulesController extends Controller
         accessToken: $accessToken,
         sourceDbInfo: $sourceDbInfo,
         cancelToken: $cancelToken,
+        captureMode: $captureMode,
+        useListIdCache: $useListIdCache,
+        refreshListIdCache: $refreshListIdCache,
       )->onQueue('capture');
 
       return response()->json([
