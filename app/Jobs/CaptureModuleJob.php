@@ -357,22 +357,25 @@ class CaptureModuleJob implements ShouldQueue
                 if ($listOnlyMode) {
                     $itemId = $item['id'] ?? null;
                     $identifierField = $this->moduleInfo['identifier_field'] ?? 'number';
-                    $transactionNo = $item[$identifierField] ?? "ID-{$itemId}";
 
-                    $transactionsToInsert[] = [
-                        'transaction_no' => $transactionNo,
-                        'capture_log_id' => $this->trackerLogId,
-                        'accurate_database_id' => $this->databaseId,
-                        'module_id' => $moduleRecord->id,
-                        'data' => json_encode($item),
-                        'description' => $this->moduleInfo['name'],
-                        'captured_at' => now(),
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ];
+                    if (!$forceListOnlyMode) {
+                        $transactionNo = $item[$identifierField] ?? "ID-{$itemId}";
 
-                    if (count($transactionsToInsert) >= $batchSize) {
-                        $flushInsertBatch();
+                        $transactionsToInsert[] = [
+                            'transaction_no' => $transactionNo,
+                            'capture_log_id' => $this->trackerLogId,
+                            'accurate_database_id' => $this->databaseId,
+                            'module_id' => $moduleRecord->id,
+                            'data' => json_encode($item),
+                            'description' => $this->moduleInfo['name'],
+                            'captured_at' => now(),
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ];
+
+                        if (count($transactionsToInsert) >= $batchSize) {
+                            $flushInsertBatch();
+                        }
                     }
 
                     if ($shouldPersistListIds && $itemId !== null && $listParamsHash) {
