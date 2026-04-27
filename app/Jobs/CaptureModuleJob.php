@@ -88,20 +88,12 @@ class CaptureModuleJob implements ShouldQueue
             ]
         );
 
-        $endpointListOnlyMode = $endpointFieldProvider->getFieldsForEndpoint($this->moduleInfo['list_endpoint']) !== null;
-        $forceListOnlyMode = $this->captureMode === 'list_only';
         $detailOnlyMode = $this->captureMode === 'detail_only';
-        $listOnlyMode = $endpointListOnlyMode || $forceListOnlyMode;
+        $listOnlyCaptureMode = $this->captureMode === 'list_only';
+        $listAndDetailMode = $this->captureMode === 'list_and_detail';
+        $shouldRunDetailCapture = $listAndDetailMode;
         $handler = ModuleManager::forSlug($this->module);
         $sharedContext = [];
-
-        if ($detailOnlyMode && $endpointListOnlyMode) {
-            $this->updateTracker('failed', 'Mode detail only tidak didukung untuk module ini', [
-                'progress' => 100,
-                'capture_mode' => $this->captureMode,
-            ]);
-            return;
-        }
 
         if ($this->isCancelled()) {
             $this->updateTracker('failed', 'Capture dibatalkan sebelum mulai', [
@@ -111,7 +103,7 @@ class CaptureModuleJob implements ShouldQueue
             return;
         }
 
-        if (!$listOnlyMode) {
+        if (!$listOnlyCaptureMode && !$detailOnlyMode) {
             $handler->preCapture($accurate, $sharedContext);
         }
 
@@ -217,7 +209,7 @@ class CaptureModuleJob implements ShouldQueue
             $listParams['filter.invoiceDp'] = false;
         }
 
-        if (!$listOnlyMode) {
+        if ($shouldRunDetailCapture) {
             $listParams['fields'] = 'id';
             $listParams['sp.fields'] = 'id';
         }
@@ -227,8 +219,8 @@ class CaptureModuleJob implements ShouldQueue
             FILTER_VALIDATE_BOOLEAN
         );
         $cacheFeatureEnabled = $this->useListIdCache && $globalUseListIdCache;
-        $useListIdCache = !$listOnlyMode && $cacheFeatureEnabled;
-        $shouldLoadFromCache = $useListIdCache && $detailOnlyMode;
+        $useListIdCache = (!$listOnlyCaptureMode || $detailOnlyMode) && $cacheFeatureEnabled;
+        $shouldLoadFromCache = $detailOnlyMode && $cacheFeatureEnabled;
         $shouldPersistListIds = $cacheFeatureEnabled && !$detailOnlyMode;
         $loadedCandidatesFromCache = false;
         $listParamsHash = null;
@@ -300,7 +292,7 @@ class CaptureModuleJob implements ShouldQueue
             }
         }
 
-        while (!$loadedCandidatesFromCache) {
+        while (!$loadedCandidatesFromCache && !$detailOnlyMode) {
             if ($this->isCancelled()) {
                 $this->updateTracker('failed', 'Capture dibatalkan', [
                     'progress' => 100,
@@ -354,7 +346,7 @@ class CaptureModuleJob implements ShouldQueue
             $moduleRecord->save();
 
             foreach ($pageData as $item) {
-                if ($listOnlyMode) {
+                if (!$shouldRunDetailCapture) {
                     $itemId = $item['id'] ?? null;
                     $identifierField = $this->moduleInfo['identifier_field'] ?? 'number';
 
@@ -430,7 +422,7 @@ class CaptureModuleJob implements ShouldQueue
 
             $nextPage = $currentPage + 1;
 
-            $this->updateTracker('running', !$listOnlyMode ? 'Capture list in progress' : 'Capture in progress', [
+            $this->updateTracker('running', $shouldRunDetailCapture ? 'Capture list in progress' : 'Capture in progress', [
                 'progress' => min(95, 10 + ($processedPages * 5)),
                 'saved_count' => $savedCount,
                 'failed_count' => $failedCount,
@@ -452,7 +444,52 @@ class CaptureModuleJob implements ShouldQueue
 
         $flushListIdCacheBatch();
 
-        if (!$listOnlyMode && !empty($detailCandidates)) {
+        if ($listOnlyCaptureMode) {
+            $finalStatus = $failedCount > 0 ? 'warning' : ($savedCount > 0 ? 'success' : 'info');
+
+            SystemLog::create([
+                'event_type' => 'capture',
+                'module' => $this->moduleInfo['name'],
+                'transaction_id' => null,
+                'status' => $finalStatus,
+                'payload' => [
+                    'module_slug' => $this->module,
+                    'database_id' => $this->databaseId,
+                    'database_name' => $this->databaseName,
+                    'capture_mode' => $this->captureMode,
+                    'list_only_mode' => true,
+                    'list_endpoint' => $this->moduleInfo['list_endpoint'],
+                    'detail_endpoint' => $this->moduleInfo['detail_endpoint'],
+                    'start_page' => $this->startPage,
+                    'total_pages_processed' => $processedPages,
+                    'total_items' => $processedItems,
+                    'saved_count' => $savedCount,
+                    'failed_count' => $failedCount,
+                    'skipped_duplicate_count' => $skippedDuplicateCount,
+                    'next_page' => $currentPage,
+                    'transaction_numbers' => $savedTransactionNumbers,
+                    'list_id_cache_enabled' => $useListIdCache,
+                    'used_cached_list_ids' => $loadedCandidatesFromCache,
+                    'list_params_hash' => $listParamsHash,
+                ],
+                'message' => "Capture {$this->moduleInfo['name']}: {$savedCount} saved" . ($failedCount > 0 ? ", {$failedCount} failed" : ''),
+                'user_id' => $this->userId,
+            ]);
+
+            $this->updateTracker($finalStatus, 'Capture completed', [
+                'progress' => 100,
+                'saved_count' => $savedCount,
+                'failed_count' => $failedCount,
+                'skipped_duplicate_count' => $skippedDuplicateCount,
+                'processed_pages' => $processedPages,
+                'processed_items' => $processedItems,
+                'next_page' => $currentPage,
+            ]);
+
+            return;
+        }
+
+        if (!empty($detailCandidates)) {
             $detailProcessed = 0;
 
             foreach ($detailCandidates as $index => $candidate) {
@@ -566,7 +603,7 @@ class CaptureModuleJob implements ShouldQueue
                 'database_id' => $this->databaseId,
                 'database_name' => $this->databaseName,
                 'capture_mode' => $this->captureMode,
-                'list_only_mode' => $listOnlyMode,
+                'list_only_mode' => $listOnlyCaptureMode,
                 'list_endpoint' => $this->moduleInfo['list_endpoint'],
                 'detail_endpoint' => $this->moduleInfo['detail_endpoint'],
                 'start_page' => $this->startPage,
