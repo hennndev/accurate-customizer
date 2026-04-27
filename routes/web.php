@@ -86,8 +86,11 @@ Route::middleware('auth')->group(function () {
     });
     Route::controller(SystemLogsController::class)->prefix('system-logs')->group(function () {
       Route::get('/', 'index')->name('system-logs.index');
+      Route::get('/queue', 'queue')->name('system-logs.queue');
       Route::get('/active', 'active')->name('system-logs.active');
       Route::get('/{log}/status', 'status')->name('system-logs.status');
+      Route::post('/{log}/cancel', 'cancel')->name('system-logs.cancel');
+      Route::delete('/queue', 'destroyMultiple')->name('system-logs.queue.destroyMultiple');
     });
     Route::controller(UsersController::class)->middleware('can:manage_users')->prefix('users')->group(function () {
       Route::get('/', 'index')->name('users.index');

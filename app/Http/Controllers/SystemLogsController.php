@@ -60,6 +60,10 @@ class SystemLogsController extends Controller
             });
         }
 
+        if ($request->filled('queue_status') && $request->queue_status !== 'all') {
+            $query->where('status', $request->queue_status);
+        }
+
         // Filter by event type
         if ($request->filled('event_type') && $request->event_type !== 'All Types') {
             $query->where('event_type', strtolower($request->event_type));
@@ -157,6 +161,76 @@ class SystemLogsController extends Controller
                 'payload' => $log->payload,
                 'updated_at' => $log->updated_at,
             ],
+        ]);
+    }
+
+    public function queue(Request $request)
+    {
+        $query = SystemLog::query()
+            ->whereIn('event_type', ['capture_queue', 'migrate_queue'])
+            ->orderByDesc('created_at');
+
+        if ($request->filled('queue_status') && $request->queue_status !== 'all') {
+            $query->where('status', $request->queue_status);
+        }
+
+        $logs = $query->get();
+
+        return view('system-logs.queue', compact('logs'));
+    }
+
+    public function destroyMultiple(Request $request)
+    {
+        $ids = collect($request->input('ids', []))->filter()->values()->all();
+
+        if (empty($ids)) {
+            return response()->json(['success' => false, 'message' => 'No items selected'], 422);
+        }
+
+        $logs = SystemLog::query()
+            ->whereIn('id', $ids)
+            ->whereIn('event_type', ['capture_queue', 'migrate_queue'])
+            ->where('user_id', Auth::id())
+            ->get();
+
+        foreach ($logs as $log) {
+            cache()->forget('capture-cancel:' . $log->id);
+        }
+
+        SystemLog::query()->whereIn('id', $logs->pluck('id'))->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Selected queue logs deleted',
+        ]);
+    }
+
+    public function cancel(SystemLog $log)
+    {
+        if (!in_array($log->event_type, ['capture_queue', 'migrate_queue'], true)) {
+            return response()->json(['success' => false, 'message' => 'Unsupported queue type'], 422);
+        }
+
+        if ((int) $log->user_id !== (int) Auth::id()) {
+            return response()->json(['success' => false, 'message' => 'Forbidden'], 403);
+        }
+
+        $payload = is_array($log->payload) ? $log->payload : [];
+        $cancelToken = 'capture-cancel:' . $log->id;
+        cache()->put($cancelToken, true, now()->addHours(24));
+
+        $payload['cancelled'] = true;
+        $payload['cancelled_at'] = now()->toDateTimeString();
+
+        $log->update([
+            'status' => 'failed',
+            'message' => 'Capture dibatalkan oleh user.',
+            'payload' => $payload,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Capture dibatalkan',
         ]);
     }
 }

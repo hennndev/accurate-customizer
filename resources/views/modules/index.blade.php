@@ -116,6 +116,27 @@
            clearMonitorFromStorage() {
                localStorage.removeItem('activeMonitorId');
            },
+           async cancelMonitor() {
+               if (!this.monitorId) return;
+               try {
+                   const response = await fetch(`/system-logs/${this.monitorId}/cancel`, {
+                       method: 'POST',
+                       credentials: 'same-origin',
+                       headers: {
+                           'Accept': 'application/json',
+                           'X-Requested-With': 'XMLHttpRequest',
+                           'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                       }
+                   });
+                   const result = await response.json();
+                   this.monitorStatus = result?.success ? 'failed' : this.monitorStatus;
+                   this.monitorMessage = result?.message || 'Capture dibatalkan';
+                   this.capturing = false;
+                   this.clearMonitorFromStorage();
+               } catch (e) {
+                   console.error(e);
+               }
+           },
            async resumePolling() {
                if (!this.monitorId) return;
                try {
@@ -367,10 +388,16 @@
           <p class="text-sm text-blue-700"
              x-text="currentModule || 'Queue job'"></p>
         </div>
-        <button type="button"
-                x-show="!capturing"
-                @click="monitorVisible = false; clearMonitorFromStorage();"
-                class="text-xs px-2 py-1 rounded border border-blue-300 text-blue-700 hover:bg-blue-100">Tutup</button>
+        <div class="flex items-center gap-2">
+          <button type="button"
+                  x-show="capturing"
+                  @click="cancelMonitor()"
+                  class="text-xs px-2 py-1 rounded border border-red-300 text-red-700 hover:bg-red-100">Batalkan antrian</button>
+          <button type="button"
+                  x-show="!capturing"
+                  @click="monitorVisible = false; clearMonitorFromStorage();"
+                  class="text-xs px-2 py-1 rounded border border-blue-300 text-blue-700 hover:bg-blue-100">Tutup</button>
+        </div>
       </div>
 
       <div class="space-y-1">
