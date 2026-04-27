@@ -23,6 +23,16 @@
 
   <div class="space-y-4"
        x-data="{ selected: [], selectAll: false, showDeleteModal: false }">
+    @if (session('success'))
+      <div class="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
+        {{ session('success') }}
+      </div>
+    @endif
+    @if (session('error'))
+      <div class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+        {{ session('error') }}
+      </div>
+    @endif
     <form method="GET"
           action="{{ route('system-logs.queue') }}"
           class="flex flex-col md:flex-row gap-3">
@@ -68,7 +78,7 @@
         </label>
         <button type="submit"
                 class="px-4 py-2 rounded-lg bg-red-600 text-white"
-                :disabled="selected.length === 0">Delete Selected</button>
+                :disabled="selected.length === 0">Delete / Stop Selected</button>
       </div>
 
       <div class="bg-white rounded-xl shadow overflow-hidden">
