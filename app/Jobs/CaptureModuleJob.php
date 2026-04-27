@@ -8,11 +8,13 @@ use App\Models\Transaction;
 use App\Modules\ModuleManager;
 use App\Services\Accurate\EndpointFieldProvider;
 use App\Services\AccurateService;
+use Illuminate\Database\QueryException;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class CaptureModuleJob implements ShouldQueue
@@ -100,8 +102,20 @@ class CaptureModuleJob implements ShouldQueue
 
         $currentPage = $this->startPage;
         $pageFetchFailures = 0;
-        $batchSize = 100;
+        $batchSize = (int) env('ACCURATE_CAPTURE_INSERT_BATCH', 20);
+        if ($batchSize < 1) {
+            $batchSize = 1;
+        }
+        if ($batchSize > 100) {
+            $batchSize = 100;
+        }
         $transactionsToInsert = [];
+        $detailCandidates = [];
+
+        $isGoneAwayError = static function (\Throwable $exception): bool {
+            $message = strtolower($exception->getMessage());
+            return str_contains($message, 'server has gone away') || str_contains($message, '2006');
+        };
 
         $flushInsertBatch = function () use (&$transactionsToInsert, &$savedCount, &$skippedDuplicateCount, &$savedTransactionNumbers, $moduleRecord): void {
             if (empty($transactionsToInsert)) {
@@ -123,13 +137,30 @@ class CaptureModuleJob implements ShouldQueue
                 return;
             }
 
-            $existingNumbers = Transaction::query()
-                ->where('capture_log_id', $this->trackerLogId)
-                ->where('module_id', $moduleRecord->id)
-                ->where('accurate_database_id', $this->databaseId)
-                ->whereIn('transaction_no', $candidateNumbers)
-                ->pluck('transaction_no')
-                ->all();
+            try {
+                $existingNumbers = Transaction::query()
+                    ->where('capture_log_id', $this->trackerLogId)
+                    ->where('module_id', $moduleRecord->id)
+                    ->where('accurate_database_id', $this->databaseId)
+                    ->whereIn('transaction_no', $candidateNumbers)
+                    ->pluck('transaction_no')
+                    ->all();
+            } catch (QueryException $exception) {
+                if (!$isGoneAwayError($exception)) {
+                    throw $exception;
+                }
+
+                DB::purge();
+                DB::reconnect();
+
+                $existingNumbers = Transaction::query()
+                    ->where('capture_log_id', $this->trackerLogId)
+                    ->where('module_id', $moduleRecord->id)
+                    ->where('accurate_database_id', $this->databaseId)
+                    ->whereIn('transaction_no', $candidateNumbers)
+                    ->pluck('transaction_no')
+                    ->all();
+            }
 
             $existingMap = array_flip($existingNumbers);
             $rowsToInsert = [];
@@ -144,13 +175,35 @@ class CaptureModuleJob implements ShouldQueue
             }
 
             if (!empty($rowsToInsert)) {
-                Transaction::insert($rowsToInsert);
+                try {
+                    Transaction::insert($rowsToInsert);
+                } catch (QueryException $exception) {
+                    if (!$isGoneAwayError($exception)) {
+                        throw $exception;
+                    }
+
+                    DB::purge();
+                    DB::reconnect();
+                    Transaction::insert($rowsToInsert);
+                }
+
                 $savedCount += count($rowsToInsert);
                 $savedTransactionNumbers = array_merge($savedTransactionNumbers, array_column($rowsToInsert, 'transaction_no'));
             }
 
             $transactionsToInsert = [];
         };
+
+        $listParams = $this->params;
+
+        if (in_array($this->module, ['sales-invoice', 'purchase-invoice'], true)) {
+            $listParams['filter.invoiceDp'] = false;
+        }
+
+        if (!$listOnlyMode) {
+            $listParams['fields'] = 'id';
+            $listParams['sp.fields'] = 'id';
+        }
 
         while (true) {
             if ($this->isCancelled()) {
@@ -165,7 +218,7 @@ class CaptureModuleJob implements ShouldQueue
             try {
                 $pageResult = $accurate->fetchModuleDataPage(
                     $this->moduleInfo['list_endpoint'],
-                    $this->params,
+                    $listParams,
                     $currentPage,
                     $this->pageSize,
                     $this->sourceDbInfo,
@@ -205,53 +258,119 @@ class CaptureModuleJob implements ShouldQueue
             $moduleRecord->is_active = true;
             $moduleRecord->save();
 
-            foreach ($pageData as $index => $item) {
-                try {
+            foreach ($pageData as $item) {
+                if ($listOnlyMode) {
                     $itemId = $item['id'] ?? null;
-                    $detailData = $item;
+                    $identifierField = $this->moduleInfo['identifier_field'] ?? 'number';
+                    $transactionNo = $item[$identifierField] ?? "ID-{$itemId}";
 
-                    if (!$listOnlyMode) {
-                        Log::info('Capture detail fetch started', [
-                            'module' => $this->module,
-                            'page' => $currentPage,
-                            'index' => $index,
-                            'item_id' => $itemId,
-                            'endpoint' => $this->moduleInfo['detail_endpoint'],
-                        ]);
+                    $transactionsToInsert[] = [
+                        'transaction_no' => $transactionNo,
+                        'capture_log_id' => $this->trackerLogId,
+                        'accurate_database_id' => $this->databaseId,
+                        'module_id' => $moduleRecord->id,
+                        'data' => json_encode($item),
+                        'description' => $this->moduleInfo['name'],
+                        'captured_at' => now(),
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ];
 
-                        $detailParams = ['id' => $itemId];
-                        $detailDataRaw = $accurate->fetchModuleData(
-                            $this->moduleInfo['detail_endpoint'],
-                            $detailParams,
-                            $this->sourceDbInfo,
-                            $this->accessToken
-                        );
-
-                        if (is_array($detailDataRaw) && isset($detailDataRaw[0]) && is_array($detailDataRaw[0])) {
-                            $detailData = $detailDataRaw[0];
-                        } else {
-                            $detailData = $detailDataRaw;
-                        }
-
-                        Log::info('Capture detail fetch completed', [
-                            'module' => $this->module,
-                            'page' => $currentPage,
-                            'index' => $index,
-                            'item_id' => $itemId,
-                        ]);
+                    if (count($transactionsToInsert) >= $batchSize) {
+                        $flushInsertBatch();
                     }
+
+                    continue;
+                }
+
+                $itemId = $item['id'] ?? null;
+                if ($itemId === null) {
+                    $failedCount++;
+                    continue;
+                }
+
+                $identifierField = $this->moduleInfo['identifier_field'] ?? 'number';
+                $detailCandidates[] = [
+                    'id' => $itemId,
+                    'fallback_number' => $item[$identifierField] ?? null,
+                ];
+            }
+
+            $nextPage = $currentPage + 1;
+
+            $this->updateTracker('running', !$listOnlyMode ? 'Capture list in progress' : 'Capture in progress', [
+                'progress' => min(95, 10 + ($processedPages * 5)),
+                'saved_count' => $savedCount,
+                'failed_count' => $failedCount,
+                'skipped_duplicate_count' => $skippedDuplicateCount,
+                'processed_pages' => $processedPages,
+                'processed_items' => $processedItems,
+                'next_page' => $nextPage,
+                'page_fetch_failures' => $pageFetchFailures,
+                'list_total_ids' => count($detailCandidates),
+            ]);
+
+            if (count($pageData) < $this->pageSize) {
+                $currentPage = $nextPage;
+                break;
+            }
+
+            $currentPage = $nextPage;
+        }
+
+        if (!$listOnlyMode && !empty($detailCandidates)) {
+            $detailProcessed = 0;
+
+            foreach ($detailCandidates as $index => $candidate) {
+                if ($this->isCancelled()) {
+                    $this->updateTracker('failed', 'Capture dibatalkan', [
+                        'progress' => 100,
+                        'cancelled' => true,
+                        'detail_processed' => $detailProcessed,
+                        'detail_total' => count($detailCandidates),
+                    ]);
+                    return;
+                }
+
+                $itemId = $candidate['id'];
+
+                try {
+                    Log::info('Capture detail fetch started', [
+                        'module' => $this->module,
+                        'index' => $index,
+                        'item_id' => $itemId,
+                        'endpoint' => $this->moduleInfo['detail_endpoint'],
+                    ]);
+
+                    $detailDataRaw = $accurate->fetchModuleData(
+                        $this->moduleInfo['detail_endpoint'],
+                        ['id' => $itemId],
+                        $this->sourceDbInfo,
+                        $this->accessToken
+                    );
+
+                    $detailData = (is_array($detailDataRaw) && isset($detailDataRaw[0]) && is_array($detailDataRaw[0]))
+                        ? $detailDataRaw[0]
+                        : $detailDataRaw;
+
+                    Log::info('Capture detail fetch completed', [
+                        'module' => $this->module,
+                        'index' => $index,
+                        'item_id' => $itemId,
+                    ]);
 
                     if (empty($detailData) || !is_array($detailData)) {
                         $failedCount++;
+                        $detailProcessed++;
                         continue;
                     }
 
                     $identifierField = $this->moduleInfo['identifier_field'] ?? 'number';
-                    $transactionNo = $detailData[$identifierField] ?? $item[$identifierField] ?? "ID-{$itemId}";
+                    $transactionNo = $detailData[$identifierField]
+                        ?? $candidate['fallback_number']
+                        ?? "ID-{$itemId}";
 
-                    if (!$listOnlyMode) {
-                        $handler->transformDetail($detailData, $sharedContext, ['itemId' => $itemId, 'module' => $this->module]);
-                    }
+                    $handler->transformDetail($detailData, $sharedContext, ['itemId' => $itemId, 'module' => $this->module]);
 
                     $transactionsToInsert[] = [
                         'transaction_no' => $transactionNo,
@@ -271,34 +390,32 @@ class CaptureModuleJob implements ShouldQueue
                 } catch (\Exception $exception) {
                     Log::error('Capture item failed', [
                         'module' => $this->module,
-                        'page' => $currentPage,
                         'index' => $index,
-                        'item_id' => $item['id'] ?? null,
+                        'item_id' => $itemId,
                         'error' => $exception->getMessage(),
                     ]);
                     $failedCount++;
                 }
+
+                $detailProcessed++;
+
+                if ($detailProcessed % 20 === 0 || $detailProcessed === count($detailCandidates)) {
+                    $listProgress = min(60, 10 + ($processedPages * 5));
+                    $detailProgressPortion = (int) floor(($detailProcessed / max(1, count($detailCandidates))) * 35);
+
+                    $this->updateTracker('running', 'Capture detail in progress', [
+                        'progress' => min(95, $listProgress + $detailProgressPortion),
+                        'saved_count' => $savedCount,
+                        'failed_count' => $failedCount,
+                        'skipped_duplicate_count' => $skippedDuplicateCount,
+                        'processed_pages' => $processedPages,
+                        'processed_items' => $processedItems,
+                        'detail_processed' => $detailProcessed,
+                        'detail_total' => count($detailCandidates),
+                        'page_fetch_failures' => $pageFetchFailures,
+                    ]);
+                }
             }
-
-            $nextPage = $currentPage + 1;
-
-            $this->updateTracker('running', 'Capture in progress', [
-                'progress' => min(95, 10 + ($processedPages * 5)),
-                'saved_count' => $savedCount,
-                'failed_count' => $failedCount,
-                'skipped_duplicate_count' => $skippedDuplicateCount,
-                'processed_pages' => $processedPages,
-                'processed_items' => $processedItems,
-                'next_page' => $nextPage,
-                'page_fetch_failures' => $pageFetchFailures,
-            ]);
-
-            if (count($pageData) < $this->pageSize) {
-                $currentPage = $nextPage;
-                break;
-            }
-
-            $currentPage = $nextPage;
         }
 
         $flushInsertBatch();

@@ -6,6 +6,7 @@ use App\Models\SystemLog;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class SystemLogsController extends Controller
 {
@@ -184,7 +185,11 @@ class SystemLogsController extends Controller
         $ids = collect($request->input('ids', []))->filter()->values()->all();
 
         if (empty($ids)) {
-            return response()->json(['success' => false, 'message' => 'No items selected'], 422);
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => 'No items selected'], 422);
+            }
+
+            return redirect()->back()->with('error', 'No items selected');
         }
 
         $logs = SystemLog::query()
@@ -193,16 +198,66 @@ class SystemLogsController extends Controller
             ->where('user_id', Auth::id())
             ->get();
 
+        $trackerIds = $logs->pluck('id')->all();
+
+        foreach ($logs as $log) {
+            if (in_array($log->status, ['queued', 'running'], true)) {
+                cache()->put('capture-cancel:' . $log->id, true, now()->addHours(24));
+            }
+        }
+
+        $deletedJobs = $this->deleteQueuedJobsByTrackerIds($trackerIds);
+
         foreach ($logs as $log) {
             cache()->forget('capture-cancel:' . $log->id);
         }
 
-        SystemLog::query()->whereIn('id', $logs->pluck('id'))->delete();
+        SystemLog::query()->whereIn('id', $trackerIds)->delete();
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Selected queue logs deleted',
-        ]);
+        $message = 'Selected queue logs deleted';
+        if ($deletedJobs > 0) {
+            $message .= ' and ' . $deletedJobs . ' queued job(s) stopped';
+        }
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => $message,
+            ]);
+        }
+
+        return redirect()->back()->with('success', $message);
+    }
+
+    private function deleteQueuedJobsByTrackerIds(array $trackerIds): int
+    {
+        if (empty($trackerIds)) {
+            return 0;
+        }
+
+        $jobs = DB::table('jobs')
+            ->whereIn('queue', ['capture', 'migrate'])
+            ->get(['id', 'payload']);
+
+        $jobIdsToDelete = [];
+
+        foreach ($jobs as $job) {
+            $payload = json_decode($job->payload, true);
+            $command = (string) data_get($payload, 'data.command', '');
+
+            foreach ($trackerIds as $trackerId) {
+                if (str_contains($command, 'trackerLogId";i:' . $trackerId . ';')) {
+                    $jobIdsToDelete[] = $job->id;
+                    break;
+                }
+            }
+        }
+
+        if (empty($jobIdsToDelete)) {
+            return 0;
+        }
+
+        return DB::table('jobs')->whereIn('id', $jobIdsToDelete)->delete();
     }
 
     public function cancel(SystemLog $log)
