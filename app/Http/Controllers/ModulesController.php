@@ -9,7 +9,6 @@ use App\Models\SystemLog;
 use App\Services\AccurateService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Auth;
 
 class ModulesController extends Controller
 {
@@ -18,8 +17,8 @@ class ModulesController extends Controller
     try {
       $dbList = $accurate->getDatabaseList();
     } catch (\Exception $e) {
-      $this->forceLogout();
-      return redirect()->route('login')->with('info', 'Sesi Accurate Anda telah berakhir. Silakan login ulang.');
+      $this->clearAccurateSession($request);
+      return redirect()->route('accurate.auth')->with('info', 'Sesi Accurate Anda telah berakhir. Silakan login Accurate ulang.');
     }
     $currentDatabase = session()->get("database_name");
 
@@ -51,12 +50,9 @@ class ModulesController extends Controller
     ]);
   }
 
-  private function forceLogout(): void
+  private function clearAccurateSession(Request $request): void
   {
-    Auth::guard('web')->logout();
-    request()->session()->invalidate();
-    request()->session()->regenerateToken();
-    request()->session()->forget([
+    $request->session()->forget([
       'accurate_access_token',
       'accurate_refresh_token',
       'accurate_database',

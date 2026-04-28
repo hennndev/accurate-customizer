@@ -10,7 +10,6 @@ use App\Models\Module;
 use App\Models\Setting;
 use App\Services\AccurateService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 
 class DataMigrateController extends Controller
 {
@@ -28,9 +27,6 @@ class DataMigrateController extends Controller
     try {
       $databases = $this->accurateService->getDatabaseList();
     } catch (\Exception $e) {
-      Auth::guard('web')->logout();
-      $request->session()->invalidate();
-      $request->session()->regenerateToken();
       $request->session()->forget([
         'accurate_access_token',
         'accurate_refresh_token',
@@ -41,7 +37,7 @@ class DataMigrateController extends Controller
         'accurate_host',
       ]);
 
-      return redirect()->route('login')->with('info', 'Sesi Accurate Anda telah berakhir. Silakan login ulang.');
+      return redirect()->route('accurate.auth')->with('info', 'Sesi Accurate Anda telah berakhir. Silakan login Accurate ulang.');
     }
     $current_database_name = session('database_name');
     $current_database_id = session('database_id');
