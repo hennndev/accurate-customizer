@@ -15,7 +15,12 @@ class ModulesController extends Controller
 {
   public function index(AccurateService $accurate, Request $request)
   {
-    $dbList = $accurate->getDatabaseList();
+    try {
+      $dbList = $accurate->getDatabaseList();
+    } catch (\Exception $e) {
+      $this->forceLogout();
+      return redirect()->route('login')->with('info', 'Sesi Accurate Anda telah berakhir. Silakan login ulang.');
+    }
     $currentDatabase = session()->get("database_name");
 
     // Get accurate database ID dari session (db_id dari Accurate)
@@ -43,6 +48,22 @@ class ModulesController extends Controller
       'current_database_name' => $currentDatabase,
       'total_transactions' => $totalTransactions,
       'modules' => $modules,
+    ]);
+  }
+
+  private function forceLogout(): void
+  {
+    Auth::guard('web')->logout();
+    request()->session()->invalidate();
+    request()->session()->regenerateToken();
+    request()->session()->forget([
+      'accurate_access_token',
+      'accurate_refresh_token',
+      'accurate_database',
+      'accurate_database_list_cache',
+      'database_id',
+      'database_name',
+      'accurate_host',
     ]);
   }
 
