@@ -85,6 +85,12 @@ class Handler extends ExceptionHandler
 
     protected function resolveErrorMessage(Throwable $e, int $status): string
     {
+        $message = $e->getMessage();
+
+        if (str_contains(strtolower($message), 'accurate_token_invalid')) {
+            return 'Sesi Accurate habis atau token tidak valid. Silakan login Accurate ulang.';
+        }
+
         if ($e instanceof ValidationException) {
             return 'Data request tidak valid.';
         }
@@ -109,6 +115,6 @@ class Handler extends ExceptionHandler
             return 'Terjadi error di server saat memproses capture data.';
         }
 
-        return $e->getMessage() !== '' ? $e->getMessage() : 'Terjadi kesalahan saat memproses request.';
+        return $message !== '' ? $message : 'Terjadi kesalahan saat memproses request.';
     }
 }
