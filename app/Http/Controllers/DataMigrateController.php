@@ -10,6 +10,7 @@ use App\Models\Module;
 use App\Models\Setting;
 use App\Services\AccurateService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 
 class DataMigrateController extends Controller
 {
