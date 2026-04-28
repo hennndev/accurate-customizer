@@ -10,7 +10,7 @@ use Exception;
 
 class DatabaseSelectionController extends Controller
 {
-  public function showSelection(AccurateService $accurate)
+  public function showSelection(Request $request, AccurateService $accurate)
   {
     try {
       $databases = $accurate->getDatabaseList();
@@ -25,7 +25,7 @@ class DatabaseSelectionController extends Controller
 
       return view('database.selection', ['databases' => $databases]);
     } catch (Exception $e) {
-      $this->clearAccurateSession($request);
+      $this->clearAccurateSession();
       return redirect()->route('accurate.auth')->with('info', 'Sesi Accurate Anda telah berakhir. Silakan login Accurate ulang.');
     }
   }
@@ -82,9 +82,9 @@ class DatabaseSelectionController extends Controller
     return redirect()->back()->with($type, $message);
   }
 
-  private function clearAccurateSession(Request $request): void
+  private function clearAccurateSession(): void
   {
-    $request->session()->forget([
+    session()->forget([
       'accurate_access_token',
       'accurate_refresh_token',
       'accurate_database',
