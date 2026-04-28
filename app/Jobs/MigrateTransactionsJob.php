@@ -188,6 +188,15 @@ class MigrateTransactionsJob implements ShouldQueue
 						'error' => $exception->getMessage(),
 					]);
 
+					if ($this->isAccurateTokenInvalid($exception)) {
+						$this->updateTracker('failed', 'Sesi Accurate habis atau token tidak valid. Silakan login Accurate ulang.', [
+							'progress' => 100,
+							'error' => $exception->getMessage(),
+							'token_invalid' => true,
+						]);
+						return;
+					}
+
 					foreach ($chunkTransactions[$chunkIndex] as $transaction) {
 						$transaction->update([
 							'status' => 'failed',
@@ -274,5 +283,15 @@ class MigrateTransactionsJob implements ShouldQueue
 			'down-payment-sales-invoice',
 			'down-payment-purchase-invoice',
 		], true);
+	}
+
+	private function isAccurateTokenInvalid(\Throwable $exception): bool
+	{
+		$message = strtolower($exception->getMessage());
+
+		return str_contains($message, 'accurate_token_invalid')
+			|| str_contains($message, 'invalid_token')
+			|| str_contains($message, 'token tidak valid')
+			|| str_contains($message, 'sesi accurate habis');
 	}
 }

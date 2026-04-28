@@ -65,6 +65,10 @@ class DataFetcher
                 'status' => $response->status(),
                 'error' => $response->body(),
             ]);
+            if ($this->isTokenInvalidResponse($response->status(), $response->body())) {
+                throw new Exception('ACCURATE_TOKEN_INVALID: Sesi Accurate habis atau token tidak valid. Silakan login Accurate ulang.');
+            }
+
             throw new Exception('Failed to fetch module page data from Accurate');
         }
 
@@ -118,6 +122,10 @@ class DataFetcher
                         'status' => $response->status(),
                         'error' => $response->body(),
                     ]);
+                    if ($this->isTokenInvalidResponse($response->status(), $response->body())) {
+                        throw new Exception('ACCURATE_TOKEN_INVALID: Sesi Accurate habis atau token tidak valid. Silakan login Accurate ulang.');
+                    }
+
                     throw new Exception('Failed to fetch module detail data from Accurate');
                 }
 
@@ -295,5 +303,18 @@ class DataFetcher
 
             Cache::put($lastRequestKey, (int) round(microtime(true) * 1000000), now()->addMinutes(10));
         });
+    }
+
+    private function isTokenInvalidResponse(int $status, string $body): bool
+    {
+        if (in_array($status, [401, 403], true)) {
+            return true;
+        }
+
+        $normalizedBody = strtolower($body);
+
+        return str_contains($normalizedBody, 'invalid_token')
+            || str_contains($normalizedBody, 'token invalid')
+            || str_contains($normalizedBody, 'invalid token');
     }
 }

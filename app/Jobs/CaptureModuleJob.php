@@ -315,6 +315,15 @@ class CaptureModuleJob implements ShouldQueue
                     'error' => $exception->getMessage(),
                 ]);
 
+                if ($this->isAccurateTokenInvalid($exception)) {
+                    $this->updateTracker('failed', 'Sesi Accurate habis atau token tidak valid. Silakan login Accurate ulang.', [
+                        'progress' => 100,
+                        'error' => $exception->getMessage(),
+                        'token_invalid' => true,
+                    ]);
+                    return;
+                }
+
                 $failedCount++;
                 $this->updateTracker('running', 'Capture page failed, continuing', [
                     'progress' => min(95, 10 + ($processedPages * 5)),
@@ -541,6 +550,18 @@ class CaptureModuleJob implements ShouldQueue
                         'item_id' => $itemId,
                         'error' => $exception->getMessage(),
                     ]);
+
+                    if ($this->isAccurateTokenInvalid($exception)) {
+                        $this->updateTracker('failed', 'Sesi Accurate habis atau token tidak valid. Silakan login Accurate ulang.', [
+                            'progress' => 100,
+                            'error' => $exception->getMessage(),
+                            'token_invalid' => true,
+                            'detail_processed' => $detailProcessed,
+                            'detail_total' => count($detailCandidates),
+                        ]);
+                        return;
+                    }
+
                     $failedCount++;
                 }
 
@@ -660,5 +681,15 @@ class CaptureModuleJob implements ShouldQueue
         }
 
         return cache()->has($this->cancelToken);
+    }
+
+    private function isAccurateTokenInvalid(\Throwable $exception): bool
+    {
+        $message = strtolower($exception->getMessage());
+
+        return str_contains($message, 'accurate_token_invalid')
+            || str_contains($message, 'invalid_token')
+            || str_contains($message, 'token tidak valid')
+            || str_contains($message, 'sesi accurate habis');
     }
 }
