@@ -9,6 +9,7 @@ use App\Models\SystemLog;
 use App\Services\AccurateService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Auth;
 
 class ModulesController extends Controller
 {

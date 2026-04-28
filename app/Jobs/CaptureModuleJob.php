@@ -124,7 +124,7 @@ class CaptureModuleJob implements ShouldQueue
             return str_contains($message, 'server has gone away') || str_contains($message, '2006');
         };
 
-        $flushInsertBatch = function () use (&$transactionsToInsert, &$savedCount, &$skippedDuplicateCount, &$savedTransactionNumbers, $moduleRecord): void {
+        $flushInsertBatch = function () use (&$transactionsToInsert, &$savedCount, &$skippedDuplicateCount, &$savedTransactionNumbers, $moduleRecord, $isGoneAwayError): void {
             if (empty($transactionsToInsert)) {
                 return;
             }
