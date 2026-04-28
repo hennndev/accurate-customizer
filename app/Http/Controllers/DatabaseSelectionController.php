@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use App\Models\AccurateDatabase;
 use Illuminate\Http\Request;
 use App\Services\AccurateService;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Exception;
 
@@ -26,8 +25,8 @@ class DatabaseSelectionController extends Controller
 
       return view('database.selection', ['databases' => $databases]);
     } catch (Exception $e) {
-      $this->forceLogout();
-      return redirect()->route('login')->with('info', 'Sesi Accurate Anda telah berakhir. Silakan login ulang.');
+      $this->clearAccurateSession($request);
+      return redirect()->route('accurate.auth')->with('info', 'Sesi Accurate Anda telah berakhir. Silakan login Accurate ulang.');
     }
   }
 
@@ -61,8 +60,8 @@ class DatabaseSelectionController extends Controller
       return $this->handleRedirect($request, 'success', 'Successfully connected to ' . $dbData['alias']);
     } catch (Exception $e) {
       if ($this->isAccurateSessionExpired($e)) {
-        $this->forceLogout();
-        return redirect()->route('login')->with('info', 'Sesi Accurate Anda telah berakhir. Silakan login ulang.');
+        $this->clearAccurateSession($request);
+        return redirect()->route('accurate.auth')->with('info', 'Sesi Accurate Anda telah berakhir. Silakan login Accurate ulang.');
       }
 
       Log::error('DB_SELECTION_ERROR', ['message' => $e->getMessage()]);
@@ -83,12 +82,9 @@ class DatabaseSelectionController extends Controller
     return redirect()->back()->with($type, $message);
   }
 
-  private function forceLogout(): void
+  private function clearAccurateSession(Request $request): void
   {
-    Auth::guard('web')->logout();
-    request()->session()->invalidate();
-    request()->session()->regenerateToken();
-    request()->session()->forget([
+    $request->session()->forget([
       'accurate_access_token',
       'accurate_refresh_token',
       'accurate_database',
