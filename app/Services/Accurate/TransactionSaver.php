@@ -128,6 +128,24 @@ class TransactionSaver
             'data' => $cleanedData
         ];
         $response = $client->post($endpoint, $requestBody);
+
+        if ($response->failed()) {
+            $status = $response->status();
+            $body = $response->body();
+
+            Log::error('Failed to bulk save to Accurate API', [
+                'endpoint' => $endpoint,
+                'status' => $status,
+                'error' => $body,
+            ]);
+
+            if ($this->isTokenInvalidResponse($status, $body)) {
+                throw new Exception('ACCURATE_TOKEN_INVALID: Sesi Accurate habis atau token tidak valid. Silakan login Accurate ulang.');
+            }
+
+            throw new Exception('Failed to save data to Accurate');
+        }
+
         $responseData = $response->json();
 
         if ($module && $accurateDatabaseId) {
@@ -198,6 +216,23 @@ class TransactionSaver
 
             try {
                 $response = $client->post($saveEndpoint, $cleanedItem);
+                if ($response->failed()) {
+                    $status = $response->status();
+                    $body = $response->body();
+
+                    Log::error('Failed to save one-by-one to Accurate API', [
+                        'endpoint' => $saveEndpoint,
+                        'status' => $status,
+                        'error' => $body,
+                    ]);
+
+                    if ($this->isTokenInvalidResponse($status, $body)) {
+                        throw new Exception('ACCURATE_TOKEN_INVALID: Sesi Accurate habis atau token tidak valid. Silakan login Accurate ulang.');
+                    }
+
+                    throw new Exception('Failed to save data to Accurate');
+                }
+
                 $result = $response->json();
                 $results[] = $result;
 
@@ -259,5 +294,18 @@ class TransactionSaver
             'success' => $successCount,
             'failed' => $failedCount
         ];
+    }
+
+    private function isTokenInvalidResponse(int $status, string $body): bool
+    {
+        if (in_array($status, [401, 403], true)) {
+            return true;
+        }
+
+        $normalizedBody = strtolower($body);
+
+        return str_contains($normalizedBody, 'invalid_token')
+            || str_contains($normalizedBody, 'token invalid')
+            || str_contains($normalizedBody, 'invalid token');
     }
 }
