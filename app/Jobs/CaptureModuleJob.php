@@ -146,8 +146,6 @@ class CaptureModuleJob implements ShouldQueue
 
             try {
                 $existingNumbers = Transaction::query()
-                    ->where('module_id', $moduleRecord->id)
-                    ->where('accurate_database_id', $this->databaseId)
                     ->whereIn('transaction_no', $candidateNumbers)
                     ->pluck('transaction_no')
                     ->all();
@@ -160,8 +158,6 @@ class CaptureModuleJob implements ShouldQueue
                 DB::reconnect();
 
                 $existingNumbers = Transaction::query()
-                    ->where('module_id', $moduleRecord->id)
-                    ->where('accurate_database_id', $this->databaseId)
                     ->whereIn('transaction_no', $candidateNumbers)
                     ->pluck('transaction_no')
                     ->all();
@@ -349,26 +345,6 @@ class CaptureModuleJob implements ShouldQueue
                 if (!$shouldRunDetailCapture) {
                     $itemId = $item['id'] ?? null;
                     $identifierField = $this->moduleInfo['identifier_field'] ?? 'number';
-
-                    if (!$forceListOnlyMode) {
-                        $transactionNo = $item[$identifierField] ?? "ID-{$itemId}";
-
-                        $transactionsToInsert[] = [
-                            'transaction_no' => $transactionNo,
-                            'capture_log_id' => $this->trackerLogId,
-                            'accurate_database_id' => $this->databaseId,
-                            'module_id' => $moduleRecord->id,
-                            'data' => json_encode($item),
-                            'description' => $this->moduleInfo['name'],
-                            'captured_at' => now(),
-                            'created_at' => now(),
-                            'updated_at' => now(),
-                        ];
-
-                        if (count($transactionsToInsert) >= $batchSize) {
-                            $flushInsertBatch();
-                        }
-                    }
 
                     if ($shouldPersistListIds && $itemId !== null && $listParamsHash) {
                         $listIdCacheRows[] = [
