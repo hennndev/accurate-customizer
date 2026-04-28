@@ -91,7 +91,7 @@ class CaptureModuleJob implements ShouldQueue
         $detailOnlyMode = $this->captureMode === 'detail_only';
         $listOnlyCaptureMode = $this->captureMode === 'list_only';
         $listAndDetailMode = $this->captureMode === 'list_and_detail';
-        $shouldRunDetailCapture = $listAndDetailMode;
+        $shouldRunDetailCapture = $listAndDetailMode || $detailOnlyMode;
         $handler = ModuleManager::forSlug($this->module);
         $sharedContext = [];
 
@@ -216,7 +216,7 @@ class CaptureModuleJob implements ShouldQueue
         );
         $cacheFeatureEnabled = $this->useListIdCache && $globalUseListIdCache;
         $useListIdCache = (!$listOnlyCaptureMode || $detailOnlyMode) && $cacheFeatureEnabled;
-        $shouldLoadFromCache = $detailOnlyMode && $cacheFeatureEnabled;
+        $shouldLoadFromCache = $detailOnlyMode;
         $shouldPersistListIds = $cacheFeatureEnabled && !$detailOnlyMode;
         $loadedCandidatesFromCache = false;
         $listParamsHash = null;
@@ -275,13 +275,13 @@ class CaptureModuleJob implements ShouldQueue
                         'processed_pages' => $processedPages,
                         'processed_items' => $processedItems,
                         'list_total_ids' => count($detailCandidates),
-                        'used_cached_list_ids' => true,
+                        'used_table_list_ids' => true,
                     ]);
                 } else {
-                    $this->updateTracker('failed', 'Mode detail only membutuhkan cache ID list, tetapi data cache belum ada', [
+                    $this->updateTracker('failed', 'Data list belum tersedia di tabel. Jalankan Capture List terlebih dahulu.', [
                         'progress' => 100,
                         'capture_mode' => $this->captureMode,
-                        'used_cached_list_ids' => false,
+                        'used_table_list_ids' => false,
                     ]);
                     return;
                 }
