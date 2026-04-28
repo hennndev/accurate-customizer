@@ -28,9 +28,6 @@ public function store(LoginRequest $request): RedirectResponse
     $request->authenticate();
     $request->session()->regenerate();
 
-    // Hapus session Accurate lama jika ada
-    $request->session()->forget(['accurate_access_token', 'accurate_refresh_token', 'accurate_database']);
-
     // Selalu arahkan ke halaman "HOME" (dashboard atau log Anda)
     return redirect()->intended(RouteServiceProvider::HOME);
 }
@@ -40,6 +37,17 @@ public function store(LoginRequest $request): RedirectResponse
     public function destroy(Request $request): RedirectResponse
     {
         Auth::guard('web')->logout();
+
+        $request->session()->forget([
+            'accurate_access_token',
+            'accurate_refresh_token',
+            'accurate_database',
+            'accurate_database_list_cache',
+            'database_id',
+            'database_name',
+            'accurate_host',
+        ]);
+
         $request->session()->invalidate();
         $request->session()->regenerateToken();
         return redirect('/');
