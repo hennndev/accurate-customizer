@@ -2,6 +2,7 @@
 
 namespace App\Services\Accurate;
 
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Http;
 use Exception;
 
@@ -27,7 +28,34 @@ class DatabaseClientManager
                 ->get(env('ACCURATE_API_URL') . '/api/db-list.do');
 
             if ($response->failed()) {
-                throw new Exception("Gagal mendapatkan daftar database dari Accurate.");
+                $status = $response->status();
+                $body = $response->body();
+                $json = $response->json();
+
+                Log::warning('ACCURATE_DB_LIST_FAILED', [
+                    'status' => $status,
+                    'body' => $body,
+                    'json' => $json,
+                ]);
+
+                if (in_array($status, [401, 403], true)) {
+                    session()->forget([
+                        'accurate_access_token',
+                        'accurate_database',
+                        'accurate_database_list_cache',
+                        'database_id',
+                        'accurate_host',
+                    ]);
+
+                    throw new Exception('Sesi Accurate sudah habis atau tidak valid. Silakan login ulang.');
+                }
+
+                $message = $json['error_description']
+                    ?? $json['message']
+                    ?? $json['error']
+                    ?? 'Gagal mendapatkan daftar database dari Accurate.';
+
+                throw new Exception($message . " (HTTP {$status})");
             }
 
             $databases = $response->json()['d'] ?? [];

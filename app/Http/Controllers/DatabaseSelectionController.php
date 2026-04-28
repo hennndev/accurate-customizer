@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\AccurateDatabase;
 use Illuminate\Http\Request;
 use App\Services\AccurateService;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Exception;
 
@@ -25,8 +26,8 @@ class DatabaseSelectionController extends Controller
 
       return view('database.selection', ['databases' => $databases]);
     } catch (Exception $e) {
-      session()->forget('accurate_access_token');
-      return redirect()->route('accurate.auth')->with('info', 'Sesi Accurate Anda telah berakhir, silakan otorisasi ulang.');
+      $this->forceLogout();
+      return redirect()->route('login')->with('info', 'Sesi Accurate Anda telah berakhir. Silakan login ulang.');
     }
   }
 
@@ -59,6 +60,11 @@ class DatabaseSelectionController extends Controller
       ]);
       return $this->handleRedirect($request, 'success', 'Successfully connected to ' . $dbData['alias']);
     } catch (Exception $e) {
+      if ($this->isAccurateSessionExpired($e)) {
+        $this->forceLogout();
+        return redirect()->route('login')->with('info', 'Sesi Accurate Anda telah berakhir. Silakan login ulang.');
+      }
+
       Log::error('DB_SELECTION_ERROR', ['message' => $e->getMessage()]);
       return $this->handleRedirect($request, 'error', 'Terjadi kesalahan saat memilih database: ' . $e->getMessage());
     }
@@ -75,5 +81,31 @@ class DatabaseSelectionController extends Controller
 
     // Selain itu, redirect back ke halaman sebelumnya
     return redirect()->back()->with($type, $message);
+  }
+
+  private function forceLogout(): void
+  {
+    Auth::guard('web')->logout();
+    request()->session()->invalidate();
+    request()->session()->regenerateToken();
+    request()->session()->forget([
+      'accurate_access_token',
+      'accurate_refresh_token',
+      'accurate_database',
+      'accurate_database_list_cache',
+      'database_id',
+      'database_name',
+      'accurate_host',
+    ]);
+  }
+
+  private function isAccurateSessionExpired(Exception $e): bool
+  {
+    $message = strtolower($e->getMessage());
+
+    return str_contains($message, 'sesi accurate sudah habis')
+      || str_contains($message, 'tidak valid')
+      || str_contains($message, '401')
+      || str_contains($message, '403');
   }
 }

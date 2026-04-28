@@ -25,7 +25,24 @@ class DataMigrateController extends Controller
   // HALAMAN INDEX MIGRATE DATA
   public function index(Request $request)
   {
-    $databases = $this->accurateService->getDatabaseList();
+    try {
+      $databases = $this->accurateService->getDatabaseList();
+    } catch (\Exception $e) {
+      Auth::guard('web')->logout();
+      $request->session()->invalidate();
+      $request->session()->regenerateToken();
+      $request->session()->forget([
+        'accurate_access_token',
+        'accurate_refresh_token',
+        'accurate_database',
+        'accurate_database_list_cache',
+        'database_id',
+        'database_name',
+        'accurate_host',
+      ]);
+
+      return redirect()->route('login')->with('info', 'Sesi Accurate Anda telah berakhir. Silakan login ulang.');
+    }
     $current_database_name = session('database_name');
     $current_database_id = session('database_id');
     $query = Transaction::with(['accurateDatabase', 'module']);
