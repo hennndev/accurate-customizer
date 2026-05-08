@@ -41,25 +41,65 @@
            searchQuery: '',
            activeFilter: 'all',
            captureModes: {},
-           restoreMonitorFromStorage() {
+           async restoreMonitorFromStorage() {
                const stored = localStorage.getItem('activeMonitorId');
-               if (stored) {
-                   try {
-                       const data = JSON.parse(stored);
-                       if (data.monitorId && data.currentModule) {
-                           this.monitorId = data.monitorId;
-                           this.currentModule = data.currentModule;
-                           this.monitorVisible = true;
-                           this.capturing = true;
-                           this.progress = data.progress || 0;
-                           this.monitorStatus = data.monitorStatus || 'running';
-                           this.monitorMessage = 'Restoring from previous session...';
-                           this.resumePolling();
-                       }
-                   } catch (e) {
-                       console.error('Failed to restore monitor:', e);
-                       localStorage.removeItem('activeMonitorId');
+               if (!stored) return false;
+       
+               try {
+                   const data = JSON.parse(stored);
+                   if (!(data.monitorId && data.currentModule)) {
+                       this.clearMonitorFromStorage();
+                       return false;
                    }
+       
+                   const statusResponse = await fetch(`/system-logs/${data.monitorId}/status`, {
+                       method: 'GET',
+                       credentials: 'same-origin',
+                       headers: {
+                           'Accept': 'application/json',
+                           'X-Requested-With': 'XMLHttpRequest',
+                       },
+                   });
+       
+                   if (!statusResponse.ok) {
+                       this.clearMonitorFromStorage();
+                       return false;
+                   }
+       
+                   const statusResult = await statusResponse.json();
+                   const payload = statusResult?.payload || {};
+                   const trackerStatus = statusResult?.status || data.monitorStatus || 'running';
+       
+                   this.monitorId = data.monitorId;
+                   this.currentModule = statusResult?.module || data.currentModule;
+                   this.monitorVisible = true;
+                   this.progress = Number(payload?.progress ?? data.progress ?? 0);
+                   this.monitorStatus = trackerStatus;
+                   this.monitorSaved = Number(payload?.saved_count || 0);
+                   this.monitorFailed = Number(payload?.failed_count || 0);
+                   this.monitorItems = Number(payload?.processed_items || 0);
+                   this.monitorPages = Number(payload?.processed_pages || 0);
+                   this.monitorLastUpdateAt = statusResult?.updated_at || null;
+       
+                   if (['success', 'warning', 'info', 'failed'].includes(trackerStatus)) {
+                       this.capturing = false;
+                       this.progress = 100;
+                       this.monitorMessage = trackerStatus === 'failed' ?
+                           (statusResult?.message || 'Capture gagal') :
+                           `Capture selesai. Saved: ${this.monitorSaved}, Failed: ${this.monitorFailed}`;
+                       this.clearMonitorFromStorage();
+                       return true;
+                   }
+       
+                   this.capturing = true;
+                   this.monitorMessage = statusResult?.message || 'Restoring from previous session...';
+                   this.monitorStaleSince = Date.now();
+                   this.resumePolling();
+                   return true;
+               } catch (e) {
+                   console.error('Failed to restore monitor:', e);
+                   this.clearMonitorFromStorage();
+                   return false;
                }
            },
            async restoreActiveMonitorFromServer() {
@@ -192,14 +232,11 @@
                            this.progress = 100;
                            this.monitorStatus = trackerStatus;
        
-                           setTimeout(() => {
-                               this.capturing = false;
-                               this.currentModule = '';
-                               this.monitorMessage = trackerStatus === 'failed' ?
-                                   (statusResult?.message || 'Capture gagal') :
-                                   `Capture selesai. Saved: ${this.monitorSaved}, Failed: ${this.monitorFailed}`;
-                               this.clearMonitorFromStorage();
-                           }, 800);
+                           this.capturing = false;
+                           this.monitorMessage = trackerStatus === 'failed' ?
+                               (statusResult?.message || 'Capture gagal') :
+                               `Capture selesai. Saved: ${this.monitorSaved}, Failed: ${this.monitorFailed}`;
+                           this.clearMonitorFromStorage();
                            break;
                        }
                    }
@@ -322,14 +359,11 @@
                            this.progress = 100;
                            this.monitorStatus = trackerStatus;
        
-                           setTimeout(() => {
-                               this.capturing = false;
-                               this.currentModule = '';
-                               this.monitorMessage = trackerStatus === 'failed' ?
-                                   (statusResult?.message || 'Capture gagal') :
-                                   `Capture selesai. Saved: ${this.monitorSaved}, Failed: ${this.monitorFailed}`;
-                               this.clearMonitorFromStorage();
-                           }, 800);
+                           this.capturing = false;
+                           this.monitorMessage = trackerStatus === 'failed' ?
+                               (statusResult?.message || 'Capture gagal') :
+                               `Capture selesai. Saved: ${this.monitorSaved}, Failed: ${this.monitorFailed}`;
+                           this.clearMonitorFromStorage();
                            break;
                        }
                    }
@@ -384,7 +418,7 @@
                    this.applyModuleFilters();
                    const restored = await this.restoreActiveMonitorFromServer();
                    if (!restored) {
-                       this.restoreMonitorFromStorage();
+                       await this.restoreMonitorFromStorage();
                    }
                });
            }

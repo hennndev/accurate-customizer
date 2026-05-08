@@ -64,6 +64,11 @@ class DataCleaner
             if ($key === 'vendorType') {
                 continue;
             }
+            // Prevent append behavior on UPDATE:
+            // do not resend any top-level array payloads (detail lines/arrays).
+            if ($isUpdate && !$isSubItem && is_array($value)) {
+                continue;
+            }
             // In detail sub-items, strip branchId (header-level concern) and
             // optLock (source-system concurrency field Accurate doesn't need in lines).
             if ($isSubItem && ($key === 'branchId' || $key === 'optLock')) {

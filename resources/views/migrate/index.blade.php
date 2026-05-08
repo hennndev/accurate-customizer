@@ -45,6 +45,7 @@
            parsedData: {},
            searchField: '',
            migrating: false,
+           migrateMonitorBooting: true,
            migrateMonitorVisible: false,
            migrateMonitorId: null,
            progress: 0,
@@ -284,9 +285,12 @@
            },
        
            async initMigrateMonitor() {
-               const restoredFromServer = await this.restoreMigrateMonitorFromServer();
-               if (!restoredFromServer) {
-                   this.restoreMigrateMonitorState();
+               this.restoreMigrateMonitorState();
+       
+               try {
+                   await this.restoreMigrateMonitorFromServer();
+               } finally {
+                   this.migrateMonitorBooting = false;
                }
            },
        
@@ -893,7 +897,8 @@
 
     <div class="flex flex-col gap-4 md:gap-5 rounded-xl bg-white shadow-lg p-4 md:p-5 border border-gray-200">
       <div class="flex max-sm:flex-col max-sm:items-start max-sm:gap-3 items-center justify-between">
-        <div x-show="selected.length > 0 && !migrating"
+        <div x-show="!migrateMonitorBooting && selected.length > 0 && !migrating"
+             x-cloak
              class="flex flex-col gap-1">
           <div class="flex items-center gap-2">
             <svg xmlns="http://www.w3.org/2000/svg"
@@ -914,7 +919,7 @@
           </p>
         </div>
 
-        <div x-show="selected.length > 0 && !migrating"
+        <div x-show="!migrateMonitorBooting && selected.length > 0 && !migrating"
              x-cloak
              class="flex self-end gap-2">
           <button @click="confirmDelete()"
@@ -967,8 +972,9 @@
           </button>
         </div>
 
-        <div x-show="migrateMonitorVisible"
-             x-transition
+        <div x-show="!migrateMonitorBooting && migrateMonitorVisible"
+             x-cloak
+             x-transition.opacity.duration.200ms
              class="w-full rounded-xl border border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 p-4 md:p-5 flex flex-col gap-4 mt-4">
           <div class="flex items-start justify-between gap-3">
             <div class="flex flex-col">
