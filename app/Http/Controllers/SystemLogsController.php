@@ -75,7 +75,7 @@ class SystemLogsController extends Controller
             $query->where('status', strtolower($request->status));
         }
 
-        $logs = $query->get();
+        $logs = $query->paginate(20)->withQueryString();
 
         // Calculate statistics
         $totalEvents = SystemLog::count();

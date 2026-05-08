@@ -32,9 +32,9 @@ class AccurateService
         return $this->databaseClientManager->getDatabaseHost();
     }
 
-    public function bulkSaveToAccurate(string $endpoint, array $data, ?array $targetDbInfo = null, ?string $accessToken = null)
+    public function bulkSaveToAccurate(string $endpoint, array $data, ?array $targetDbInfo = null, ?string $accessToken = null, bool $forceCreate = false)
     {
-        return $this->transactionSaver->bulkSaveToAccurate($endpoint, $data, $targetDbInfo, $accessToken);
+        return $this->transactionSaver->bulkSaveToAccurate($endpoint, $data, $targetDbInfo, $accessToken, $forceCreate);
     }
 
     public function openDatabaseById(int $dbId): ?array

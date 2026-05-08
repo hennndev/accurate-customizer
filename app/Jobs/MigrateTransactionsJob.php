@@ -25,7 +25,8 @@ class MigrateTransactionsJob implements ShouldQueue
 		public array $targetDbInfo,
 		public ?int $userId,
 		public int $trackerLogId,
-		public ?string $accessToken
+		public ?string $accessToken,
+		public bool $forceCreate = false,
 	) {
 	}
 
@@ -48,6 +49,7 @@ class MigrateTransactionsJob implements ShouldQueue
 			'total_selected' => count($this->transactionIds),
 			'success_count' => 0,
 			'failed_count' => 0,
+			'force_create' => $this->forceCreate,
 		]);
 
 		$transactions = Transaction::with(['module', 'accurateDatabase'])
@@ -124,7 +126,7 @@ class MigrateTransactionsJob implements ShouldQueue
 
 			foreach ($chunks as $chunkIndex => $chunkData) {
 				try {
-					$result = $accurateService->bulkSaveToAccurate($endpoint, $chunkData, $this->targetDbInfo, $this->accessToken);
+					$result = $accurateService->bulkSaveToAccurate($endpoint, $chunkData, $this->targetDbInfo, $this->accessToken, $this->forceCreate);
 					$isOverallSuccess = isset($result['s']) && $result['s'] === true;
 					$itemResults = $result['d'] ?? [];
 					if (!is_array($itemResults)) {
@@ -142,7 +144,7 @@ class MigrateTransactionsJob implements ShouldQueue
 							$transaction->update([
 								'status' => 'success',
 								'migrated_at' => now(),
-								'push_status' => $isFirstPush ? 'pushed_create' : 'pushed_update',
+								'push_status' => $this->forceCreate ? 'pushed_create' : ($isFirstPush ? 'pushed_create' : 'pushed_update'),
 								'last_pushed_at' => now(),
 								'push_count' => ((int) $transaction->push_count) + 1,
 							]);

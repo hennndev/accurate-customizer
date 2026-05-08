@@ -27,7 +27,7 @@ class TransactionSaver
         $this->entityMappingManager = $entityMappingManager;
     }
 
-    public function bulkSaveToAccurate(string $endpoint, array $data, ?array $targetDbInfo = null, ?string $accessToken = null)
+    public function bulkSaveToAccurate(string $endpoint, array $data, ?array $targetDbInfo = null, ?string $accessToken = null, bool $forceCreate = false)
     {
         set_time_limit(0);
         if (
@@ -36,14 +36,14 @@ class TransactionSaver
             str_contains($endpoint, 'work-order') ||
             str_contains($endpoint, 'bill-of-material')
         ) {
-            return $this->saveOneByOne($endpoint, $data, $targetDbInfo, $accessToken);
+            return $this->saveOneByOne($endpoint, $data, $targetDbInfo, $accessToken, $forceCreate);
         }
 
         preg_match('/\/api\/([^\/]+)\//', $endpoint, $matches);
         $module = $matches[1] ?? null;
         $accurateDatabaseId = $this->databaseClientManager->getAccurateDatabaseId($targetDbInfo);
 
-        if ($module && $accurateDatabaseId) {
+        if (!$forceCreate && $module && $accurateDatabaseId) {
             $numberField = $this->moduleFieldProvider->getNumberFieldForModule($module, $data[0] ?? []);
 
             if ($numberField) {
@@ -158,7 +158,7 @@ class TransactionSaver
         return $responseData;
     }
 
-    protected function saveOneByOne(string $endpoint, array $data, ?array $targetDbInfo = null, ?string $accessToken = null)
+    protected function saveOneByOne(string $endpoint, array $data, ?array $targetDbInfo = null, ?string $accessToken = null, bool $forceCreate = false)
     {
         set_time_limit(0);
 
@@ -171,7 +171,7 @@ class TransactionSaver
             ? $this->databaseClientManager->getDataClientForDatabase($targetDbInfo, $accessToken)
             : $this->databaseClientManager->getDataClient();
 
-        if ($module && $accurateDatabaseId) {
+        if (!$forceCreate && $module && $accurateDatabaseId) {
             $numberField = $this->moduleFieldProvider->getNumberFieldForModule($module, $data[0] ?? []);
 
             if ($numberField) {
