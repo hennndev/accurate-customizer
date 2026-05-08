@@ -34,7 +34,7 @@
        x-data="{
            selectAll: false,
            selected: [],
-           allTransactionIds: {{ $transactions->pluck('id')->toJson() }},
+           allTransactionIds: {{ $transactions->where('status', '!=', 'success')->pluck('id')->toJson() }},
            showDeleteModal: false,
            showSingleDeleteModal: false,
            showEditModal: false,
@@ -393,10 +393,60 @@
                    this.clearMigrateMonitorState();
                    alert(this.currentStatus);
                }
+           },
+       
+           async migrateSingleCreate(transactionId) {
+               const targetDbSelect = document.getElementById('targetDatabaseSelect');
+               if (!targetDbSelect || !targetDbSelect.value) {
+                   alert('Please select a target database first!');
+                   return;
+               }
+       
+               this.migrating = true;
+               this.migrateMonitorVisible = true;
+               this.migrateMonitorId = null;
+               this.progress = 0;
+               this.currentStatus = 'Preparing migration...';
+               this.migrateSuccessCount = 0;
+               this.migrateFailedCount = 0;
+               this.migrateTotalSelected = 1;
+       
+               try {
+                   const response = await fetch('{{ route('migrate.toAccurate') }}', {
+                       method: 'POST',
+                       credentials: 'same-origin',
+                       headers: {
+                           'Content-Type': 'application/json',
+                           'Accept': 'application/json',
+                           'X-Requested-With': 'XMLHttpRequest',
+                           'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                       },
+                       body: JSON.stringify({
+                           target_database_id: Number(targetDbSelect.value),
+                           ids: [Number(transactionId)],
+                           force_create: true,
+                       }),
+                   });
+       
+                   const result = await response.json();
+                   if (!(response.ok && result?.success && result?.queued && result?.monitor_id)) {
+                       throw new Error(result?.message || 'Failed to queue migration');
+                   }
+       
+                   this.migrateMonitorId = result.monitor_id;
+                   this.currentStatus = result?.message || 'Migration queued';
+                   this.saveMigrateMonitorState();
+                   await this.pollMigrateStatus();
+               } catch (error) {
+                   this.migrating = false;
+                   this.currentStatus = error?.message || 'Migration request failed';
+                   this.clearMigrateMonitorState();
+                   alert(this.currentStatus);
+               }
            }
        }"
        x-init="initMigrateMonitor();
-       $watch('selected', value => selectAll = value.length === allTransactionIds.length && allTransactionIds.length > 0)">
+       $watch('selected', value => selectAll = allTransactionIds.length > 0 && allTransactionIds.every(id => value.includes(String(id))))">
     <div class="w-full bg-gradient-to-r from-green-600 to-green-700 rounded-xl p-5 md:p-8 lg:p-10 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 lg:gap-4">
       <div class="flex flex-col gap-4 md:gap-5 w-full lg:w-auto">
         <div class="flex items-center gap-3 md:gap-4">
@@ -914,8 +964,7 @@
             <p class="text-sm md:text-base text-black font-medium">Transaction Manager</p>
           </div>
           <p class="text-xs md:text-sm lg:text-base text-gray-500 font-normal">Select and migrate
-            transactions to
-            <span class="font-semibold">{{ $current_database_name }}</span>
+            transactions to the selected target database
           </p>
         </div>
 
@@ -1123,13 +1172,11 @@
       <form method="GET"
             action="{{ route('migrate.index') }}"
             id="filterForm"
-            class="w-full rounded-xl bg-gray-50 p-3 md:p-4 border border-gray-200 flex flex-col md:flex-row items-stretch md:items-center gap-2 md:gap-3">
+            class="w-full rounded-xl bg-gray-50 p-3 md:p-4 border border-gray-200 flex flex-wrap items-stretch md:items-end gap-2 md:gap-3">
         <input type="text"
                name="search"
                placeholder="Search transactions..."
                value="{{ request('search') }}"
-               @keyup.enter="$el.form.submit()"
-               @blur="$el.form.submit()"
                class="bg-white rounded-md py-2 px-3 md:px-4 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs md:text-sm w-full md:w-[250px] lg:w-[300px] font-medium">
 
         <!-- All Database Dropdown -->
@@ -1166,7 +1213,7 @@
                x-transition:leave-end="opacity-0 scale-95"
                class="absolute z-[99] mt-2 bg-white border border-gray-200 rounded-md shadow-lg overflow-hidden w-full md:min-w-[200px]">
             <ul class="py-1 max-h-[200px] md:max-h-none overflow-y-auto">
-              <li @click="selected = 'All Database'; $nextTick(() => $el.closest('form').submit())"
+              <li @click="selected = 'All Database'; open = false"
                   :class="selected === 'All Database' ? 'bg-blue-50' : ''"
                   class="px-4 py-2 text-gray-700 text-sm hover:bg-gray-100 cursor-pointer transition font-medium flex items-center justify-between">
                 <span>All Database</span>
@@ -1183,7 +1230,7 @@
                 </svg>
               </li>
               @foreach ($filter_databases as $db)
-                <li @click="selected = '{{ $db }}'; $nextTick(() => $el.closest('form').submit())"
+                <li @click="selected = '{{ $db }}'; open = false"
                     :class="selected === '{{ $db }}' ? 'bg-blue-50' : ''"
                     class="px-4 py-2 text-gray-700 text-sm hover:bg-gray-100 cursor-pointer transition font-medium flex items-center justify-between">
                   <span>{{ $db }}</span>
@@ -1241,7 +1288,7 @@
                x-transition:leave-end="opacity-0 scale-95"
                class="absolute z-[99] mt-2 bg-white border border-gray-200 rounded-md shadow-lg overflow-hidden w-full">
             <ul class="py-1 max-h-[250px] overflow-y-auto">
-              <li @click="selected = 'All Modules'; open = false; $nextTick(() => { document.getElementById('filterForm').submit(); })"
+              <li @click="selected = 'All Modules'; open = false"
                   :class="selected === 'All Modules' ? 'bg-blue-50' : ''"
                   class="px-4 py-2 text-gray-700 text-sm hover:bg-gray-100 cursor-pointer transition font-medium flex items-center justify-between">
                 <span>All Modules</span>
@@ -1258,7 +1305,7 @@
                 </svg>
               </li>
               @foreach ($modules as $module)
-                <li @click="selected = '{{ $module }}'; open = false; $nextTick(() => { document.getElementById('filterForm').submit(); })"
+                <li @click="selected = '{{ $module }}'; open = false"
                     :class="selected === '{{ $module }}' ? 'bg-blue-50' : ''"
                     class="px-4 py-2 text-gray-700 text-sm hover:bg-gray-100 cursor-pointer transition font-medium flex items-center justify-between">
                   <span>{{ $module }}</span>
@@ -1312,7 +1359,7 @@
                x-transition:leave-end="opacity-0 scale-95"
                class="absolute z-[99] mt-2 bg-white border border-gray-200 rounded-md shadow-lg overflow-hidden w-full">
             <ul class="py-1">
-              <li @click="selected = 'All Status'; $nextTick(() => $el.closest('form').submit())"
+              <li @click="selected = 'All Status'; open = false"
                   :class="selected === 'All Status' ? 'bg-blue-50' : ''"
                   class="px-4 py-2 text-gray-700 text-sm hover:bg-gray-100 cursor-pointer transition font-medium flex items-center justify-between">
                 <span>All Status</span>
@@ -1328,7 +1375,7 @@
                         d="m4.5 12.75 6 6 9-13.5" />
                 </svg>
               </li>
-              <li @click="selected = 'Pending'; $nextTick(() => $el.closest('form').submit())"
+              <li @click="selected = 'Pending'; open = false"
                   :class="selected === 'Pending' ? 'bg-blue-50' : ''"
                   class="px-4 py-2 text-gray-700 text-sm hover:bg-gray-100 cursor-pointer transition font-medium flex items-center justify-between">
                 <span>Pending</span>
@@ -1344,7 +1391,7 @@
                         d="m4.5 12.75 6 6 9-13.5" />
                 </svg>
               </li>
-              <li @click="selected = 'Success'; $nextTick(() => $el.closest('form').submit())"
+              <li @click="selected = 'Success'; open = false"
                   :class="selected === 'Success' ? 'bg-blue-50' : ''"
                   class="px-4 py-2 text-gray-700 text-sm hover:bg-gray-100 cursor-pointer transition font-medium flex items-center justify-between">
                 <span>Success</span>
@@ -1360,7 +1407,7 @@
                         d="m4.5 12.75 6 6 9-13.5" />
                 </svg>
               </li>
-              <li @click="selected = 'Failed'; $nextTick(() => $el.closest('form').submit())"
+              <li @click="selected = 'Failed'; open = false"
                   :class="selected === 'Failed' ? 'bg-blue-50' : ''"
                   class="px-4 py-2 text-gray-700 text-sm hover:bg-gray-100 cursor-pointer transition font-medium flex items-center justify-between">
                 <span>Failed</span>
@@ -1382,7 +1429,6 @@
 
         <div class="relative w-full md:w-auto">
           <select name="per_page"
-                  onchange="this.form.submit()"
                   class="bg-white w-full md:min-w-[110px] border border-gray-200 text-gray-700 text-xs md:text-sm rounded-md py-2 px-3 md:px-4 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium">
             @foreach ($perPageOptions ?? [100, 200, 300, 400, 500] as $option)
               <option value="{{ $option }}"
@@ -1393,16 +1439,75 @@
           </select>
         </div>
 
+        @php
+          $selectedCustomerName = (string) request('customer_name', '');
+          $selectedProgramValue = (string) request('program_value', '');
+        @endphp
+
+        <div class="relative w-full md:w-auto">
+          <select name="customer_name"
+                  class="bg-white w-full md:min-w-[200px] border border-gray-200 text-gray-700 text-xs md:text-sm rounded-md py-2 px-3 md:px-4 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium">
+            <option value=""
+                    {{ $selectedCustomerName === '' ? 'selected' : '' }}>All Customer</option>
+            @foreach ($customerNames ?? [] as $customerName)
+              <option value="{{ $customerName }}"
+                      {{ (string) $customerName === $selectedCustomerName ? 'selected' : '' }}>
+                {{ $customerName }}
+              </option>
+            @endforeach
+          </select>
+        </div>
+
+        <div class="relative w-full md:w-auto">
+          <select name="program_value"
+                  class="bg-white w-full md:min-w-[220px] border border-gray-200 text-gray-700 text-xs md:text-sm rounded-md py-2 px-3 md:px-4 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium">
+            <option value=""
+                    {{ $selectedProgramValue === '' ? 'selected' : '' }}>PROGRAM: All</option>
+            @foreach ($programOptions ?? [] as $programOption)
+              <option value="{{ $programOption }}"
+                      {{ (string) $programOption === $selectedProgramValue ? 'selected' : '' }}>
+                {{ $programOption }}
+              </option>
+            @endforeach
+          </select>
+        </div>
+
+        <input type="date"
+               name="trans_date_start"
+               value="{{ request('trans_date_start') }}"
+               class="bg-white rounded-md py-2 px-3 md:px-4 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs md:text-sm w-full md:w-auto font-medium"
+               title="Trans Date Start">
+
+        <input type="date"
+               name="trans_date_end"
+               value="{{ request('trans_date_end') }}"
+               class="bg-white rounded-md py-2 px-3 md:px-4 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs md:text-sm w-full md:w-auto font-medium"
+               title="Trans Date End">
+
+        <div class="relative w-full md:w-auto">
+          <select name="sort_date"
+                  class="bg-white w-full md:min-w-[150px] border border-gray-200 text-gray-700 text-xs md:text-sm rounded-md py-2 px-3 md:px-4 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium">
+            <option value="desc"
+                    {{ request('sort_date', 'desc') === 'desc' ? 'selected' : '' }}>Date: Newest</option>
+            <option value="asc"
+                    {{ request('sort_date') === 'asc' ? 'selected' : '' }}>Date: Oldest</option>
+          </select>
+        </div>
+
         <button type="button"
                 @click="selectAll = true; selectAllTransactions()"
                 :disabled="!{{ $transactions->count() }}"
-                class="bg-white w-full md:flex-1 hover:bg-gray-100 p-2 border border-gray-200 rounded-lg text-xs md:text-sm text-black font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                class="bg-white w-full md:w-auto hover:bg-gray-100 p-2 border border-gray-200 rounded-lg text-xs md:text-sm text-black font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
           Select All
         </button>
         <button type="button"
                 @click="clearAll()"
-                class="bg-white w-full md:flex-1 hover:bg-gray-100 p-2 border border-gray-200 rounded-lg text-xs md:text-sm text-black font-medium cursor-pointer">
+                class="bg-white w-full md:w-auto hover:bg-gray-100 p-2 border border-gray-200 rounded-lg text-xs md:text-sm text-black font-medium cursor-pointer">
           Clear
+        </button>
+        <button type="submit"
+                class="bg-blue-600 w-full md:w-auto hover:bg-blue-700 p-2 border border-blue-600 rounded-lg text-xs md:text-sm text-white font-semibold cursor-pointer">
+          Apply Filter
         </button>
       </form>
 
@@ -1428,14 +1533,8 @@
                   Description</th>
                 <th class="p-2 md:p-4 text-left text-xs md:text-sm font-semibold text-gray-700">Trans Date
                 </th>
-                <th class="p-2 md:p-4 text-left text-xs md:text-sm font-semibold text-gray-700">Date
-                </th>
                 <th class="p-2 md:p-4 text-center text-xs md:text-sm font-semibold text-gray-700">
                   Status</th>
-                <th class="p-2 md:p-4 text-center text-xs md:text-sm font-semibold text-gray-700">
-                  Push Status</th>
-                <th class="p-2 md:p-4 text-left text-xs md:text-sm font-semibold text-gray-700">
-                  Last Pushed</th>
                 <th class="p-2 md:p-4 text-left text-xs md:text-sm font-semibold text-gray-700">
                   Error Details</th>
                 <th class="p-2 md:p-4 text-center text-xs md:text-sm font-semibold text-gray-700">
@@ -1449,6 +1548,7 @@
                     <input type="checkbox"
                            x-model="selected"
                            value="{{ (string) $transaction->id }}"
+                           @disabled($transaction->status === 'success')
                            class="w-5 h-5 rounded border-2 border-gray-400 bg-white accent-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 cursor-pointer">
                   </td>
                   <td class="p-2 md:p-4 text-xs md:text-sm font-medium text-gray-900">
@@ -1483,8 +1583,6 @@
                       <span class="text-gray-400">-</span>
                     @endif
                   </td>
-                  <td class="p-2 md:p-4 text-xs md:text-sm text-gray-600">
-                    {{ $transaction->captured_at }}</td>
                   <td class="p-2 md:p-4 text-center">
                     @if ($transaction->status === 'success')
                       <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
@@ -1528,72 +1626,6 @@
                         </svg>
                         Failed
                       </span>
-                    @endif
-                  </td>
-                  <td class="p-2 md:p-4 text-center">
-                    @if ($transaction->push_status === 'pushed_create')
-                      <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
-                        <svg xmlns="http://www.w3.org/2000/svg"
-                             fill="none"
-                             viewBox="0 0 24 24"
-                             stroke-width="2"
-                             stroke="currentColor"
-                             class="size-3">
-                          <path stroke-linecap="round"
-                                stroke-linejoin="round"
-                                d="M12 4.5v15m7.5-7.5h-15" />
-                        </svg>
-                        Created
-                      </span>
-                    @elseif ($transaction->push_status === 'pushed_update')
-                      <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700">
-                        <svg xmlns="http://www.w3.org/2000/svg"
-                             fill="none"
-                             viewBox="0 0 24 24"
-                             stroke-width="2"
-                             stroke="currentColor"
-                             class="size-3">
-                          <path stroke-linecap="round"
-                                stroke-linejoin="round"
-                                d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
-                        </svg>
-                        Updated
-                      </span>
-                    @elseif ($transaction->push_status === 'failed')
-                      <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">
-                        <svg xmlns="http://www.w3.org/2000/svg"
-                             fill="none"
-                             viewBox="0 0 24 24"
-                             stroke-width="2"
-                             stroke="currentColor"
-                             class="size-3">
-                          <path stroke-linecap="round"
-                                stroke-linejoin="round"
-                                d="M6 18 18 6M6 6l12 12" />
-                        </svg>
-                        Failed
-                      </span>
-                    @else
-                      <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
-                        <svg xmlns="http://www.w3.org/2000/svg"
-                             fill="none"
-                             viewBox="0 0 24 24"
-                             stroke-width="2"
-                             stroke="currentColor"
-                             class="size-3">
-                          <path stroke-linecap="round"
-                                stroke-linejoin="round"
-                                d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                        </svg>
-                        Pending
-                      </span>
-                    @endif
-                  </td>
-                  <td class="p-2 md:p-4 text-xs md:text-sm text-gray-600">
-                    @if ($transaction->last_pushed_at)
-                      <span class="text-gray-700">{{ \Carbon\Carbon::parse($transaction->last_pushed_at)->format('Y-m-d H:i:s') }}</span>
-                    @else
-                      <span class="text-gray-400">-</span>
                     @endif
                   </td>
                   <td class="p-2 md:p-4 text-xs md:text-sm text-gray-600">
@@ -1687,6 +1719,24 @@
                   </td>
                   <td class="p-2 md:p-4 text-center">
                     <div class="flex items-center justify-center gap-2">
+                      @if ($transaction->status === 'success')
+                        <!-- Create Again Button -->
+                        <button @click.prevent="migrateSingleCreate({{ $transaction->id }})"
+                                type="button"
+                                class="inline-flex items-center justify-center p-1.5 md:p-2 rounded-lg hover:bg-green-50 text-green-600 hover:text-green-700 transition"
+                                title="Create Again (Force Create)">
+                          <svg xmlns="http://www.w3.org/2000/svg"
+                               fill="none"
+                               viewBox="0 0 24 24"
+                               stroke-width="1.5"
+                               stroke="currentColor"
+                               class="w-4 h-4 md:w-5 md:h-5">
+                            <path stroke-linecap="round"
+                                  stroke-linejoin="round"
+                                  d="M16.023 9.348h4.992V4.356m-.944 13.012a9 9 0 10-2.121 2.121M2.977 14.652H7.97v4.992" />
+                          </svg>
+                        </button>
+                      @endif
                       <!-- Edit Button -->
                       <button @click="openEditModal({{ $transaction->id }}, '{{ $transaction->transaction_no }}', {{ json_encode($transaction->data) }})"
                               class="inline-flex items-center justify-center p-1.5 md:p-2 rounded-lg hover:bg-blue-50 text-blue-600 hover:text-blue-700 transition"
@@ -1722,7 +1772,7 @@
                 </tr>
               @empty
                 <tr>
-                  <td colspan="9"
+                  <td colspan="8"
                       class="p-8 text-center text-gray-500">
                     <div class="flex flex-col items-center gap-2">
                       <svg xmlns="http://www.w3.org/2000/svg"

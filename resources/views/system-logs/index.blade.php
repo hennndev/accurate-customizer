@@ -705,6 +705,12 @@
             <p class="text-gray-500 text-sm">No logs found matching your filters.</p>
           </div>
         @endforelse
+
+        @if ($logs instanceof \Illuminate\Pagination\LengthAwarePaginator && $logs->hasPages())
+          <div class="pt-2 md:pt-3">
+            {{ $logs->links() }}
+          </div>
+        @endif
       </div>
     </div>
 </x-app-layout>

@@ -43,6 +43,15 @@ class DataMigrateController extends Controller
     $current_database_name = session('database_name');
     $current_database_id = session('database_id');
     $query = Transaction::with(['accurateDatabase', 'module']);
+    $customerNameExpression = "JSON_UNQUOTE(JSON_EXTRACT(data, '$.customer.name'))";
+    $programInjekExpression = "JSON_UNQUOTE(JSON_EXTRACT(data, '$.\"PROGRAM INJEK\"'))";
+    $customerProgramExpression = "JSON_UNQUOTE(JSON_EXTRACT(data, '$.\"CUSTOMER PROGRAM\"'))";
+    $transDateExpression = "COALESCE(
+      STR_TO_DATE(JSON_UNQUOTE(JSON_EXTRACT(data, '$.transDate')), '%d/%m/%Y'),
+      STR_TO_DATE(JSON_UNQUOTE(JSON_EXTRACT(data, '$.transDate')), '%Y-%m-%d'),
+      STR_TO_DATE(JSON_UNQUOTE(JSON_EXTRACT(data, '$.transDate')), '%d/%m/%Y %H:%i:%s'),
+      STR_TO_DATE(JSON_UNQUOTE(JSON_EXTRACT(data, '$.transDate')), '%Y-%m-%d %H:%i:%s')
+    )";
 
     if ($request->filled('search')) {
       $search = $request->search;
@@ -69,6 +78,31 @@ class DataMigrateController extends Controller
     if ($request->filled('status') && $request->status !== 'All Status') {
       $query->where('status', strtolower($request->status));
     }
+
+    if ($request->filled('customer_name')) {
+      $query->whereRaw("{$customerNameExpression} = ?", [$request->input('customer_name')]);
+    }
+
+    if ($request->filled('program_value')) {
+      $programValue = $request->input('program_value');
+      $query->where(function ($q) use ($programInjekExpression, $customerProgramExpression, $programValue) {
+        $q->whereRaw("{$programInjekExpression} = ?", [$programValue])
+          ->orWhereRaw("{$customerProgramExpression} = ?", [$programValue]);
+      });
+    }
+
+    if ($request->filled('trans_date_start')) {
+      $query->whereRaw("{$transDateExpression} >= ?", [$request->input('trans_date_start')]);
+    }
+
+    if ($request->filled('trans_date_end')) {
+      $query->whereRaw("{$transDateExpression} <= ?", [$request->input('trans_date_end')]);
+    }
+
+    $sortDateDirection = strtolower((string) $request->input('sort_date', 'desc')) === 'asc' ? 'asc' : 'desc';
+    $query->orderByRaw("({$transDateExpression} IS NULL) ASC");
+    $query->orderByRaw("{$transDateExpression} {$sortDateDirection}");
+    $query->orderByDesc('id');
 
     $perPageOptions = [100, 200, 300, 400, 500];
 
@@ -97,11 +131,37 @@ class DataMigrateController extends Controller
 
     $filter_databases = AccurateDatabase::pluck('db_name');
     $modules = Module::pluck('name')->unique();
+    $customerNames = Transaction::query()
+      ->selectRaw("DISTINCT {$customerNameExpression} AS value")
+      ->whereRaw("{$customerNameExpression} IS NOT NULL")
+      ->whereRaw("{$customerNameExpression} != ''")
+      ->orderBy('value')
+      ->pluck('value');
+    $programInjekOptions = Transaction::query()
+      ->selectRaw("DISTINCT {$programInjekExpression} AS value")
+      ->whereRaw("{$programInjekExpression} IS NOT NULL")
+      ->whereRaw("{$programInjekExpression} != ''")
+      ->orderBy('value')
+      ->pluck('value');
+    $customerProgramOptions = Transaction::query()
+      ->selectRaw("DISTINCT {$customerProgramExpression} AS value")
+      ->whereRaw("{$customerProgramExpression} IS NOT NULL")
+      ->whereRaw("{$customerProgramExpression} != ''")
+      ->orderBy('value')
+      ->pluck('value');
+    $programOptions = $programInjekOptions
+      ->merge($customerProgramOptions)
+      ->filter(fn($value) => filled($value))
+      ->unique()
+      ->sort()
+      ->values();
     return view('migrate.index', compact(
       'transactions',
       'databases',
       'filter_databases',
       'modules',
+      'customerNames',
+      'programOptions',
       'current_database_name',
       'currentPerPage',
       'perPageOptions'
@@ -216,7 +276,8 @@ class DataMigrateController extends Controller
     $request->validate([
       'ids' => 'required|array',
       'ids.*' => 'required|integer|exists:transactions,id',
-      'target_database_id' => 'required|integer'
+      'target_database_id' => 'required|integer',
+      'force_create' => 'nullable|boolean',
     ]);
 
     $targetDbId = $request->input('target_database_id');
@@ -254,6 +315,7 @@ class DataMigrateController extends Controller
     }
 
     $ids = $request->input('ids', []);
+    $forceCreate = $request->boolean('force_create', false);
 
     $tracker = SystemLog::create([
       'event_type' => 'migrate_queue',
@@ -264,6 +326,7 @@ class DataMigrateController extends Controller
         'target_database_id' => $targetDbId,
         'target_database_name' => $targetDbName,
         'transaction_ids' => $ids,
+        'force_create' => $forceCreate,
         'total_selected' => count($ids),
         'progress' => 0,
       ],
@@ -279,6 +342,7 @@ class DataMigrateController extends Controller
       userId: Auth::id(),
       trackerLogId: $tracker->id,
       accessToken: session('accurate_access_token'),
+      forceCreate: $forceCreate,
     )->onQueue('migrate');
 
     if ($request->expectsJson() || $request->ajax()) {
