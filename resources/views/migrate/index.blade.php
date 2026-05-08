@@ -1426,6 +1426,8 @@
                 </th>
                 <th class="p-2 md:p-4 text-left text-xs md:text-sm font-semibold text-gray-700">
                   Description</th>
+                <th class="p-2 md:p-4 text-left text-xs md:text-sm font-semibold text-gray-700">Trans Date
+                </th>
                 <th class="p-2 md:p-4 text-left text-xs md:text-sm font-semibold text-gray-700">Date
                 </th>
                 <th class="p-2 md:p-4 text-center text-xs md:text-sm font-semibold text-gray-700">
@@ -1457,6 +1459,17 @@
                     {{ $transaction->module?->name ?? 'N/A' }}</td>
                   <td class="p-2 md:p-4 text-xs md:text-sm text-gray-600 max-w-xs truncate">
                     {{ $transaction->description }}</td>
+                  <td class="p-2 md:p-4 text-xs md:text-sm text-gray-600">
+                    @php
+                      $data = is_array($transaction->data) ? $transaction->data : json_decode($transaction->data, true);
+                      $transDate = $data['transDate'] ?? null;
+                    @endphp
+                    @if ($transDate)
+                      {{ \Carbon\Carbon::parse($transDate)->format('d/m/Y') }}
+                    @else
+                      <span class="text-gray-400">-</span>
+                    @endif
+                  </td>
                   <td class="p-2 md:p-4 text-xs md:text-sm text-gray-600">
                     {{ $transaction->captured_at }}</td>
                   <td class="p-2 md:p-4 text-center">
