@@ -1463,9 +1463,22 @@
                     @php
                       $data = is_array($transaction->data) ? $transaction->data : json_decode($transaction->data, true);
                       $transDate = $data['transDate'] ?? null;
+                      $transDateDisplay = null;
+
+                      if (!empty($transDate)) {
+                          try {
+                              $transDateDisplay = \Carbon\Carbon::createFromFormat('d/m/Y', $transDate)->format('d/m/Y');
+                          } catch (\Throwable $e) {
+                              try {
+                                  $transDateDisplay = \Carbon\Carbon::parse($transDate)->format('d/m/Y');
+                              } catch (\Throwable $e) {
+                                  $transDateDisplay = null;
+                              }
+                          }
+                      }
                     @endphp
-                    @if ($transDate)
-                      {{ \Carbon\Carbon::parse($transDate)->format('d/m/Y') }}
+                    @if ($transDateDisplay)
+                      {{ $transDateDisplay }}
                     @else
                       <span class="text-gray-400">-</span>
                     @endif
