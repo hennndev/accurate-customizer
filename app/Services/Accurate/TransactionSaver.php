@@ -43,38 +43,6 @@ class TransactionSaver
         $module = $matches[1] ?? null;
         $accurateDatabaseId = $this->databaseClientManager->getAccurateDatabaseId($targetDbInfo);
 
-        if (!$forceCreate && $module && $accurateDatabaseId) {
-            $numberField = $this->moduleFieldProvider->getNumberFieldForModule($module, $data[0] ?? []);
-
-            if ($numberField) {
-                foreach ($data as &$item) {
-                    $sourceIdentifier = $item[$numberField] ?? null;
-
-                    if ($sourceIdentifier) {
-                        $existingId = \App\Models\AccurateEntityMapping::getAccurateId(
-                            $accurateDatabaseId,
-                            $module,
-                            $sourceIdentifier
-                        );
-
-                        if ($existingId) {
-                            if ($numberField === 'id') {
-                                $item['_sourceId'] = $item['id'];
-                            } else {
-                                $item['_sourceNumber'] = $item[$numberField] ?? null;
-                            }
-                            $item['id'] = $existingId;
-                            $item['_isUpdate'] = true;
-                            if ($numberField !== 'id') {
-                                unset($item[$numberField]);
-                            }
-                        }
-                    }
-                }
-                unset($item);
-            }
-        }
-
         $client = $targetDbInfo
             ? $this->databaseClientManager->getDataClientForDatabase($targetDbInfo, $accessToken)
             : $this->databaseClientManager->getDataClient();
@@ -121,8 +89,7 @@ class TransactionSaver
         }
 
         $cleanedData = array_map(function ($item) use ($endpoint) {
-            $isUpdate = isset($item['_isUpdate']) && $item['_isUpdate'] === true;
-            return $this->dataCleaner->cleanDataItem($item, $endpoint, $isUpdate);
+            return $this->dataCleaner->cleanDataItem($item, $endpoint);
         }, $data);
         $requestBody = [
             'data' => $cleanedData
@@ -171,48 +138,13 @@ class TransactionSaver
             ? $this->databaseClientManager->getDataClientForDatabase($targetDbInfo, $accessToken)
             : $this->databaseClientManager->getDataClient();
 
-        if (!$forceCreate && $module && $accurateDatabaseId) {
-            $numberField = $this->moduleFieldProvider->getNumberFieldForModule($module, $data[0] ?? []);
-
-            if ($numberField) {
-                foreach ($data as &$item) {
-                    $sourceIdentifier = $item[$numberField] ?? null;
-
-                    if ($sourceIdentifier) {
-                        $existingId = \App\Models\AccurateEntityMapping::getAccurateId(
-                            $accurateDatabaseId,
-                            $module,
-                            $sourceIdentifier
-                        );
-
-                        if ($existingId) {
-                            if ($numberField === 'id') {
-                                $item['_sourceId'] = $item['id'];
-                            } else {
-                                $item['_sourceNumber'] = $item[$numberField] ?? null;
-                            }
-
-                            $item['id'] = $existingId;
-                            $item['_isUpdate'] = true;
-
-                            if ($numberField !== 'id') {
-                                unset($item[$numberField]);
-                            }
-                        }
-                    }
-                }
-                unset($item);
-            }
-        }
-
         $results = [];
         $successCount = 0;
         $failedCount = 0;
         $saveEndpoint = str_replace('bulk-save.do', 'save.do', $endpoint);
 
         foreach ($data as $index => $item) {
-            $isUpdate = isset($item['_isUpdate']) && $item['_isUpdate'] === true;
-            $cleanedItem = $this->dataCleaner->cleanDataItem($item, $endpoint, $isUpdate);
+            $cleanedItem = $this->dataCleaner->cleanDataItem($item, $endpoint);
 
             try {
                 $response = $client->post($saveEndpoint, $cleanedItem);
@@ -242,18 +174,14 @@ class TransactionSaver
                     if ($module && $accurateDatabaseId) {
                         $numberField = $this->moduleFieldProvider->getNumberFieldForModule($module, $item);
 
-                        if ($numberField === 'id' && isset($item['_sourceId'])) {
-                            $sourceIdentifier = $item['_sourceId'];
-                        } else {
-                            $sourceIdentifier = $item[$numberField] ?? null;
-                        }
+                        $sourceIdentifier = $item[$numberField]
+                            ?? $item['_sourceNumber']
+                            ?? null;
 
                         $accurateId = $result['r']['id'] ?? $result['d']['id'] ?? null;
                         $accurateNumber = $sourceIdentifier;
 
                         if ($sourceIdentifier && $accurateId) {
-                            $wasUpdate = isset($item['_isUpdate']) && $item['_isUpdate'] === true;
-                            
                             \App\Models\AccurateEntityMapping::storeMapping(
                                 $accurateDatabaseId,
                                 $module,
@@ -263,7 +191,7 @@ class TransactionSaver
                                 [
                                     'synced_at' => now()->toIso8601String(),
                                     'endpoint' => $saveEndpoint,
-                                    'operation' => $wasUpdate ? 'update' : 'create'
+                                    'operation' => 'create'
                                 ]
                             );
 
@@ -271,7 +199,7 @@ class TransactionSaver
                                 $sourceIdentifier,
                                 $module,
                                 $accurateDatabaseId,
-                                $wasUpdate ? \App\Models\Transaction::STATUS_PUSHED_UPDATE : \App\Models\Transaction::STATUS_PUSHED_CREATE
+                                \App\Models\Transaction::STATUS_PUSHED_CREATE
                             );
                         }
                     }

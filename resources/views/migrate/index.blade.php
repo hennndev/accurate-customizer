@@ -34,7 +34,8 @@
        x-data="{
            selectAll: false,
            selected: [],
-           allTransactionIds: {{ $transactions->where('status', '!=', 'success')->pluck('id')->toJson() }},
+           allTransactionIds: {{ $transactions->pluck('id')->toJson() }},
+           transactionStatusById: {{ $transactions->pluck('status', 'id')->toJson() }},
            showDeleteModal: false,
            showSingleDeleteModal: false,
            showEditModal: false,
@@ -221,13 +222,34 @@
                localStorage.removeItem('migrateMonitorState');
            },
        
-           restoreMigrateMonitorState() {
+           async restoreMigrateMonitorState() {
                const raw = localStorage.getItem('migrateMonitorState');
-               if (!raw) return;
+               if (!raw) return false;
        
                try {
                    const state = JSON.parse(raw);
-                   if (!state?.migrateMonitorId) return;
+                   if (!state?.migrateMonitorId) return false;
+       
+                   const statusResponse = await fetch(`/system-logs/${state.migrateMonitorId}/status`, {
+                       method: 'GET',
+                       credentials: 'same-origin',
+                       headers: {
+                           'Accept': 'application/json',
+                           'X-Requested-With': 'XMLHttpRequest',
+                       },
+                   });
+       
+                   if (!statusResponse.ok) {
+                       this.clearMigrateMonitorState();
+                       return false;
+                   }
+       
+                   const statusResult = await statusResponse.json();
+                   const trackerStatus = statusResult?.status;
+                   if (!['queued', 'running'].includes(trackerStatus)) {
+                       this.clearMigrateMonitorState();
+                       return false;
+                   }
        
                    this.migrateMonitorId = state.migrateMonitorId;
                    this.migrateMonitorVisible = true;
@@ -239,8 +261,10 @@
                    this.migrateTotalSelected = Number(state.migrateTotalSelected || 0);
        
                    this.pollMigrateStatus();
+                   return true;
                } catch (e) {
                    this.clearMigrateMonitorState();
+                   return false;
                }
            },
        
@@ -285,10 +309,12 @@
            },
        
            async initMigrateMonitor() {
-               this.restoreMigrateMonitorState();
+               const hasRestoredLocal = await this.restoreMigrateMonitorState();
        
                try {
-                   await this.restoreMigrateMonitorFromServer();
+                   if (!hasRestoredLocal) {
+                       await this.restoreMigrateMonitorFromServer();
+                   }
                } finally {
                    this.migrateMonitorBooting = false;
                }
@@ -353,6 +379,8 @@
                    return;
                }
        
+               const migrateIds = [...new Set(this.selected.map(id => String(id)))];
+       
                this.migrating = true;
                this.migrateMonitorVisible = true;
                this.migrateMonitorId = null;
@@ -360,7 +388,7 @@
                this.currentStatus = 'Preparing migration...';
                this.migrateSuccessCount = 0;
                this.migrateFailedCount = 0;
-               this.migrateTotalSelected = this.selected.length;
+               this.migrateTotalSelected = migrateIds.length;
        
                try {
                    const response = await fetch('{{ route('migrate.toAccurate') }}', {
@@ -374,7 +402,7 @@
                        },
                        body: JSON.stringify({
                            target_database_id: Number(targetDbSelect.value),
-                           ids: this.selected.map(id => Number(id)),
+                           ids: migrateIds.map(id => Number(id)),
                        }),
                    });
        
@@ -1548,7 +1576,6 @@
                     <input type="checkbox"
                            x-model="selected"
                            value="{{ (string) $transaction->id }}"
-                           @disabled($transaction->status === 'success')
                            class="w-5 h-5 rounded border-2 border-gray-400 bg-white accent-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 cursor-pointer">
                   </td>
                   <td class="p-2 md:p-4 text-xs md:text-sm font-medium text-gray-900">
