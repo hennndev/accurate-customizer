@@ -17,28 +17,22 @@ class DataCleaner
         $this->numberMappingManager = $numberMappingManager;
     }
 
-    public function cleanDataItem(array $item, string $endpoint = '', bool $isUpdate = false, bool $isSubItem = false): array
+    public function cleanDataItem(array $item, string $endpoint = '', bool $isSubItem = false): array
     {
         // Only apply handler transform at the top (header) level.
         // Recursive calls for detail sub-items skip this — detail lines are
         // handled by cleanDataItem's own transformation logic below.
         if (!$isSubItem) {
-            // Save inject-loop fields before transformDetail overwrites $item.
-            // Handlers filter $item to allowedFields, which strips 'id' even though
-            // it was set by the inject loop to trigger an UPDATE. We must restore it.
-            $injectedId       = $item['id'] ?? null;
-            $injectedSourceId = $item['_sourceId'] ?? null;
-            $injectedIsUpdate = $item['_isUpdate'] ?? null;
+            // Save source id before transformDetail overwrites $item.
+            $injectedId = $item['id'] ?? null;
 
             $handler = \App\Modules\ModuleManager::forEndpoint($endpoint);
             $sharedContext = [];
             $meta = [];
             $handler->transformDetail($item, $sharedContext, $meta);
 
-            // Restore after handler filtering so cleanDataItem can honour them.
-            if ($injectedId       !== null) { $item['id']        = $injectedId; }
-            if ($injectedSourceId !== null) { $item['_sourceId'] = $injectedSourceId; }
-            if ($injectedIsUpdate !== null) { $item['_isUpdate'] = $injectedIsUpdate; }
+            // Restore after handler filtering so cleanDataItem can honour source id rules.
+            if ($injectedId !== null) { $item['id'] = $injectedId; }
 
         }
 
@@ -47,26 +41,16 @@ class DataCleaner
         foreach ($item as $key => $value) {
             // ===START SKIP FIELDS===
             // Skip internal marker fields
-            if ($key === '_isUpdate' || $key === '_sourceId') {
-                continue;
-            }
             if ($key === '_sourceNumber') {
                 continue;
             }
 
-            // Skip 'id' only if it's NOT an update operation
-            // On CREATE: skip 'id' from source (Accurate will generate new ID)
-            // On UPDATE: keep 'id' from mapping (Accurate needs ID to identify which record to update)
-            if ($key === 'id' && !$isUpdate) {
+            // Skip source id on create flow (Accurate will generate new ID)
+            if ($key === 'id') {
                 continue;
             }
 
             if ($key === 'vendorType') {
-                continue;
-            }
-            // Prevent append behavior on UPDATE:
-            // do not resend any top-level array payloads (detail lines/arrays).
-            if ($isUpdate && !$isSubItem && is_array($value)) {
                 continue;
             }
             // In detail sub-items, strip branchId (header-level concern) and
@@ -290,7 +274,7 @@ class DataCleaner
                         // Detail sub-items should never carry their source-system `id`.
                         // Only the header `id` (set by the inject loop) is needed for UPDATE.
                         // Always pass $isUpdate=false so sub-item `id` fields are stripped.
-                        $cleanedSubItem = $this->cleanDataItem($subValue, $endpoint, false, true);
+                        $cleanedSubItem = $this->cleanDataItem($subValue, $endpoint, true);
                         if (!empty($cleanedSubItem)) {
                             if ($key === 'detailItem' && (
                                 str_contains($endpoint, 'purchase-order') ||

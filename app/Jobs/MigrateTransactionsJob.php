@@ -9,6 +9,7 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 
@@ -52,9 +53,14 @@ class MigrateTransactionsJob implements ShouldQueue
 			'force_create' => $this->forceCreate,
 		]);
 
-		$transactions = Transaction::with(['module', 'accurateDatabase'])
-			->whereIn('id', $this->transactionIds)
-			->get();
+		$transactionsQuery = Transaction::with(['module', 'accurateDatabase'])
+			->whereIn('id', $this->transactionIds);
+
+		if (!$this->forceCreate && $this->attempts() > 1) {
+			$transactionsQuery->where('status', '!=', 'success');
+		}
+
+		$transactions = $transactionsQuery->get();
 
 		if ($transactions->isEmpty()) {
 			$this->updateTracker('failed', 'No transactions selected for migration', [
@@ -139,12 +145,11 @@ class MigrateTransactionsJob implements ShouldQueue
 
 						if ($isSuccess) {
 							$transaction->refresh();
-							$isFirstPush = (int) $transaction->push_count === 0;
 
 							$transaction->update([
 								'status' => 'success',
 								'migrated_at' => now(),
-								'push_status' => $this->forceCreate ? 'pushed_create' : ($isFirstPush ? 'pushed_create' : 'pushed_update'),
+								'push_status' => 'pushed_create',
 								'last_pushed_at' => now(),
 								'push_count' => ((int) $transaction->push_count) + 1,
 							]);
@@ -253,6 +258,14 @@ class MigrateTransactionsJob implements ShouldQueue
 			'failed_count' => $failedCount,
 			'module_results' => $moduleResults,
 		]);
+	}
+
+	public function middleware(): array
+	{
+		return [
+			(new WithoutOverlapping('migrate-tracker-' . $this->trackerLogId))
+				->expireAfter(3600),
+		];
 	}
 
 	public function failed(\Throwable $exception): void

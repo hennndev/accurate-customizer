@@ -31,18 +31,16 @@ class EntityMappingManager
                 continue;
             }
 
-            if ($numberField === 'id' && isset($originalData[$index]['_sourceId'])) {
-                $sourceIdentifier = $originalData[$index]['_sourceId'];
-            } else {
-                $sourceIdentifier = $originalData[$index][$numberField] ?? null;
-            }
+            $sourceIdentifier = $originalData[$index][$numberField]
+                ?? $originalData[$index]['_sourceNumber']
+                ?? null;
 
             $accurateId = $result['r']['id'] ?? $result['d']['id'] ?? null;
             $apiNumber = $result['r']['number'] ?? $result['r']['no'] ?? $result['r']['vendorNo'] ?? $result['r']['customerNo']
                 ?? $result['d']['number'] ?? $result['d']['no'] ?? $result['d']['vendorNo'] ?? $result['d']['customerNo'] ?? null;
 
             $effectiveIdentifier = $sourceIdentifier ?? $apiNumber;
-            $accurateNumber = $effectiveIdentifier;
+            $accurateNumber = $apiNumber ?? $sourceIdentifier;
 
             if (!$effectiveIdentifier || !$accurateId) {
                 Log::warning('ENTITY_MAPPING_SKIP: missing identifier or accurateId', [
@@ -57,8 +55,6 @@ class EntityMappingManager
                 continue;
             }
 
-            $wasUpdate = isset($originalData[$index]['_isUpdate']) && $originalData[$index]['_isUpdate'] === true;
-
             \App\Models\AccurateEntityMapping::storeMapping(
                 $accurateDatabaseId,
                 $module,
@@ -68,7 +64,7 @@ class EntityMappingManager
                 [
                     'synced_at' => now()->toIso8601String(),
                     'endpoint' => '/api/' . $module . '/bulk-save.do',
-                    'operation' => $wasUpdate ? 'update' : 'create'
+                    'operation' => 'create'
                 ]
             );
 
@@ -76,7 +72,7 @@ class EntityMappingManager
                 $effectiveIdentifier,
                 $module,
                 $accurateDatabaseId,
-                $wasUpdate ? \App\Models\Transaction::STATUS_PUSHED_UPDATE : \App\Models\Transaction::STATUS_PUSHED_CREATE
+                \App\Models\Transaction::STATUS_PUSHED_CREATE
             );
         }
     }

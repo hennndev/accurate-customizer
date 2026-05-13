@@ -20,7 +20,6 @@ class Transaction extends Model
     // Status constants
     const STATUS_PENDING = 'pending';
     const STATUS_PUSHED_CREATE = 'pushed_create';
-    const STATUS_PUSHED_UPDATE = 'pushed_update';
     const STATUS_FAILED = 'failed';
 
     public function accurateDatabase()

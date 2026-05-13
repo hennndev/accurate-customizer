@@ -41,40 +41,36 @@ class AccurateEntityMapping extends Model
         ?string $accurateNumber = null,
         array $metadata = []
     ): self {
-        // Use accurate_number as unique key (fallback to sourceIdentifier if null)
-        $lookupNumber = $accurateNumber ?? $sourceIdentifier;
-
-        return self::updateOrCreate(
-            [
-                'accurate_database_id' => $accurateDatabaseId,
-                'module_slug' => $moduleSlug,
-                'accurate_number' => $lookupNumber,
-            ],
-            [
-                'source_identifier' => $sourceIdentifier,
-                'accurate_id' => $accurateId,
-                'metadata' => array_merge(
-                    $metadata,
-                    ['last_synced_at' => now()->toIso8601String()]
-                )
-            ]
-        );
-    }
-
-    /**
-     * Get Accurate ID by accurate_number (for update instead of create)
-     */
-    public static function getAccurateId(
-        int $accurateDatabaseId,
-        string $moduleSlug,
-        string $number
-    ): ?int {
-        $mapping = self::where('accurate_database_id', $accurateDatabaseId)
+        $mapping = self::query()
+            ->where('accurate_database_id', $accurateDatabaseId)
             ->where('module_slug', $moduleSlug)
-            ->where('accurate_number', $number)
+            ->where(function ($query) use ($sourceIdentifier, $accurateNumber) {
+                $query->where('source_identifier', $sourceIdentifier);
+
+                if ($accurateNumber !== null && $accurateNumber !== '') {
+                    $query->orWhere('accurate_number', $accurateNumber);
+                }
+            })
             ->first();
 
-        return $mapping?->accurate_id;
+        $payload = [
+            'accurate_database_id' => $accurateDatabaseId,
+            'module_slug' => $moduleSlug,
+            'source_identifier' => $sourceIdentifier,
+            'accurate_id' => $accurateId,
+            'accurate_number' => $accurateNumber ?? $sourceIdentifier,
+            'metadata' => array_merge(
+                $metadata,
+                ['last_synced_at' => now()->toIso8601String()]
+            ),
+        ];
+
+        if ($mapping) {
+            $mapping->update($payload);
+            return $mapping;
+        }
+
+        return self::create($payload);
     }
 
     /**
