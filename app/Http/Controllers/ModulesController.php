@@ -224,6 +224,7 @@ class ModulesController extends Controller
         'detail_endpoint' => '/api/bill-of-material/detail.do',
         'identifier_field' => 'name',
         'type' => 'master',
+        'capture_mode' => 'list_only',
       ],
       'material-adjustment' => [
         'name' => 'Material Adjustment',
@@ -277,6 +278,7 @@ class ModulesController extends Controller
         'detail_endpoint' => '/api/customer/detail.do',
         'identifier_field' => 'customerNo',
         'type' => 'master',
+        'capture_mode' => 'list_only',
       ],
       'vendor' => [
         'name' => 'Vendor',
@@ -284,6 +286,7 @@ class ModulesController extends Controller
         'detail_endpoint' => '/api/vendor/detail.do',
         'identifier_field' => 'vendorNo',
         'type' => 'master',
+        'capture_mode' => 'list_only',
       ],
       'item' => [
         'name' => 'Item',
@@ -291,6 +294,7 @@ class ModulesController extends Controller
         'detail_endpoint' => '/api/item/detail.do',
         'identifier_field' => 'itemNo',
         'type' => 'master',
+        'capture_mode' => 'list_only',
       ],
       'branch' => [
         'name' => 'Branch',
@@ -298,6 +302,7 @@ class ModulesController extends Controller
         'detail_endpoint' => '/api/branch/detail.do',
         'identifier_field' => 'name',
         'type' => 'master',
+        'capture_mode' => 'list_only',
       ],
       'department' => [
         'name' => 'Department',
@@ -305,6 +310,7 @@ class ModulesController extends Controller
         'detail_endpoint' => '/api/department/detail.do',
         'identifier_field' => 'name',
         'type' => 'master',
+        'capture_mode' => 'list_only',
       ],
       'employee' => [
         'name' => 'Employee',
@@ -312,6 +318,7 @@ class ModulesController extends Controller
         'detail_endpoint' => '/api/employee/detail.do',
         'identifier_field' => 'employeeNo',
         'type' => 'master',
+        'capture_mode' => 'list_only',
       ],
       'warehouse' => [
         'name' => 'Warehouse',
@@ -319,6 +326,7 @@ class ModulesController extends Controller
         'detail_endpoint' => '/api/warehouse/detail.do',
         'identifier_field' => 'name',
         'type' => 'master',
+        'capture_mode' => 'list_only',
       ],
       'project' => [
         'name' => 'Project',
@@ -326,6 +334,7 @@ class ModulesController extends Controller
         'detail_endpoint' => '/api/project/detail.do',
         'identifier_field' => 'name',
         'type' => 'master',
+        'capture_mode' => 'list_only',
       ],
 
       // Categories & Classifications
@@ -335,6 +344,7 @@ class ModulesController extends Controller
         'detail_endpoint' => '/api/customer-category/detail.do',
         'identifier_field' => 'name',
         'type' => 'master',
+        'capture_mode' => 'list_only',
       ],
       'vendor-category' => [
         'name' => 'Vendor Category',
@@ -342,6 +352,7 @@ class ModulesController extends Controller
         'detail_endpoint' => '/api/vendor-category/detail.do',
         'identifier_field' => 'name',
         'type' => 'master',
+        'capture_mode' => 'list_only',
       ],
       'item-category' => [
         'name' => 'Item Category',
@@ -349,6 +360,7 @@ class ModulesController extends Controller
         'detail_endpoint' => '/api/item-category/detail.do',
         'identifier_field' => 'name',
         'type' => 'master',
+        'capture_mode' => 'list_only',
       ],
       'price-category' => [
         'name' => 'Price Category',
@@ -356,6 +368,7 @@ class ModulesController extends Controller
         'detail_endpoint' => '/api/price-category/detail.do',
         'identifier_field' => 'name',
         'type' => 'master',
+        'capture_mode' => 'list_only',
       ],
       'data-classification' => [
         'name' => 'Data Classification',
@@ -363,6 +376,7 @@ class ModulesController extends Controller
         'detail_endpoint' => '/api/data-classification/detail.do',
         'identifier_field' => 'name',
         'type' => 'master',
+        'capture_mode' => 'list_only',
       ],
 
       // Claims & Additional
@@ -386,6 +400,7 @@ class ModulesController extends Controller
         'detail_endpoint' => '/api/vendor-price/detail.do',
         'identifier_field' => 'name',
         'type' => 'master',
+        'capture_mode' => 'list_only',
       ],
       'shipment' => [
         'name' => 'Shipment',
@@ -402,6 +417,7 @@ class ModulesController extends Controller
         'detail_endpoint' => '/api/glaccount/detail.do',
         'identifier_field' => 'name',
         'type' => 'master',
+        'capture_mode' => 'list_only',
       ],
       'currency' => [
         'name' => 'Currency',
@@ -409,6 +425,7 @@ class ModulesController extends Controller
         'detail_endpoint' => '/api/currency/detail.do',
         'identifier_field' => 'name',
         'type' => 'master',
+        'capture_mode' => 'list_only',
       ],
       'tax' => [
         'name' => 'Tax',
@@ -416,6 +433,7 @@ class ModulesController extends Controller
         'detail_endpoint' => '/api/tax/detail.do',
         'identifier_field' => 'name',
         'type' => 'master',
+        'capture_mode' => 'list_only',
       ],
       'unit' => [
         'name' => 'Unit',
@@ -423,6 +441,7 @@ class ModulesController extends Controller
         'detail_endpoint' => '/api/unit/detail.do',
         'identifier_field' => 'name',
         'type' => 'master',
+        'capture_mode' => 'list_only',
       ],
       'fob' => [
         'name' => 'FOB',
@@ -430,6 +449,7 @@ class ModulesController extends Controller
         'detail_endpoint' => '/api/fob/detail.do',
         'identifier_field' => 'name',
         'type' => 'master',
+        'capture_mode' => 'list_only',
       ],
       'material-slip' => [
         'name' => 'Material Slip',
@@ -548,19 +568,12 @@ class ModulesController extends Controller
         $capturePage = 1;
       }
 
-      $isTransactionModule = ($moduleInfo['type'] ?? 'transaction') === 'transaction';
-      $defaultCaptureMode = $isTransactionModule ? 'list_and_detail' : 'list_only';
+      $defaultCaptureMode = 'list_and_detail';
       $captureMode = (string) $request->input('capture_mode', $defaultCaptureMode);
+
       $allowedCaptureModes = ['list_only', 'list_and_detail', 'detail_only'];
       if (!in_array($captureMode, $allowedCaptureModes, true)) {
         $captureMode = $defaultCaptureMode;
-      }
-
-      if ($captureMode === 'list_and_detail' && !$isTransactionModule) {
-        return response()->json([
-          'success' => false,
-          'message' => 'Mode list + detail hanya tersedia untuk module transaction.'
-        ], 422);
       }
 
       $useListIdCache = filter_var(

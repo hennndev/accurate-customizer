@@ -3,7 +3,9 @@
 namespace App\Jobs;
 
 use App\Models\SystemLog;
+use App\Models\SalesInvoiceMapping;
 use App\Models\Transaction;
+use App\Services\Accurate\NumberMappingManager;
 use App\Services\AccurateService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -17,7 +19,8 @@ class MigrateTransactionsJob implements ShouldQueue
 {
 	use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-	public int $timeout = 0;
+	public int $timeout = 1800; // 30 minutes max per job
+	public int $tries = 1;
 
 	public function __construct(
 		public array $transactionIds,
@@ -31,7 +34,7 @@ class MigrateTransactionsJob implements ShouldQueue
 	) {
 	}
 
-	public function handle(AccurateService $accurateService): void
+	public function handle(AccurateService $accurateService, NumberMappingManager $numberMappingManager): void
 	{
 		if ($this->accessToken) {
 			session(['accurate_access_token' => $this->accessToken]);
@@ -56,7 +59,7 @@ class MigrateTransactionsJob implements ShouldQueue
 		$transactionsQuery = Transaction::with(['module', 'accurateDatabase'])
 			->whereIn('id', $this->transactionIds);
 
-		if (!$this->forceCreate && $this->attempts() > 1) {
+		if (!$this->forceCreate) {
 			$transactionsQuery->where('status', '!=', 'success');
 		}
 
@@ -99,7 +102,38 @@ class MigrateTransactionsJob implements ShouldQueue
 			$bulkData = [];
 			$payloadTransactions = [];
 
+			$salesInvoiceOldNumberMap = [];
+			if ($moduleSlug === 'sales-invoice') {
+				$candidateNumbers = $moduleTransactions
+					->pluck('transaction_no')
+					->filter(fn ($number) => filled($number))
+					->values()
+					->all();
+
+				if (!empty($candidateNumbers)) {
+					$mappedOldNumbers = SalesInvoiceMapping::query()
+						->where('db_name', $this->targetDatabaseName)
+						->whereIn('old_number', $candidateNumbers)
+						->pluck('old_number')
+						->all();
+
+					$salesInvoiceOldNumberMap = array_flip($mappedOldNumbers);
+				}
+			}
+
 			foreach ($moduleTransactions as $transaction) {
+				if ($moduleSlug === 'sales-invoice' && isset($salesInvoiceOldNumberMap[$transaction->transaction_no])) {
+					$transaction->update([
+						'status' => 'success',
+						'migrated_at' => now(),
+						'error_message' => null,
+					]);
+
+					$successCount++;
+					$moduleResults[$module->name]['success']++;
+					continue;
+				}
+
 				$data = json_decode($transaction->data, true);
 				if (json_last_error() !== JSON_ERROR_NONE || !is_array($data) || empty($data)) {
 					$transaction->update([
@@ -139,6 +173,21 @@ class MigrateTransactionsJob implements ShouldQueue
 						$itemResults = [];
 					}
 
+					// Store number mappings for this chunk (old_number → new_number in Accurate)
+					try {
+						$numberMappingManager->storeNumberMappings(
+							$endpoint,
+							$chunkData,
+							$result,
+							$this->targetDatabaseId
+						);
+					} catch (\Throwable $mappingException) {
+						Log::warning('NUMBER_MAPPING_STORE_ERROR', [
+							'module' => $moduleSlug,
+							'error' => $mappingException->getMessage(),
+						]);
+					}
+
 					foreach ($chunkTransactions[$chunkIndex] as $idx => $transaction) {
 						$itemResult = $itemResults[$idx] ?? null;
 						$isSuccess = ($isOverallSuccess && empty($itemResults)) || ($itemResult && isset($itemResult['s']) && $itemResult['s'] === true);
@@ -149,9 +198,6 @@ class MigrateTransactionsJob implements ShouldQueue
 							$transaction->update([
 								'status' => 'success',
 								'migrated_at' => now(),
-								'push_status' => 'pushed_create',
-								'last_pushed_at' => now(),
-								'push_count' => ((int) $transaction->push_count) + 1,
 							]);
 
 							$successCount++;
@@ -178,7 +224,6 @@ class MigrateTransactionsJob implements ShouldQueue
 							$transaction->update([
 								'status' => 'failed',
 								'error_message' => $errorText,
-								'push_status' => 'failed',
 							]);
 
 							$failedCount++;
@@ -207,7 +252,6 @@ class MigrateTransactionsJob implements ShouldQueue
 					foreach ($chunkTransactions[$chunkIndex] as $transaction) {
 						$transaction->update([
 							'status' => 'failed',
-							'push_status' => 'failed',
 							'error_message' => $exception->getMessage(),
 						]);
 						$failedCount++;

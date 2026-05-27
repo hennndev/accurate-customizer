@@ -12,7 +12,7 @@ class SystemLogsController extends Controller
 {
     private function resolveStaleQueueTracker(SystemLog $log): SystemLog
     {
-        if (!in_array($log->event_type, ['capture_queue', 'migrate_queue'], true)) {
+        if (!in_array($log->event_type, ['capture_queue', 'migrate_queue', 'transaction_number_mapping_queue'], true)) {
             return $log;
         }
 
@@ -118,7 +118,7 @@ class SystemLogsController extends Controller
         $eventType = $request->input('event_type');
 
         SystemLog::query()
-            ->whereIn('event_type', ['capture_queue', 'migrate_queue'])
+            ->whereIn('event_type', ['capture_queue', 'migrate_queue', 'transaction_number_mapping_queue'])
             ->whereIn('status', ['queued', 'running'])
             ->where('user_id', Auth::id())
             ->when($eventType, function ($q) use ($eventType) {
@@ -168,7 +168,7 @@ class SystemLogsController extends Controller
     public function queue(Request $request)
     {
         $query = SystemLog::query()
-            ->whereIn('event_type', ['capture_queue', 'migrate_queue'])
+            ->whereIn('event_type', ['capture_queue', 'migrate_queue', 'transaction_number_mapping_queue'])
             ->orderByDesc('created_at');
 
         if ($request->filled('queue_status') && $request->queue_status !== 'all') {
@@ -194,7 +194,7 @@ class SystemLogsController extends Controller
 
         $logs = SystemLog::query()
             ->whereIn('id', $ids)
-            ->whereIn('event_type', ['capture_queue', 'migrate_queue'])
+            ->whereIn('event_type', ['capture_queue', 'migrate_queue', 'transaction_number_mapping_queue'])
             ->where('user_id', Auth::id())
             ->get();
 
@@ -262,7 +262,7 @@ class SystemLogsController extends Controller
 
     public function cancel(SystemLog $log)
     {
-        if (!in_array($log->event_type, ['capture_queue', 'migrate_queue'], true)) {
+        if (!in_array($log->event_type, ['capture_queue', 'migrate_queue', 'transaction_number_mapping_queue'], true)) {
             return response()->json(['success' => false, 'message' => 'Unsupported queue type'], 422);
         }
 

@@ -164,6 +164,20 @@
                 </svg>
                 <p class="text-sm sidebar-text font-medium text-black">Migrate</p>
               </a>
+              <a href="{{ route('transaction-number-mappings.index') }}"
+                 class="menu-item sidebar-link flex items-center gap-3 {{ request()->routeIs('transaction-number-mappings.*') ? 'active' : '' }}">
+                <svg xmlns="http://www.w3.org/2000/svg"
+                     fill="none"
+                     viewBox="0 0 24 24"
+                     stroke-width="1.5"
+                     stroke="currentColor"
+                     class="size-5 flex-shrink-0">
+                  <path stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M3.75 3v11.25A2.25 2.25 0 0 0 6 16.5h12m-12 0v3.75m0-3.75h12m0 0a2.25 2.25 0 0 0 2.25-2.25V3m-2.25 13.5v3.75M8.25 6h7.5m-7.5 3h7.5m-7.5 3h4.5" />
+                </svg>
+                <p class="text-sm sidebar-text font-medium text-black">Transaction Number Mapping</p>
+              </a>
               <a href="{{ route('system-logs.index') }}"
                  class="menu-item sidebar-link flex items-center gap-3 {{ request()->routeIs('system-logs.*') ? 'active' : '' }}">
                 <svg xmlns="http://www.w3.org/2000/svg"

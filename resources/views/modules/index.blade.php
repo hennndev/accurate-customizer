@@ -249,14 +249,7 @@
                }
            },
            async captureData(moduleName, moduleSlug, moduleType = 'transaction') {
-               const captureMode = this.captureModes[moduleSlug] || (moduleType === 'transaction' ? 'list_and_detail' : 'list_only');
-       
-               if (moduleType !== 'transaction' && captureMode === 'list_and_detail') {
-                   this.monitorVisible = true;
-                   this.monitorStatus = 'failed';
-                   this.monitorMessage = 'Mode list + detail hanya tersedia untuk module transaction.';
-                   return;
-               }
+               const captureMode = this.captureModes[moduleSlug] || 'list_and_detail';
        
                this.capturing = true;
                this.progress = 0;
@@ -1575,10 +1568,11 @@
               <div class="flex flex-col gap-1">
                 <label class="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Mode Capture</label>
                 <select x-model="captureModes['{{ $card['slug'] }}']"
-                        x-init="if (!captureModes['{{ $card['slug'] }}']) captureModes['{{ $card['slug'] }}'] = 'list_only'"
+                        x-init="if (!captureModes['{{ $card['slug'] }}']) captureModes['{{ $card['slug'] }}'] = 'list_and_detail'"
                         :disabled="capturing || switchingDb"
                         class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed">
                   <option value="list_only">Capture List Saja</option>
+                  <option value="list_and_detail">Capture List + Detail</option>
                   <option value="detail_only">Capture Detail (Dari Cache ID)</option>
                 </select>
               </div>

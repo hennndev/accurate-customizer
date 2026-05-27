@@ -7,40 +7,7 @@ use Illuminate\Support\Facades\Log;
 
 class CustomerHandler extends BaseHandler
 {
-    /**
-     * Fields yang ingin disimpan untuk module Customer
-     */
-    protected array $allowedFields = [
-        'id',
-        'transDate',
-        'billCity',
-        'billProvince',
-        'billCountry',
-        'billStreet',
-        'billZipCode',
-        'categoryName',
-        'customerTaxType',
-        'description',
-        'detailContact',
-        'detailOpenBalance',
-        'detailShipAddress',
-        'fax',
-        'mobilPhone',
-        'npwpNo',
-        'shipCity',
-        'shipProvince',
-        'shipCountry',
-        'shipStreet',
-        'shipZipCode',
-        'shipSameAsBill',
-        'customerNo',
-        'name',
-        'address',
-        'workPhone',
-        'email',
-        'taxNumber',
-        'branchName', // hasil transform dari branchId
-    ];
+
 
     public function preCapture(AccurateService $accurate, array &$sharedContext): void
     {
@@ -133,14 +100,6 @@ class CustomerHandler extends BaseHandler
             }
         }
 
-        // Filter hanya field yang dibutuhkan
-        $filteredData = [];
-        foreach ($this->allowedFields as $field) {
-            if (array_key_exists($field, $detailData)) {
-                $filteredData[$field] = $detailData[$field];
-            }
-        }
-        $detailData = $filteredData;
-        Log::info("data customer pushed", ['data' => $detailData]);
+        Log::info("data customer captured", ['field_count' => count($detailData)]);
     }
 }

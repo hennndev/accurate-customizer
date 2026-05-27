@@ -26,6 +26,11 @@ class NumberMappingManager
             return;
         }
 
+        // Skip number mapping for master data modules
+        if ($this->isMasterDataModule($moduleSlug)) {
+            return;
+        }
+
         $numberField = $this->fieldProvider->getNumberFieldForModule($moduleSlug, $originalData[0] ?? []);
         if (!$numberField || $numberField === 'id') {
             return;
@@ -131,5 +136,16 @@ class NumberMappingManager
         }
 
         return null;
+    }
+
+    private function isMasterDataModule(string $moduleSlug): bool
+    {
+        $masterDataModules = [
+            'customer', 'vendor', 'item', 'branch', 'department', 'employee', 'warehouse', 'project',
+            'customer-category', 'vendor-category', 'item-category', 'price-category', 'data-classification',
+            'vendor-price', 'glaccount', 'currency', 'tax', 'unit', 'fob', 'bill-of-material'
+        ];
+
+        return in_array($moduleSlug, $masterDataModules, true);
     }
 }

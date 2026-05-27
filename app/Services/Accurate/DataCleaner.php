@@ -466,8 +466,7 @@ class DataCleaner
                                             $cleanedSubItem['invoice']['number']
                                         );
                                     } else {
-                                        $cleanedSubItem['invoiceNo'] = $this->numberMappingManager->getMappedNumber(
-                                            'sales-invoice',
+                                        $cleanedSubItem['invoiceNo'] = $this->resolveSalesInvoiceNumber(
                                             $cleanedSubItem['invoice']['number']
                                         );
                                     }
@@ -509,6 +508,53 @@ class DataCleaner
             $cleaned[$key] = $value;
         }
         return $cleaned;
+    }
+
+    private function resolveSalesInvoiceNumber(string $oldNumber): string
+    {
+        $setting = \App\Models\Setting::first();
+        $source = $setting->sales_invoice_number_source ?? 'mapping_table';
+
+        if ($source === 'transaction_number_mappings') {
+            return $this->numberMappingManager->getMappedNumber('sales-invoice', $oldNumber);
+        }
+
+        return $this->getMappedSalesInvoiceNumberFromTable($oldNumber);
+    }
+
+    private function getMappedSalesInvoiceNumberFromTable(string $oldNumber): string
+    {
+        $normalizedOldNumber = trim($oldNumber);
+        if ($normalizedOldNumber === '') {
+            return $oldNumber;
+        }
+
+        $databaseNames = array_values(array_unique(array_filter([
+            session('database_name'),
+            session('accurate_database.alias'),
+            session('accurate_database.name'),
+        ], static fn ($value) => is_string($value) && trim($value) !== '')));
+
+        $mappingQuery = \App\Models\SalesInvoiceMapping::query()
+            ->whereRaw('TRIM(old_number) = ?', [$normalizedOldNumber]);
+
+        if (!empty($databaseNames)) {
+            $mappingQuery->whereIn('db_name', $databaseNames);
+        }
+
+        $mapping = $mappingQuery->first();
+
+        if (!$mapping && !empty($databaseNames)) {
+            $mapping = \App\Models\SalesInvoiceMapping::query()
+                ->whereRaw('TRIM(old_number) = ?', [$normalizedOldNumber])
+                ->first();
+        }
+
+        if (!$mapping || !filled($mapping->new_number)) {
+            return $oldNumber;
+        }
+
+        return (string) $mapping->new_number;
     }
 
     private function resolvePurchaseInvoiceReceiveItemNumber(array $rawSubValue, array $cleanedSubItem): ?string

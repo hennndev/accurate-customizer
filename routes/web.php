@@ -8,6 +8,7 @@ use App\Http\Controllers\ModulesController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\SystemLogsController;
+use App\Http\Controllers\TransactionNumberMappingController;
 use App\Http\Controllers\UsersController;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
@@ -79,10 +80,15 @@ Route::middleware('auth')->group(function () {
     });
     Route::controller(DataMigrateController::class)->prefix('migrate')->group(function () {
       Route::get('/', 'index')->name('migrate.index');
+      Route::get('/{transaction}/data', 'transactionData')->name('migrate.transactionData');
       Route::post('/migrate-to-accurate', 'migrateToAccurate')->name('migrate.toAccurate');
       Route::put('/{transaction}', 'update')->name('migrate.update');
       Route::delete('/{transaction}', 'destroy')->name('migrate.destroy');
       Route::delete('/', 'destroyMultiple')->name('migrate.destroyMultiple');
+    });
+    Route::controller(TransactionNumberMappingController::class)->prefix('transaction-number-mappings')->group(function () {
+      Route::get('/', 'index')->name('transaction-number-mappings.index');
+      Route::post('/capture', 'capture')->name('transaction-number-mappings.capture');
     });
     Route::controller(SystemLogsController::class)->prefix('system-logs')->group(function () {
       Route::get('/', 'index')->name('system-logs.index');
