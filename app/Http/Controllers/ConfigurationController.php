@@ -21,12 +21,14 @@ class ConfigurationController extends Controller
     public function update(Request $request)
     {
         $validated = $request->validate([
-            'retention_days' => 'required|integer|min:1|max:365'
+            'retention_days'              => 'required|integer|min:1|max:365',
+            'sales_invoice_number_source' => 'required|in:mapping_table,transaction_number_mappings',
         ]);
         
         $setting = Setting::firstOrCreate(['id' => 1]);
         $setting->update([
-            'retention_days' => $validated['retention_days']
+            'retention_days'              => $validated['retention_days'],
+            'sales_invoice_number_source' => $validated['sales_invoice_number_source'],
         ]);
         
         return redirect()->route('configuration.index')

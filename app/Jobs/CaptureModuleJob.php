@@ -23,6 +23,7 @@ class CaptureModuleJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $timeout = 0;
+    public int $tries = 1;
 
     public function __construct(
         public string $module,
@@ -124,7 +125,7 @@ class CaptureModuleJob implements ShouldQueue
             return str_contains($message, 'server has gone away') || str_contains($message, '2006');
         };
 
-        $flushInsertBatch = function () use (&$transactionsToInsert, &$savedCount, &$skippedDuplicateCount, &$savedTransactionNumbers, $moduleRecord, $isGoneAwayError): void {
+        $flushInsertBatch = function () use (&$transactionsToInsert, &$savedCount, &$skippedDuplicateCount, &$savedTransactionNumbers, $isGoneAwayError): void {
             if (empty($transactionsToInsert)) {
                 return;
             }
@@ -144,40 +145,9 @@ class CaptureModuleJob implements ShouldQueue
                 return;
             }
 
-            try {
-                $existingNumbers = Transaction::query()
-                    ->whereIn('transaction_no', $candidateNumbers)
-                    ->pluck('transaction_no')
-                    ->all();
-            } catch (QueryException $exception) {
-                if (!$isGoneAwayError($exception)) {
-                    throw $exception;
-                }
-
-                DB::purge();
-                DB::reconnect();
-
-                $existingNumbers = Transaction::query()
-                    ->whereIn('transaction_no', $candidateNumbers)
-                    ->pluck('transaction_no')
-                    ->all();
-            }
-
-            $existingMap = array_flip($existingNumbers);
-            $rowsToInsert = [];
-
-            foreach ($candidateRows as $row) {
-                $number = $row['transaction_no'];
-                if (isset($existingMap[$number])) {
-                    $skippedDuplicateCount++;
-                    continue;
-                }
-                $rowsToInsert[] = $row;
-            }
-
-            if (!empty($rowsToInsert)) {
+            if (!empty($candidateRows)) {
                 try {
-                    $insertedCount = Transaction::query()->insertOrIgnore($rowsToInsert);
+                    $insertedCount = Transaction::query()->insertOrIgnore($candidateRows);
                 } catch (QueryException $exception) {
                     if (!$isGoneAwayError($exception)) {
                         throw $exception;
@@ -185,14 +155,14 @@ class CaptureModuleJob implements ShouldQueue
 
                     DB::purge();
                     DB::reconnect();
-                    $insertedCount = Transaction::query()->insertOrIgnore($rowsToInsert);
+                    $insertedCount = Transaction::query()->insertOrIgnore($candidateRows);
                 }
 
                 $savedCount += (int) $insertedCount;
-                $skippedDuplicateCount += max(0, count($rowsToInsert) - (int) $insertedCount);
+                $skippedDuplicateCount += max(0, count($candidateRows) - (int) $insertedCount);
 
                 if ((int) $insertedCount > 0) {
-                    $savedTransactionNumbers = array_merge($savedTransactionNumbers, array_column($rowsToInsert, 'transaction_no'));
+                    $savedTransactionNumbers = array_merge($savedTransactionNumbers, array_column($candidateRows, 'transaction_no'));
                 }
             }
 
@@ -206,8 +176,8 @@ class CaptureModuleJob implements ShouldQueue
         }
 
         if ($shouldRunDetailCapture) {
-            $listParams['fields'] = 'id';
-            $listParams['sp.fields'] = 'id';
+            $listParams['fields'] = 'id,number';
+            $listParams['sp.fields'] = 'id,number';
         }
 
         $globalUseListIdCache = filter_var(
@@ -384,7 +354,7 @@ class CaptureModuleJob implements ShouldQueue
                 $identifierField = $this->moduleInfo['identifier_field'] ?? 'number';
                 $detailCandidates[] = [
                     'id' => $itemId,
-                    'fallback_number' => $item[$identifierField] ?? null,
+                    'fallback_number' => $item['number'] ?? $item[$identifierField] ?? null,
                 ];
 
                 if ($shouldPersistListIds && $listParamsHash) {
@@ -428,6 +398,38 @@ class CaptureModuleJob implements ShouldQueue
         }
 
         $flushListIdCacheBatch();
+
+        if ($shouldRunDetailCapture && !empty($detailCandidates)) {
+            $candidateNumbers = collect($detailCandidates)
+                ->pluck('fallback_number')
+                ->filter(fn ($number) => filled($number))
+                ->unique()
+                ->values()
+                ->all();
+
+            if (!empty($candidateNumbers)) {
+                $existingNumbers = Transaction::query()
+                    ->whereIn('transaction_no', $candidateNumbers)
+                    ->pluck('transaction_no')
+                    ->all();
+
+                $existingNumberMap = array_flip($existingNumbers);
+                $filteredCandidates = [];
+
+                foreach ($detailCandidates as $candidate) {
+                    $fallbackNumber = $candidate['fallback_number'] ?? null;
+
+                    if ($fallbackNumber && isset($existingNumberMap[$fallbackNumber])) {
+                        $skippedDuplicateCount++;
+                        continue;
+                    }
+
+                    $filteredCandidates[] = $candidate;
+                }
+
+                $detailCandidates = $filteredCandidates;
+            }
+        }
 
         if ($listOnlyCaptureMode) {
             $finalStatus = $failedCount > 0 ? 'warning' : ($savedCount > 0 ? 'success' : 'info');

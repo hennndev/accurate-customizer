@@ -7,24 +7,15 @@ use Illuminate\Support\Facades\Log;
 
 class TransactionSaver
 {
-    protected ModuleFieldProvider $moduleFieldProvider;
     protected DataCleaner $dataCleaner;
     protected DatabaseClientManager $databaseClientManager;
-    protected NumberMappingManager $numberMappingManager;
-    protected EntityMappingManager $entityMappingManager;
 
     public function __construct(
-        ModuleFieldProvider $moduleFieldProvider,
         DataCleaner $dataCleaner,
-        DatabaseClientManager $databaseClientManager,
-        NumberMappingManager $numberMappingManager,
-        EntityMappingManager $entityMappingManager
+        DatabaseClientManager $databaseClientManager
     ) {
-        $this->moduleFieldProvider = $moduleFieldProvider;
         $this->dataCleaner = $dataCleaner;
         $this->databaseClientManager = $databaseClientManager;
-        $this->numberMappingManager = $numberMappingManager;
-        $this->entityMappingManager = $entityMappingManager;
     }
 
     public function bulkSaveToAccurate(string $endpoint, array $data, ?array $targetDbInfo = null, ?string $accessToken = null, bool $forceCreate = false)
@@ -115,22 +106,12 @@ class TransactionSaver
 
         $responseData = $response->json();
 
-        if ($module && $accurateDatabaseId) {
-            $this->entityMappingManager->storeEntityMappings($module, $data, $responseData, $accurateDatabaseId);
-        }
-
-        if ($accurateDatabaseId) {
-            $this->numberMappingManager->storeNumberMappings($endpoint, $data, $responseData, $accurateDatabaseId);
-        }
         return $responseData;
     }
 
     protected function saveOneByOne(string $endpoint, array $data, ?array $targetDbInfo = null, ?string $accessToken = null, bool $forceCreate = false)
     {
         set_time_limit(0);
-
-        preg_match('/\/api\/([^\/]+)\//', $endpoint, $matches);
-        $module = $matches[1] ?? null;
 
         $accurateDatabaseId = $this->databaseClientManager->getAccurateDatabaseId($targetDbInfo);
 
@@ -170,39 +151,6 @@ class TransactionSaver
 
                 if (isset($result['s']) && $result['s'] === true) {
                     $successCount++;
-
-                    if ($module && $accurateDatabaseId) {
-                        $numberField = $this->moduleFieldProvider->getNumberFieldForModule($module, $item);
-
-                        $sourceIdentifier = $item[$numberField]
-                            ?? $item['_sourceNumber']
-                            ?? null;
-
-                        $accurateId = $result['r']['id'] ?? $result['d']['id'] ?? null;
-                        $accurateNumber = $sourceIdentifier;
-
-                        if ($sourceIdentifier && $accurateId) {
-                            \App\Models\AccurateEntityMapping::storeMapping(
-                                $accurateDatabaseId,
-                                $module,
-                                $sourceIdentifier,
-                                $accurateId,
-                                $accurateNumber,
-                                [
-                                    'synced_at' => now()->toIso8601String(),
-                                    'endpoint' => $saveEndpoint,
-                                    'operation' => 'create'
-                                ]
-                            );
-
-                            $this->entityMappingManager->updateTransactionStatus(
-                                $sourceIdentifier,
-                                $module,
-                                $accurateDatabaseId,
-                                \App\Models\Transaction::STATUS_PUSHED_CREATE
-                            );
-                        }
-                    }
                 } else {
                     $failedCount++;
                 }
@@ -235,5 +183,22 @@ class TransactionSaver
         return str_contains($normalizedBody, 'invalid_token')
             || str_contains($normalizedBody, 'token invalid')
             || str_contains($normalizedBody, 'invalid token');
+    }
+
+    private function isMasterDataModule(string $endpoint): bool
+    {
+        $masterDataModules = [
+            'customer', 'vendor', 'item', 'branch', 'department', 'employee', 'warehouse', 'project',
+            'customer-category', 'vendor-category', 'item-category', 'price-category', 'data-classification',
+            'vendor-price', 'glaccount', 'currency', 'tax', 'unit', 'fob', 'bill-of-material'
+        ];
+
+        foreach ($masterDataModules as $module) {
+            if (str_contains($endpoint, '/' . $module . '/')) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

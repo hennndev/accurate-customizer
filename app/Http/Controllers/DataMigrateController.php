@@ -11,6 +11,7 @@ use App\Models\Setting;
 use App\Services\AccurateService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 
 class DataMigrateController extends Controller
 {
@@ -42,7 +43,23 @@ class DataMigrateController extends Controller
     }
     $current_database_name = session('database_name');
     $current_database_id = session('database_id');
-    $query = Transaction::with(['accurateDatabase', 'module']);
+    $query = Transaction::query()
+      ->with([
+        'accurateDatabase:id,db_name',
+        'module:id,name,slug',
+      ])
+      ->select([
+        'id',
+        'transaction_no',
+        'accurate_database_id',
+        'module_id',
+        'description',
+        'status',
+        'error_message',
+        'migrated_at',
+        'created_at',
+      ])
+      ->selectRaw("JSON_UNQUOTE(JSON_EXTRACT(data, '$.transDate')) as trans_date_raw");
     $customerNameExpression = "JSON_UNQUOTE(JSON_EXTRACT(data, '$.customer.name'))";
     $programInjekExpression = "JSON_UNQUOTE(JSON_EXTRACT(data, '$.\"PROGRAM INJEK\"'))";
     $customerProgramExpression = "JSON_UNQUOTE(JSON_EXTRACT(data, '$.\"CUSTOMER PROGRAM\"'))";
@@ -99,12 +116,49 @@ class DataMigrateController extends Controller
       $query->whereRaw("{$transDateExpression} <= ?", [$request->input('trans_date_end')]);
     }
 
+    if ($request->boolean('only_duplicates')) {
+      $query->whereIn('transaction_no', function ($sub) {
+        $sub->select('transaction_no')
+          ->from('transactions')
+          ->whereNotNull('transaction_no')
+          ->where('transaction_no', '!=', '')
+          ->groupBy('transaction_no')
+          ->havingRaw('COUNT(*) > 1');
+      });
+    }
+
+    // Module-specific detail field search (JSON array traversal)
+    // Config: module name → list of JSON paths to search in
+    $moduleDetailSearchConfig = [
+      'Sales Receipt'     => ['$.detailInvoice[*].invoice.number', '$.detailInvoice[*].invoiceNo'],
+      'Purchase Payment'  => ['$.detailInvoice[*].invoice.number', '$.detailInvoice[*].invoiceNo'],
+      'Sales Return'      => ['$.invoiceNo', '$.salesInvoiceNo'],
+      'Sales Invoice'     => ['$.number'],
+    ];
+
+    if ($request->filled('detail_field_search') && $request->filled('module') && $request->module !== 'All Modules') {
+      $detailSearch = $request->input('detail_field_search');
+      $searchModule = $request->input('module');
+
+      if (isset($moduleDetailSearchConfig[$searchModule])) {
+        $jsonPaths = $moduleDetailSearchConfig[$searchModule];
+        $query->where(function ($q) use ($detailSearch, $jsonPaths) {
+          foreach ($jsonPaths as $jsonPath) {
+            $q->orWhereRaw(
+              "JSON_SEARCH(data, 'all', ?, NULL, ?) IS NOT NULL",
+              ["%{$detailSearch}%", $jsonPath]
+            );
+          }
+        });
+      }
+    }
+
     $sortDateDirection = strtolower((string) $request->input('sort_date', 'desc')) === 'asc' ? 'asc' : 'desc';
     $query->orderByRaw("({$transDateExpression} IS NULL) ASC");
     $query->orderByRaw("{$transDateExpression} {$sortDateDirection}");
     $query->orderByDesc('id');
 
-    $perPageOptions = [100, 200, 300, 400, 500];
+    $perPageOptions = [100, 200, 300, 400, 500, 1000, 2000];
 
     $setting = Setting::first();
     if (!$setting) {
@@ -129,32 +183,55 @@ class DataMigrateController extends Controller
 
     $transactions = $query->paginate($currentPerPage)->appends($request->except('page'));
 
-    $filter_databases = AccurateDatabase::pluck('db_name');
-    $modules = Module::pluck('name')->unique();
-    $customerNames = Transaction::query()
-      ->selectRaw("DISTINCT {$customerNameExpression} AS value")
-      ->whereRaw("{$customerNameExpression} IS NOT NULL")
-      ->whereRaw("{$customerNameExpression} != ''")
-      ->orderBy('value')
-      ->pluck('value');
-    $programInjekOptions = Transaction::query()
-      ->selectRaw("DISTINCT {$programInjekExpression} AS value")
-      ->whereRaw("{$programInjekExpression} IS NOT NULL")
-      ->whereRaw("{$programInjekExpression} != ''")
-      ->orderBy('value')
-      ->pluck('value');
-    $customerProgramOptions = Transaction::query()
-      ->selectRaw("DISTINCT {$customerProgramExpression} AS value")
-      ->whereRaw("{$customerProgramExpression} IS NOT NULL")
-      ->whereRaw("{$customerProgramExpression} != ''")
-      ->orderBy('value')
-      ->pluck('value');
-    $programOptions = $programInjekOptions
-      ->merge($customerProgramOptions)
-      ->filter(fn($value) => filled($value))
-      ->unique()
-      ->sort()
-      ->values();
+    // Highlight duplicate numbers only within current page to avoid expensive full-table scan.
+    $duplicateTransactionNos = $transactions
+      ->pluck('transaction_no')
+      ->filter(fn($number) => filled($number))
+      ->countBy()
+      ->filter(fn($count) => $count > 1)
+      ->keys()
+      ->flip()
+      ->all();
+
+    $filter_databases = Cache::remember('migrate:filter_databases:v1', now()->addMinutes(10), function () {
+      return AccurateDatabase::pluck('db_name');
+    });
+
+    $modules = Cache::remember('migrate:modules:v1', now()->addMinutes(10), function () {
+      return Module::pluck('name')->unique()->values();
+    });
+
+    $customerNames = Cache::remember('migrate:customer_names:v1', now()->addMinutes(5), function () use ($customerNameExpression) {
+      return Transaction::query()
+        ->selectRaw("DISTINCT {$customerNameExpression} AS value")
+        ->whereRaw("{$customerNameExpression} IS NOT NULL")
+        ->whereRaw("{$customerNameExpression} != ''")
+        ->orderBy('value')
+        ->pluck('value');
+    });
+
+    $programOptions = Cache::remember('migrate:program_options:v1', now()->addMinutes(5), function () use ($programInjekExpression, $customerProgramExpression) {
+      $programInjekOptions = Transaction::query()
+        ->selectRaw("DISTINCT {$programInjekExpression} AS value")
+        ->whereRaw("{$programInjekExpression} IS NOT NULL")
+        ->whereRaw("{$programInjekExpression} != ''")
+        ->orderBy('value')
+        ->pluck('value');
+
+      $customerProgramOptions = Transaction::query()
+        ->selectRaw("DISTINCT {$customerProgramExpression} AS value")
+        ->whereRaw("{$customerProgramExpression} IS NOT NULL")
+        ->whereRaw("{$customerProgramExpression} != ''")
+        ->orderBy('value')
+        ->pluck('value');
+
+      return $programInjekOptions
+        ->merge($customerProgramOptions)
+        ->filter(fn($value) => filled($value))
+        ->unique()
+        ->sort()
+        ->values();
+    });
     return view('migrate.index', compact(
       'transactions',
       'databases',
@@ -164,7 +241,9 @@ class DataMigrateController extends Controller
       'programOptions',
       'current_database_name',
       'currentPerPage',
-      'perPageOptions'
+      'perPageOptions',
+      'duplicateTransactionNos',
+      'moduleDetailSearchConfig'
     ));
   }
 
@@ -233,6 +312,25 @@ class DataMigrateController extends Controller
       return redirect()->route('migrate.index')
         ->with('error', 'Failed to update transaction: ' . $e->getMessage());
     }
+  }
+
+  public function transactionData(Transaction $transaction)
+  {
+    $decoded = is_array($transaction->data)
+      ? $transaction->data
+      : json_decode($transaction->data, true);
+
+    if (json_last_error() !== JSON_ERROR_NONE || !is_array($decoded)) {
+      return response()->json([
+        'success' => true,
+        'data' => [],
+      ]);
+    }
+
+    return response()->json([
+      'success' => true,
+      'data' => $decoded,
+    ]);
   }
 
   // DELETE MULTIPLE TRANSACTIONS

@@ -45,6 +45,8 @@
            editMode: 'form', // 'form' or 'json'
            parsedData: {},
            searchField: '',
+           editLoading: false,
+           filterModuleSelected: '{{ request('module', 'All Modules') }}',
            migrating: false,
            migrateMonitorBooting: true,
            migrateMonitorVisible: false,
@@ -85,20 +87,36 @@
                $refs.singleDeleteForm.submit();
            },
        
-           openEditModal(transactionId, transactionNo, jsonData) {
+           async openEditModal(transactionId, transactionNo) {
                this.editTransaction = { id: transactionId, no: transactionNo };
                this.editMode = 'form';
                this.searchField = '';
-               // Parse and pretty print JSON
+               this.editLoading = true;
+               this.showEditModal = true;
+       
                try {
-                   const parsed = JSON.parse(jsonData);
+                   const response = await fetch(`/migrate/${transactionId}/data`, {
+                       headers: {
+                           'Accept': 'application/json',
+                           'X-Requested-With': 'XMLHttpRequest',
+                       }
+                   });
+       
+                   if (!response.ok) {
+                       throw new Error('Failed to load transaction data');
+                   }
+       
+                   const payload = await response.json();
+                   const parsed = payload?.data && typeof payload.data === 'object' ? payload.data : {};
+       
                    this.parsedData = parsed;
                    this.editData = JSON.stringify(parsed, null, 2);
                } catch (e) {
                    this.parsedData = {};
-                   this.editData = jsonData;
+                   this.editData = '{}';
+               } finally {
+                   this.editLoading = false;
                }
-               this.showEditModal = true;
            },
        
            closeEditModal() {
@@ -1280,18 +1298,15 @@
         </div>
 
         <!-- All Modules Dropdown -->
-        <div x-data="{
-            open: false,
-            selected: '{{ request('module') ? request('module') : 'All Modules' }}'
-        }"
+        <div x-data="{ open: false }"
              class="relative w-full md:w-auto">
           <input type="hidden"
                  name="module"
-                 :value="selected !== 'All Modules' ? selected : ''">
+                 :value="filterModuleSelected !== 'All Modules' ? filterModuleSelected : ''">
           <button @click="open = !open"
                   type="button"
                   class="bg-white border w-full md:min-w-[180px] lg:min-w-[200px] border-gray-200 text-gray-700 text-xs md:text-sm rounded-md py-2 px-3 md:px-4 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center gap-2 whitespace-nowrap">
-            <span x-text="selected"
+            <span x-text="filterModuleSelected"
                   class="font-medium"></span>
             <svg xmlns="http://www.w3.org/2000/svg"
                  fill="none"
@@ -1316,11 +1331,11 @@
                x-transition:leave-end="opacity-0 scale-95"
                class="absolute z-[99] mt-2 bg-white border border-gray-200 rounded-md shadow-lg overflow-hidden w-full">
             <ul class="py-1 max-h-[250px] overflow-y-auto">
-              <li @click="selected = 'All Modules'; open = false"
-                  :class="selected === 'All Modules' ? 'bg-blue-50' : ''"
+              <li @click="filterModuleSelected = 'All Modules'; open = false"
+                  :class="filterModuleSelected === 'All Modules' ? 'bg-blue-50' : ''"
                   class="px-4 py-2 text-gray-700 text-sm hover:bg-gray-100 cursor-pointer transition font-medium flex items-center justify-between">
                 <span>All Modules</span>
-                <svg x-show="selected === 'All Modules'"
+                <svg x-show="filterModuleSelected === 'All Modules'"
                      xmlns="http://www.w3.org/2000/svg"
                      fill="none"
                      viewBox="0 0 24 24"
@@ -1333,11 +1348,11 @@
                 </svg>
               </li>
               @foreach ($modules as $module)
-                <li @click="selected = '{{ $module }}'; open = false"
-                    :class="selected === '{{ $module }}' ? 'bg-blue-50' : ''"
+                <li @click="filterModuleSelected = '{{ $module }}'; open = false"
+                    :class="filterModuleSelected === '{{ $module }}' ? 'bg-blue-50' : ''"
                     class="px-4 py-2 text-gray-700 text-sm hover:bg-gray-100 cursor-pointer transition font-medium flex items-center justify-between">
                   <span>{{ $module }}</span>
-                  <svg x-show="selected === '{{ $module }}'"
+                  <svg x-show="filterModuleSelected === '{{ $module }}'"
                        xmlns="http://www.w3.org/2000/svg"
                        fill="none"
                        viewBox="0 0 24 24"
@@ -1458,7 +1473,7 @@
         <div class="relative w-full md:w-auto">
           <select name="per_page"
                   class="bg-white w-full md:min-w-[110px] border border-gray-200 text-gray-700 text-xs md:text-sm rounded-md py-2 px-3 md:px-4 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium">
-            @foreach ($perPageOptions ?? [100, 200, 300, 400, 500] as $option)
+            @foreach ($perPageOptions ?? [100, 200, 300, 400, 500, 1000, 2000] as $option)
               <option value="{{ $option }}"
                       {{ (int) ($currentPerPage ?? request('per_page', 100)) === (int) $option ? 'selected' : '' }}>
                 {{ $option }} / page
@@ -1522,6 +1537,53 @@
           </select>
         </div>
 
+        {{-- Duplicate filter toggle --}}
+        <label class="flex items-center gap-2 bg-white border border-gray-200 rounded-md py-2 px-3 md:px-4 cursor-pointer hover:border-orange-400 transition w-full md:w-auto select-none
+            {{ request()->boolean('only_duplicates') ? 'border-orange-400 bg-orange-50' : '' }}">
+          <input type="checkbox"
+                 name="only_duplicates"
+                 value="1"
+                 {{ request()->boolean('only_duplicates') ? 'checked' : '' }}
+                 class="w-4 h-4 rounded border-2 border-gray-400 accent-orange-500 cursor-pointer">
+          <span class="text-xs md:text-sm font-medium {{ request()->boolean('only_duplicates') ? 'text-orange-700' : 'text-gray-700' }} whitespace-nowrap">
+            Duplikat saja
+          </span>
+        </label>
+
+        {{-- Module-specific detail field search --}}
+        @php
+          $supportedModulesForDetailSearch = array_keys($moduleDetailSearchConfig);
+          $detailSearchHints = [
+              'Sales Receipt' => 'Cari invoice no (e.g. INV-001)...',
+              'Purchase Payment' => 'Cari invoice no (e.g. PINV-001)...',
+              'Sales Return' => 'Cari invoice no referensi...',
+              'Sales Invoice' => 'Cari nomor invoice...',
+          ];
+        @endphp
+        <div x-show='@json($supportedModulesForDetailSearch).includes(filterModuleSelected)'
+             x-cloak
+             class="w-full md:w-auto">
+          <div class="relative">
+            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <svg xmlns="http://www.w3.org/2000/svg"
+                   fill="none"
+                   viewBox="0 0 24 24"
+                   stroke-width="1.5"
+                   stroke="currentColor"
+                   class="w-4 h-4 text-indigo-400">
+                <path stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 15.803a7.5 7.5 0 0 0 10.607 0Z" />
+              </svg>
+            </div>
+            <input type="text"
+                   name="detail_field_search"
+                   value="{{ request('detail_field_search') }}"
+                   :placeholder='(@json($detailSearchHints)[filterModuleSelected] ?? "Cari di detail field...")'
+                   class="bg-white rounded-md py-2 pl-9 pr-3 md:pr-4 border border-indigo-200 focus:outline-none focus:ring-2 focus:ring-indigo-400 text-xs md:text-sm w-full md:w-[220px] font-medium placeholder:text-gray-400">
+          </div>
+        </div>
+
         <button type="button"
                 @click="selectAll = true; selectAllTransactions()"
                 :disabled="!{{ $transactions->count() }}"
@@ -1537,6 +1599,10 @@
                 class="bg-blue-600 w-full md:w-auto hover:bg-blue-700 p-2 border border-blue-600 rounded-lg text-xs md:text-sm text-white font-semibold cursor-pointer">
           Apply Filter
         </button>
+        <a href="{{ route('migrate.index') }}"
+           class="bg-white w-full md:w-auto hover:bg-gray-100 p-2 border border-gray-200 rounded-lg text-xs md:text-sm text-gray-700 font-medium cursor-pointer text-center">
+          Reset
+        </a>
       </form>
 
       {{-- table --}}
@@ -1571,7 +1637,8 @@
             </thead>
             <tbody class="bg-white">
               @forelse ($transactions as $transaction)
-                <tr class="border-b border-gray-100 hover:bg-gray-50 transition">
+                @php $isDuplicate = isset($duplicateTransactionNos[$transaction->transaction_no]); @endphp
+                <tr class="border-b border-gray-100 transition {{ $isDuplicate ? 'bg-orange-50 hover:bg-orange-100' : 'hover:bg-gray-50' }}">
                   <td class="p-2 md:p-4">
                     <input type="checkbox"
                            x-model="selected"
@@ -1579,7 +1646,15 @@
                            class="w-5 h-5 rounded border-2 border-gray-400 bg-white accent-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 cursor-pointer">
                   </td>
                   <td class="p-2 md:p-4 text-xs md:text-sm font-medium text-gray-900">
-                    {{ $transaction->transaction_no }}</td>
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                      <span>{{ $transaction->transaction_no }}</span>
+                      @if ($isDuplicate)
+                        <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-orange-100 text-orange-700 border border-orange-300 whitespace-nowrap">
+                          DUPLIKAT
+                        </span>
+                      @endif
+                    </div>
+                  </td>
                   <td class="p-2 md:p-4 text-xs md:text-sm text-gray-600">
                     {{ $transaction->accurateDatabase?->db_name ?? 'N/A' }}</td>
                   <td class="p-2 md:p-4 text-xs md:text-sm text-gray-600">
@@ -1588,8 +1663,7 @@
                     {{ $transaction->description }}</td>
                   <td class="p-2 md:p-4 text-xs md:text-sm text-gray-600">
                     @php
-                      $data = is_array($transaction->data) ? $transaction->data : json_decode($transaction->data, true);
-                      $transDate = $data['transDate'] ?? null;
+                      $transDate = $transaction->trans_date_raw ?? null;
                       $transDateDisplay = null;
 
                       if (!empty($transDate)) {
@@ -1765,7 +1839,7 @@
                         </button>
                       @endif
                       <!-- Edit Button -->
-                      <button @click="openEditModal({{ $transaction->id }}, '{{ $transaction->transaction_no }}', {{ json_encode($transaction->data) }})"
+                      <button @click="openEditModal({{ $transaction->id }}, '{{ $transaction->transaction_no }}')"
                               class="inline-flex items-center justify-center p-1.5 md:p-2 rounded-lg hover:bg-blue-50 text-blue-600 hover:text-blue-700 transition"
                               title="Edit JSON Data">
                         <svg xmlns="http://www.w3.org/2000/svg"
