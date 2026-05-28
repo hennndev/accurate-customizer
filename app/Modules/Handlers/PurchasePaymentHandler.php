@@ -9,6 +9,7 @@ class PurchasePaymentHandler extends BaseHandler
 {
   protected array $allowedFields = [
     'bank',
+    'charField2',
     'detailItem',
     'bankNo',
     'chequeAmount',
@@ -46,6 +47,10 @@ class PurchasePaymentHandler extends BaseHandler
 
   public function transformDetail(array &$detailData, array $sharedContext, array $meta = []): void
   {
+    if (!empty($detailData['number'])) {
+      $detailData['charField2'] = (string) $detailData['number'];
+    }
+
     // Transform branchId → branchName
     $branchList = $sharedContext['branchList'] ?? [];
     if (isset($detailData['branchId']) && !empty($branchList)) {
