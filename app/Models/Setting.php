@@ -15,10 +15,17 @@ class Setting extends Model
         'transaction_number_mappings' => 'Transaction Number Mappings (transaction_number_mappings)',
     ];
 
+    /** @var array<string> */
+    public const PURCHASE_INVOICE_NUMBER_SOURCES = [
+        'mapping_table'              => 'Purchase Invoice Mapping Table (purchase_invoice_mapping_number)',
+        'transaction_number_mappings' => 'Transaction Number Mappings (transaction_number_mappings)',
+    ];
+
     protected $fillable = [
         'retention_days',
         'migrate_per_page',
         'sales_invoice_number_source',
+        'purchase_invoice_number_source',
     ];
     
     protected $casts = [

@@ -9,6 +9,7 @@ class SalesReceiptHandler extends BaseHandler
 {
   protected array $allowedFields = [
     'bank',
+    'charField1',
     'chequeAmount',
     'chequeDate',
     'chequeNo',
@@ -44,6 +45,10 @@ class SalesReceiptHandler extends BaseHandler
 
   public function transformDetail(array &$detailData, array $sharedContext, array $meta = []): void
   {
+    if (!empty($detailData['number'])) {
+      $detailData['charField1'] = (string) $detailData['number'];
+    }
+
     // Transform branchId → branchName
     $branchList = $sharedContext['branchList'] ?? [];
     if (isset($detailData['branchId']) && !empty($branchList)) {

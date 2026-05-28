@@ -12,6 +12,7 @@ class PurchaseInvoiceHandler extends BaseHandler
         'vendor',
         'billNumber',
         'cashDiscount',
+        'charField2',
         'transDate',
         'vendorNo',
         'branchName',    // hasil transform dari branchId
@@ -59,6 +60,10 @@ class PurchaseInvoiceHandler extends BaseHandler
 
   public function transformDetail(array &$detailData, array $sharedContext, array $meta = []): void
   {
+    if (!empty($detailData['number'])) {
+      $detailData['charField2'] = (string) $detailData['number'];
+    }
+
     // Transform branchId → branchName
     $branchList = $sharedContext['branchList'] ?? [];
     if (isset($detailData['branchId']) && !empty($branchList)) {

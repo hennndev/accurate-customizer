@@ -238,6 +238,55 @@
               <p class="text-xs text-red-600">{{ $message }}</p>
             @enderror
           </div>
+
+          {{-- Purchase Invoice Number Source --}}
+          <div class="flex flex-col gap-2 pt-2">
+            <label class="text-sm font-medium text-gray-700">
+              Purchase Invoice Number Source
+              <span class="text-red-500">*</span>
+            </label>
+            <p class="text-xs text-gray-500 -mt-1">
+              Sumber nomor invoice yang dipakai untuk referensi pembelian saat migrasi.
+            </p>
+            <div class="flex flex-col gap-3 mt-1">
+              @php $currentPiSource = $setting->purchase_invoice_number_source ?? 'mapping_table'; @endphp
+
+              <label class="flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors
+                                {{ $currentPiSource === 'mapping_table' ? 'border-blue-400 bg-blue-50' : 'border-gray-200 bg-white hover:border-gray-300' }}">
+                <input type="radio"
+                       name="purchase_invoice_number_source"
+                       value="mapping_table"
+                       class="mt-0.5 text-blue-600 focus:ring-blue-500"
+                       {{ $currentPiSource === 'mapping_table' ? 'checked' : '' }}>
+                <div class="flex flex-col gap-0.5">
+                  <span class="text-sm font-medium text-gray-800">Purchase Invoice Mapping Table</span>
+                  <span class="text-xs text-gray-500">
+                    Ambil nomor baru dari tabel <code class="bg-gray-100 px-1 rounded">purchase_invoice_mapping_number</code>.
+                    Gunakan opsi ini jika sudah menjalankan <em>Capture Number Mapping</em>.
+                  </span>
+                </div>
+              </label>
+
+              <label class="flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors
+                                {{ $currentPiSource === 'transaction_number_mappings' ? 'border-blue-400 bg-blue-50' : 'border-gray-200 bg-white hover:border-gray-300' }}">
+                <input type="radio"
+                       name="purchase_invoice_number_source"
+                       value="transaction_number_mappings"
+                       class="mt-0.5 text-blue-600 focus:ring-blue-500"
+                       {{ $currentPiSource === 'transaction_number_mappings' ? 'checked' : '' }}>
+                <div class="flex flex-col gap-0.5">
+                  <span class="text-sm font-medium text-gray-800">Transaction Number Mappings</span>
+                  <span class="text-xs text-gray-500">
+                    Ambil nomor baru dari tabel <code class="bg-gray-100 px-1 rounded">transaction_number_mappings</code>.
+                    Gunakan opsi ini jika mapping disimpan via mekanisme baru.
+                  </span>
+                </div>
+              </label>
+            </div>
+            @error('purchase_invoice_number_source')
+              <p class="text-xs text-red-600">{{ $message }}</p>
+            @enderror
+          </div>
         </div>
       </div>
 
