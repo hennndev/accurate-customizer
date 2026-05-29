@@ -171,8 +171,13 @@ class CaptureModuleJob implements ShouldQueue
 
         $listParams = $this->params;
 
+        // CRITICAL: Ensure correct invoiceDp filter for invoice modules
+        // Regular invoices: invoiceDp = false (default)
+        // Down payment invoices: invoiceDp = true (only DP items)
         if (in_array($this->module, ['sales-invoice', 'purchase-invoice'], true)) {
             $listParams['filter.invoiceDp'] = false;
+        } elseif (in_array($this->module, ['down-payment-sales-invoice', 'down-payment-purchase-invoice'], true)) {
+            $listParams['filter.invoiceDp'] = true;
         }
 
         if ($shouldRunDetailCapture) {

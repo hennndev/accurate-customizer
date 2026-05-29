@@ -35,7 +35,9 @@ class TransactionNumberMapping extends Model
     }
 
     /**
-     * Store mapping from migration response
+     * Store mapping from migration response.
+     * On re-migrate with same old_number, simply reassigns new_number.
+     * On new old_number, inserts a new record.
      */
     public static function storeMapping(int $databaseId, string $moduleSlug, string $oldNumber, array $response): void
     {
@@ -47,31 +49,34 @@ class TransactionNumberMapping extends Model
             ?? $response['d']['receiveNumber']
             ?? $response['d']['no']
             ?? null;
-        
-        if ($newNumber) {
-            $responseSummary = [
-                's' => $response['s'] ?? null,
-                'd' => is_string($response['d'] ?? null) ? $response['d'] : null,
-                'r' => [
-                    'id' => $response['r']['id'] ?? $response['d']['id'] ?? null,
-                    'number' => $response['r']['number'] ?? $response['d']['number'] ?? null,
-                    'receiveNumber' => $response['r']['receiveNumber'] ?? $response['d']['receiveNumber'] ?? null,
-                    'no' => $response['r']['no'] ?? $response['d']['no'] ?? null,
-                    'transDate' => $response['r']['transDate'] ?? $response['d']['transDate'] ?? null,
-                ],
-            ];
 
-            self::updateOrCreate(
-                [
-                    'accurate_database_id' => $databaseId,
-                    'module_slug' => $moduleSlug,
-                    'old_number' => $oldNumber,
-                ],
-                [
-                    'new_number' => $newNumber,
-                    'response_data' => $responseSummary,
-                ]
-            );
+        if (!$newNumber) {
+            return;
         }
+
+        $responseSummary = [
+            's' => $response['s'] ?? null,
+            'd' => is_string($response['d'] ?? null) ? $response['d'] : null,
+            'r' => [
+                'id'            => $response['r']['id'] ?? $response['d']['id'] ?? null,
+                'number'        => $response['r']['number'] ?? $response['d']['number'] ?? null,
+                'receiveNumber' => $response['r']['receiveNumber'] ?? $response['d']['receiveNumber'] ?? null,
+                'no'            => $response['r']['no'] ?? $response['d']['no'] ?? null,
+                'transDate'     => $response['r']['transDate'] ?? $response['d']['transDate'] ?? null,
+            ],
+        ];
+
+        self::updateOrCreate(
+            [
+                'accurate_database_id' => $databaseId,
+                'module_slug'          => $moduleSlug,
+                'old_number'           => $oldNumber,
+            ],
+            [
+                'new_number'    => $newNumber,
+                'response_data' => $responseSummary,
+            ]
+        );
     }
+
 }
