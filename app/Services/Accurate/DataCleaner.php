@@ -338,8 +338,7 @@ class DataCleaner
                                     );
 
                                     if ($sourceReceiveItemNumber !== null && $sourceReceiveItemNumber !== '') {
-                                        $cleanedSubItem['receiveItemNumber'] = $this->numberMappingManager->getMappedNumber(
-                                            'receive-item',
+                                        $cleanedSubItem['receiveItemNumber'] = $this->resolveReceiveItemNumber(
                                             (string) $sourceReceiveItemNumber
                                         );
                                     }
@@ -597,6 +596,57 @@ class DataCleaner
         }
 
         if (!$mapping || !filled($mapping->new_number)) {
+            return $oldNumber;
+        }
+
+        return (string) $mapping->new_number;
+    }
+
+    private function resolveReceiveItemNumber(string $oldNumber): string
+    {
+        $setting = \App\Models\Setting::first();
+        $source = $setting->receive_item_number_source ?? 'mapping_table';
+
+        if ($source === 'transaction_number_mappings') {
+            return $this->numberMappingManager->getMappedNumber('receive-item', $oldNumber);
+        }
+
+        return $this->getMappedReceiveItemNumberFromTable($oldNumber);
+    }
+
+    private function getMappedReceiveItemNumberFromTable(string $oldNumber): string
+    {
+        $normalizedOldNumber = trim($oldNumber);
+        if ($normalizedOldNumber === '') {
+            return $oldNumber;
+        }
+
+        if (!\Illuminate\Support\Facades\Schema::hasTable('receive_item_mapping_number')) {
+            return $oldNumber;
+        }
+
+        $databaseNames = array_values(array_unique(array_filter([
+            session('database_name'),
+            session('accurate_database.alias'),
+            session('accurate_database.name'),
+        ], static fn ($value) => is_string($value) && trim($value) !== '')));
+
+        $mappingQuery = \Illuminate\Support\Facades\DB::table('receive_item_mapping_number')
+            ->whereRaw('TRIM(old_number) = ?', [$normalizedOldNumber]);
+
+        if (!empty($databaseNames)) {
+            $mappingQuery->whereIn('db_name', $databaseNames);
+        }
+
+        $mapping = $mappingQuery->first();
+
+        if (!$mapping && !empty($databaseNames)) {
+            $mapping = \Illuminate\Support\Facades\DB::table('receive_item_mapping_number')
+                ->whereRaw('TRIM(old_number) = ?', [$normalizedOldNumber])
+                ->first();
+        }
+
+        if (!$mapping || !isset($mapping->new_number) || !filled($mapping->new_number)) {
             return $oldNumber;
         }
 

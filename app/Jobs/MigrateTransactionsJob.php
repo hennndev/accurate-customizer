@@ -175,12 +175,15 @@ class MigrateTransactionsJob implements ShouldQueue
 
 					// Store number mappings for this chunk (old_number → new_number in Accurate)
 					try {
-						$numberMappingManager->storeNumberMappings(
-							$endpoint,
-							$chunkData,
-							$result,
-							$this->targetDatabaseId
-						);
+						$localDatabaseId = $this->targetDbInfo['_local_db_id'] ?? null;
+						if ($localDatabaseId) {
+							$numberMappingManager->storeNumberMappings(
+								$endpoint,
+								$chunkData,
+								$result,
+								$localDatabaseId
+							);
+						}
 					} catch (\Throwable $mappingException) {
 						Log::warning('NUMBER_MAPPING_STORE_ERROR', [
 							'module' => $moduleSlug,
