@@ -27,6 +27,7 @@ class ReceiveItemHandler extends BaseHandler
     'taxDate',
     'taxable',
     'toAddress',
+    'charField1',
   ];
 
   public function preCapture(AccurateService $accurate, array &$sharedContext): void
@@ -62,6 +63,10 @@ class ReceiveItemHandler extends BaseHandler
           'available_branches' => array_keys($branchList),
         ]);
       }
+    }
+
+    if (!empty($detailData['number'])) {
+      $detailData['charField1'] = (string) $detailData['number'];
     }
 
     $filteredData = [];

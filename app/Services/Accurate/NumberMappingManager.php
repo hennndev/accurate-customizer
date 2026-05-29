@@ -60,6 +60,7 @@ class NumberMappingManager
 
             $oldNumber = $originalData[$index][$numberField]
                 ?? $originalData[$index]['_sourceNumber']
+                ?? $originalData[$index]['charField1']  // preserved by handler before number field is stripped by DataCleaner
                 ?? null;
 
             if ($oldNumber && isset($normalizedResult['r']) && is_array($normalizedResult['r'])) {
@@ -68,6 +69,19 @@ class NumberMappingManager
                 }
                 if (!isset($normalizedResult['r']['number']) && isset($normalizedResult['d']) && is_array($normalizedResult['d']) && isset($normalizedResult['d'][$numberField])) {
                     $normalizedResult['r']['number'] = $normalizedResult['d'][$numberField];
+                }
+                // Normalize module-specific alternate number fields to 'number'
+                // e.g. receive-item returns 'receiveNumber', some modules return 'no'
+                $altFields = ['receiveNumber', 'no'];
+                foreach ($altFields as $altField) {
+                    if (!isset($normalizedResult['r']['number']) && !empty($normalizedResult['r'][$altField])) {
+                        $normalizedResult['r']['number'] = $normalizedResult['r'][$altField];
+                        break;
+                    }
+                    if (!isset($normalizedResult['r']['number']) && isset($normalizedResult['d']) && is_array($normalizedResult['d']) && !empty($normalizedResult['d'][$altField])) {
+                        $normalizedResult['r']['number'] = $normalizedResult['d'][$altField];
+                        break;
+                    }
                 }
 
                 \App\Models\TransactionNumberMapping::storeMapping(
