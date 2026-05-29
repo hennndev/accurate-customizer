@@ -21,11 +21,18 @@ class Setting extends Model
         'transaction_number_mappings' => 'Transaction Number Mappings (transaction_number_mappings)',
     ];
 
+    /** @var array<string> */
+    public const RECEIVE_ITEM_NUMBER_SOURCES = [
+        'mapping_table'              => 'Receive Item Mapping Table (receive_item_mapping_number)',
+        'transaction_number_mappings' => 'Transaction Number Mappings (transaction_number_mappings)',
+    ];
+
     protected $fillable = [
         'retention_days',
         'migrate_per_page',
         'sales_invoice_number_source',
         'purchase_invoice_number_source',
+        'receive_item_number_source',
     ];
     
     protected $casts = [

@@ -24,6 +24,7 @@ class ConfigurationController extends Controller
             'retention_days'               => 'required|integer|min:1|max:365',
             'sales_invoice_number_source'  => 'required|in:mapping_table,transaction_number_mappings',
             'purchase_invoice_number_source' => 'required|in:mapping_table,transaction_number_mappings',
+            'receive_item_number_source'   => 'required|in:mapping_table,transaction_number_mappings',
         ]);
         
         $setting = Setting::firstOrCreate(['id' => 1]);
@@ -31,6 +32,7 @@ class ConfigurationController extends Controller
             'retention_days'               => $validated['retention_days'],
             'sales_invoice_number_source'  => $validated['sales_invoice_number_source'],
             'purchase_invoice_number_source' => $validated['purchase_invoice_number_source'],
+            'receive_item_number_source'   => $validated['receive_item_number_source'],
         ]);
         
         return redirect()->route('configuration.index')

@@ -287,6 +287,55 @@
               <p class="text-xs text-red-600">{{ $message }}</p>
             @enderror
           </div>
+
+          {{-- Receive Item Number Source --}}
+          <div class="flex flex-col gap-2 pt-2">
+            <label class="text-sm font-medium text-gray-700">
+              Receive Item Number Source
+              <span class="text-red-500">*</span>
+            </label>
+            <p class="text-xs text-gray-500 -mt-1">
+              Sumber nomor receive item yang dipakai untuk nomor item saat migrasi.
+            </p>
+            <div class="flex flex-col gap-3 mt-1">
+              @php $currentRiSource = $setting->receive_item_number_source ?? 'mapping_table'; @endphp
+
+              <label class="flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors
+                                {{ $currentRiSource === 'mapping_table' ? 'border-blue-400 bg-blue-50' : 'border-gray-200 bg-white hover:border-gray-300' }}">
+                <input type="radio"
+                       name="receive_item_number_source"
+                       value="mapping_table"
+                       class="mt-0.5 text-blue-600 focus:ring-blue-500"
+                       {{ $currentRiSource === 'mapping_table' ? 'checked' : '' }}>
+                <div class="flex flex-col gap-0.5">
+                  <span class="text-sm font-medium text-gray-800">Receive Item Mapping Table</span>
+                  <span class="text-xs text-gray-500">
+                    Ambil nomor baru dari tabel <code class="bg-gray-100 px-1 rounded">receive_item_mapping_number</code>.
+                    Gunakan opsi ini jika sudah menjalankan <em>Capture Number Mapping</em>.
+                  </span>
+                </div>
+              </label>
+
+              <label class="flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors
+                                {{ $currentRiSource === 'transaction_number_mappings' ? 'border-blue-400 bg-blue-50' : 'border-gray-200 bg-white hover:border-gray-300' }}">
+                <input type="radio"
+                       name="receive_item_number_source"
+                       value="transaction_number_mappings"
+                       class="mt-0.5 text-blue-600 focus:ring-blue-500"
+                       {{ $currentRiSource === 'transaction_number_mappings' ? 'checked' : '' }}>
+                <div class="flex flex-col gap-0.5">
+                  <span class="text-sm font-medium text-gray-800">Transaction Number Mappings</span>
+                  <span class="text-xs text-gray-500">
+                    Ambil nomor baru dari tabel <code class="bg-gray-100 px-1 rounded">transaction_number_mappings</code>.
+                    Gunakan opsi ini jika mapping disimpan via mekanisme baru.
+                  </span>
+                </div>
+              </label>
+            </div>
+            @error('receive_item_number_source')
+              <p class="text-xs text-red-600">{{ $message }}</p>
+            @enderror
+          </div>
         </div>
       </div>
 
