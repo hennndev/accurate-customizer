@@ -421,6 +421,7 @@
                        body: JSON.stringify({
                            target_database_id: Number(targetDbSelect.value),
                            ids: migrateIds.map(id => Number(id)),
+                           force_create: true,
                        }),
                    });
        
