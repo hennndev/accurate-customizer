@@ -26,6 +26,14 @@ class NumberMappingManager
             return;
         }
 
+        Log::info('NUMBER_MAPPING_ATTEMPT', [
+            'module'       => $moduleSlug,
+            'database_id'  => $accurateDatabaseId,
+            'items_count'  => count($originalData),
+            'response_s'   => $responseData['s'] ?? null,
+            'response_d_count' => is_array($responseData['d'] ?? null) ? count($responseData['d']) : gettype($responseData['d'] ?? null),
+        ]);
+
         // Skip number mapping for master data modules
         if ($this->isMasterDataModule($moduleSlug)) {
             return;
@@ -33,15 +41,32 @@ class NumberMappingManager
 
         $numberField = $this->fieldProvider->getNumberFieldForModule($moduleSlug, $originalData[0] ?? []);
         if (!$numberField || $numberField === 'id') {
+            Log::warning('NUMBER_MAPPING_SKIPPED_NO_FIELD', [
+                'module' => $moduleSlug,
+                'number_field' => $numberField,
+            ]);
             return;
         }
 
         $results = $responseData['d'] ?? [];
         if (!is_array($results)) {
+            Log::warning('NUMBER_MAPPING_SKIPPED_NO_RESULTS', [
+                'module' => $moduleSlug,
+                'response_d_type' => gettype($responseData['d'] ?? null),
+                'response_s' => $responseData['s'] ?? null,
+            ]);
             $results = [];
         }
         if (isset($results['s']) && is_bool($results['s'])) {
             $results = [$results];
+        }
+
+        if (empty($results)) {
+            Log::warning('NUMBER_MAPPING_SKIPPED_EMPTY_RESULTS', [
+                'module' => $moduleSlug,
+                'response_keys' => array_keys($responseData),
+            ]);
+            return;
         }
 
         foreach ($results as $index => $result) {
@@ -61,53 +86,58 @@ class NumberMappingManager
             $oldNumber = $originalData[$index][$numberField]
                 ?? $originalData[$index]['_sourceNumber']
                 ?? $originalData[$index]['charField1']  // preserved by handler before number field is stripped by DataCleaner
+                ?? $originalData[$index]['charField2']  // purchase-invoice uses charField2
                 ?? null;
 
-            if ($oldNumber && isset($normalizedResult['r']) && is_array($normalizedResult['r'])) {
-                if (!isset($normalizedResult['r']['number']) && isset($normalizedResult['r'][$numberField])) {
-                    $normalizedResult['r']['number'] = $normalizedResult['r'][$numberField];
-                }
-                if (!isset($normalizedResult['r']['number']) && isset($normalizedResult['d']) && is_array($normalizedResult['d']) && isset($normalizedResult['d'][$numberField])) {
-                    $normalizedResult['r']['number'] = $normalizedResult['d'][$numberField];
-                }
-                // Normalize module-specific alternate number fields to 'number'
-                // e.g. receive-item returns 'receiveNumber', some modules return 'no'
-                $altFields = ['receiveNumber', 'no'];
-                foreach ($altFields as $altField) {
-                    if (!isset($normalizedResult['r']['number']) && !empty($normalizedResult['r'][$altField])) {
-                        $normalizedResult['r']['number'] = $normalizedResult['r'][$altField];
-                        break;
-                    }
-                    if (!isset($normalizedResult['r']['number']) && isset($normalizedResult['d']) && is_array($normalizedResult['d']) && !empty($normalizedResult['d'][$altField])) {
-                        $normalizedResult['r']['number'] = $normalizedResult['d'][$altField];
-                        break;
-                    }
-                }
-
-                \App\Models\TransactionNumberMapping::storeMapping(
-                    $accurateDatabaseId,
-                    $moduleSlug,
-                    $oldNumber,
-                    $normalizedResult
-                );
-
-                Log::info('NUMBER_MAPPING_STORED', [
-                    'database_id' => $accurateDatabaseId,
-                    'module' => $moduleSlug,
-                    'old_number' => $oldNumber,
-                    'new_number' => $normalizedResult['r']['number'] ?? $normalizedResult['r']['receiveNumber'] ?? $normalizedResult['r']['no'] ?? null,
-                ]);
-            } else {
+            if (!$oldNumber || !isset($normalizedResult['r']) || !is_array($normalizedResult['r'])) {
                 Log::warning('NUMBER_MAPPING_SKIPPED', [
-                    'database_id' => $accurateDatabaseId,
-                    'module' => $moduleSlug,
-                    'index' => $index,
-                    'number_field' => $numberField,
-                    'has_old_number' => !empty($oldNumber),
-                    'has_response_r' => isset($normalizedResult['r']) && is_array($normalizedResult['r']),
-                    'result_keys' => is_array($result) ? array_keys($result) : [],
+                    'database_id'       => $accurateDatabaseId,
+                    'module'            => $moduleSlug,
+                    'index'             => $index,
+                    'number_field'      => $numberField,
+                    'has_old_number'    => !empty($oldNumber),
+                    'has_response_r'    => isset($normalizedResult['r']) && is_array($normalizedResult['r']),
+                    'result_keys'       => is_array($result) ? array_keys($result) : [],
+                    'original_keys'     => array_keys($originalData[$index] ?? []),
+                    'result_s'          => $result['s'] ?? null,
                 ]);
+                continue;
             }
+
+            // Normalize number field in response to always be in r['number']
+            if (!isset($normalizedResult['r']['number']) && isset($normalizedResult['r'][$numberField])) {
+                $normalizedResult['r']['number'] = $normalizedResult['r'][$numberField];
+            }
+            if (!isset($normalizedResult['r']['number']) && isset($normalizedResult['d']) && is_array($normalizedResult['d']) && isset($normalizedResult['d'][$numberField])) {
+                $normalizedResult['r']['number'] = $normalizedResult['d'][$numberField];
+            }
+            // Normalize module-specific alternate number fields to 'number'
+            // e.g. receive-item returns 'receiveNumber', some modules return 'no'
+            $altFields = ['receiveNumber', 'no'];
+            foreach ($altFields as $altField) {
+                if (!isset($normalizedResult['r']['number']) && !empty($normalizedResult['r'][$altField])) {
+                    $normalizedResult['r']['number'] = $normalizedResult['r'][$altField];
+                    break;
+                }
+                if (!isset($normalizedResult['r']['number']) && isset($normalizedResult['d']) && is_array($normalizedResult['d']) && !empty($normalizedResult['d'][$altField])) {
+                    $normalizedResult['r']['number'] = $normalizedResult['d'][$altField];
+                    break;
+                }
+            }
+
+            \App\Models\TransactionNumberMapping::storeMapping(
+                $accurateDatabaseId,
+                $moduleSlug,
+                $oldNumber,
+                $normalizedResult
+            );
+
+            Log::info('NUMBER_MAPPING_STORED', [
+                'database_id' => $accurateDatabaseId,
+                'module'      => $moduleSlug,
+                'old_number'  => $oldNumber,
+                'new_number'  => $normalizedResult['r']['number'] ?? null,
+            ]);
         }
     }
 

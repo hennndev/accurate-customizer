@@ -65,7 +65,9 @@ class ReceiveItemHandler extends BaseHandler
       }
     }
 
-    if (!empty($detailData['number'])) {
+    if (!empty($detailData['receiveNumber'])) {
+      $detailData['charField1'] = (string) $detailData['receiveNumber'];
+    } elseif (!empty($detailData['number'])) {
       $detailData['charField1'] = (string) $detailData['number'];
     }
 
