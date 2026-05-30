@@ -22,6 +22,12 @@ class Setting extends Model
     ];
 
     /** @var array<string> */
+    public const DOWN_PAYMENT_PURCHASE_INVOICE_NUMBER_SOURCES = [
+        'mapping_table'              => 'Down Payment Purchase Invoice Mapping Table (down_payment_purchase_invoice_mapping_number)',
+        'transaction_number_mappings' => 'Transaction Number Mappings (transaction_number_mappings)',
+    ];
+
+    /** @var array<string> */
     public const RECEIVE_ITEM_NUMBER_SOURCES = [
         'mapping_table'              => 'Receive Item Mapping Table (receive_item_mapping_number)',
         'transaction_number_mappings' => 'Transaction Number Mappings (transaction_number_mappings)',
@@ -32,6 +38,7 @@ class Setting extends Model
         'migrate_per_page',
         'sales_invoice_number_source',
         'purchase_invoice_number_source',
+        'down_payment_purchase_invoice_number_source',
         'receive_item_number_source',
     ];
     

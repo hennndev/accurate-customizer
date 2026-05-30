@@ -64,8 +64,10 @@ class SalesInvoiceHandler extends BaseHandler
 
   public function transformDetail(array &$detailData, array $sharedContext, array $meta = []): void
   {
-    if (!empty($detailData['number'])) {
-      $detailData['charField1'] = (string) $detailData['number'];
+    $sourceNumber = $detailData['number'] ?? null;
+
+    if ($sourceNumber !== null && $sourceNumber !== '') {
+      $detailData['charField1'] = (string) $sourceNumber;
     }
 
     // Transform branchId → branchName

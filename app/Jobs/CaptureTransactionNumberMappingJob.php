@@ -123,11 +123,19 @@ class CaptureTransactionNumberMappingJob implements ShouldQueue
 
             foreach ($rows as $row) {
                 $number = trim((string) ($row['number'] ?? ''));
+                $receiveNumber = trim((string) ($row['receiveNumber'] ?? ''));
                 $charField = trim((string) ($row['charField'] ?? ''));
                 $charField1 = trim((string) ($row['charField1'] ?? ''));
 
-                $oldNumber = $charField !== '' ? $charField : ($charField1 !== '' ? $charField1 : null);
-                $newNumber = $number;
+                // For receive-item: new number is `number`, old number follows charField1 (set from number)
+                // For other modules: new number is `number`, old number is charField or charField1
+                if ($this->moduleSlug === 'receive-item') {
+                    $newNumber = $number;
+                    $oldNumber = $charField1 !== '' ? $charField1 : ($number !== '' ? $number : ($receiveNumber !== '' ? $receiveNumber : null));
+                } else {
+                    $newNumber = $number;
+                    $oldNumber = $charField !== '' ? $charField : ($charField1 !== '' ? $charField1 : null);
+                }
 
                 if ($newNumber !== '') {
                     $capturedByNewNumber[$newNumber] = $oldNumber;

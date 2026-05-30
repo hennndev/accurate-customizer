@@ -42,7 +42,15 @@ class DataFetcher
             $params['filter.invoiceDp'] = false;
         }
 
-        Log::info("dataparamsssss", ["params" => $params]);
+        $params = $this->normalizeAccurateParams($params);
+
+        Log::info('ACCURATE_API_PARAMS', [
+            'endpoint' => $endpoint,
+            'page' => $pageNumber,
+            'params' => $params,
+        ]);
+
+
 
         $client = $targetDbInfo
             ? $this->databaseClientManager->getDataClientForDatabase($targetDbInfo, $accessToken, 600)
@@ -154,6 +162,8 @@ class DataFetcher
             if (!array_key_exists('filter.invoiceDp', $params)) {
                 $params['filter.invoiceDp'] = false;
             }
+
+            $params = $this->normalizeAccurateParams($params);
 
             do {
                 $params['sp.page'] = $pageNumber;
@@ -316,5 +326,34 @@ class DataFetcher
         return str_contains($normalizedBody, 'invalid_token')
             || str_contains($normalizedBody, 'token invalid')
             || str_contains($normalizedBody, 'invalid token');
+    }
+
+    private function normalizeAccurateParams(array $params): array
+    {
+        if (!array_key_exists('filter.invoiceDp', $params)) {
+            return $params;
+        }
+
+        $value = $params['filter.invoiceDp'];
+        if (is_bool($value)) {
+            $params['filter.invoiceDp'] = $value ? 'true' : 'false';
+            return $params;
+        }
+
+        if (is_int($value)) {
+            $params['filter.invoiceDp'] = $value === 1 ? 'true' : 'false';
+            return $params;
+        }
+
+        if (is_string($value)) {
+            $normalized = strtolower(trim($value));
+            if (in_array($normalized, ['true', '1', 'yes', 'on'], true)) {
+                $params['filter.invoiceDp'] = 'true';
+            } elseif (in_array($normalized, ['false', '0', 'no', 'off', ''], true)) {
+                $params['filter.invoiceDp'] = 'false';
+            }
+        }
+
+        return $params;
     }
 }

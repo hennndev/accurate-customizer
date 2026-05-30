@@ -26,11 +26,13 @@ class NumberMappingManager
             return;
         }
 
+        $moduleSlug = $this->resolveEffectiveModuleSlug($moduleSlug, $originalData);
+
         Log::info('NUMBER_MAPPING_ATTEMPT', [
-            'module'       => $moduleSlug,
-            'database_id'  => $accurateDatabaseId,
-            'items_count'  => count($originalData),
-            'response_s'   => $responseData['s'] ?? null,
+            'module' => $moduleSlug,
+            'database_id' => $accurateDatabaseId,
+            'items_count' => count($originalData),
+            'response_s' => $responseData['s'] ?? null,
             'response_d_count' => is_array($responseData['d'] ?? null) ? count($responseData['d']) : gettype($responseData['d'] ?? null),
         ]);
 
@@ -86,7 +88,7 @@ class NumberMappingManager
             $oldNumber = $originalData[$index][$numberField]
                 ?? $originalData[$index]['_sourceNumber']
                 ?? $originalData[$index]['charField1']  // preserved by handler before number field is stripped by DataCleaner
-                ?? $originalData[$index]['charField2']  // purchase-invoice uses charField2
+                ?? $originalData[$index]['charField2']
                 ?? null;
 
             if (!$oldNumber || !isset($normalizedResult['r']) || !is_array($normalizedResult['r'])) {
@@ -191,5 +193,34 @@ class NumberMappingManager
         ];
 
         return in_array($moduleSlug, $masterDataModules, true);
+    }
+
+    private function resolveEffectiveModuleSlug(string $moduleSlug, array $originalData): string
+    {
+        if (!in_array($moduleSlug, ['sales-invoice', 'purchase-invoice'], true)) {
+            return $moduleSlug;
+        }
+
+        if ($this->isDownPaymentPayload($originalData)) {
+            return 'down-payment-' . $moduleSlug;
+        }
+
+        return $moduleSlug;
+    }
+
+    private function isDownPaymentPayload(array $originalData): bool
+    {
+        foreach ($originalData as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+
+            $flag = $item['invoiceDp'] ?? $item['invoiceDP'] ?? null;
+            if ($flag === true || $flag === 1 || $flag === '1' || $flag === 'true') {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

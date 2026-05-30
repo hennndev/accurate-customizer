@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Jobs\CaptureTransactionNumberMappingJob;
+use App\Models\DownPaymentPurchaseInvoiceMapping;
 use App\Models\PurchaseInvoiceMapping;
 use App\Models\SalesInvoiceMapping;
+use App\Models\ReceiveItemMapping;
 use App\Models\SystemLog;
 use App\Services\AccurateService;
 use Illuminate\Http\Request;
@@ -155,7 +157,7 @@ class TransactionNumberMappingController extends Controller
         }
 
         $params = $this->buildDateParams($request);
-        $params['filter.invoiceDp'] = false;
+        $params['filter.invoiceDp'] = $module === 'down-payment-purchase-invoice';
         $params['fields'] = $moduleMapping[$module]['fields'];
         $params['sp.fields'] = $moduleMapping[$module]['fields'];
 
@@ -286,8 +288,20 @@ class TransactionNumberMappingController extends Controller
             'purchase-invoice' => [
                 'name' => 'Purchase Invoice',
                 'list_endpoint' => '/api/purchase-invoice/list.do',
-                'fields' => 'number,charField',
+                'fields' => 'number,charField1',
                 'mapping_model' => PurchaseInvoiceMapping::class,
+            ],
+            'down-payment-purchase-invoice' => [
+                'name' => 'Down Payment Purchase Invoice',
+                'list_endpoint' => '/api/purchase-invoice/list.do',
+                'fields' => 'number,charField1,invoiceDp',
+                'mapping_model' => DownPaymentPurchaseInvoiceMapping::class,
+            ],
+            'receive-item' => [
+                'name' => 'Receive Item',
+                'list_endpoint' => '/api/receive-item/list.do',
+                'fields' => 'number,receiveNumber,charField1',
+                'mapping_model' => ReceiveItemMapping::class,
             ],
         ];
     }

@@ -7,26 +7,6 @@ use Illuminate\Support\Facades\Log;
 
 class PurchasePaymentHandler extends BaseHandler
 {
-  protected array $allowedFields = [
-    'bank',
-    'charField2',
-    'detailItem',
-    'bankNo',
-    'chequeAmount',
-    'detailInvoice',
-    'transDate',
-    'vendor',
-    'vendorNo',
-    'branchName',
-    'chequeDate',
-    'chequeNo',
-    'currencyCode',
-    'rate',
-    'paymentMethod',
-    'number',
-    'description',
-  ];
-
   public function preCapture(AccurateService $accurate, array &$sharedContext): void
   {
     try {
@@ -48,7 +28,7 @@ class PurchasePaymentHandler extends BaseHandler
   public function transformDetail(array &$detailData, array $sharedContext, array $meta = []): void
   {
     if (!empty($detailData['number'])) {
-      $detailData['charField2'] = (string) $detailData['number'];
+      $detailData['charField1'] = (string) $detailData['number'];
     }
 
     // Transform branchId → branchName
@@ -66,13 +46,5 @@ class PurchasePaymentHandler extends BaseHandler
       }
     }
 
-    $filteredData = [];
-    foreach ($this->allowedFields as $field) {
-      if (array_key_exists($field, $detailData)) {
-        $filteredData[$field] = $detailData[$field];
-      }
-    }
-
-    $detailData = $filteredData;
   }
 }

@@ -7,42 +7,6 @@ use Illuminate\Support\Facades\Log;
 
 class PurchaseInvoiceHandler extends BaseHandler
 {
-    protected array $allowedFields = [
-        'number',
-        'vendor',
-        'billNumber',
-        'cashDiscount',
-        'charField2',
-        'transDate',
-        'vendorNo',
-        'branchName',    // hasil transform dari branchId
-        'description',
-        'currencyCode',
-        'detailItem',
-        // 'detailDownPayment',
-        'detailExpense',
-        'documentCode',
-        'documentTransaction',
-        'fillPriceByVendorPrice',
-        'fobName',
-        'fiscalRate',
-        'inclusiveTax',
-        'inputDownPayment',
-        'invoiceDP',
-        'orderDownPaymentNumber',
-        'paymentTermName',
-        'rate',
-        'reverseInvocie',
-        'shipDate',
-        'shipmenName',
-        'tax1Name',
-        'taxDate',
-        'taxNumber',
-        'taxable',
-        'toAddress',
-        'vendorTaxType',
-    ];
-
   public function preCapture(AccurateService $accurate, array &$sharedContext): void
   {
     try {
@@ -61,7 +25,9 @@ class PurchaseInvoiceHandler extends BaseHandler
   public function transformDetail(array &$detailData, array $sharedContext, array $meta = []): void
   {
     if (!empty($detailData['number'])) {
-      $detailData['charField2'] = (string) $detailData['number'];
+      $detailData['charField1'] = (string) $detailData['number'];
+    } elseif (!empty($detailData['receiveNumber']) && empty($detailData['charField1'])) {
+      $detailData['charField1'] = (string) $detailData['receiveNumber'];
     }
 
     // Transform branchId → branchName
@@ -85,14 +51,5 @@ class PurchaseInvoiceHandler extends BaseHandler
         }
       }
     }
-
-    $filteredData = [];
-    foreach ($this->allowedFields as $field) {
-      if (array_key_exists($field, $detailData)) {
-        $filteredData[$field] = $detailData[$field];
-      }
-    }
-
-    $detailData = $filteredData;
   }
 }

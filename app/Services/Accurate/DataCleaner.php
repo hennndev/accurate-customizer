@@ -8,6 +8,10 @@ class DataCleaner
 {
     protected ModuleFieldProvider $moduleFieldProvider;
     protected NumberMappingManager $numberMappingManager;
+    protected ?\App\Models\Setting $cachedSetting = null;
+    protected ?array $cachedDatabaseNames = null;
+    protected array $tableExistsCache = [];
+    protected array $mappingResultCache = [];
 
     public function __construct(
         ModuleFieldProvider $moduleFieldProvider,
@@ -26,10 +30,33 @@ class DataCleaner
             // Save source id before transformDetail overwrites $item.
             $injectedId = $item['id'] ?? null;
 
-            $handler = \App\Modules\ModuleManager::forEndpoint($endpoint);
+            $invoiceDpRaw = $item['invoiceDp'] ?? $item['invoiceDP'] ?? false;
+            $isInvoiceDp = filter_var($invoiceDpRaw, FILTER_VALIDATE_BOOLEAN);
+            if ($isInvoiceDp && str_contains($endpoint, '/purchase-invoice/')) {
+                $handler = \App\Modules\ModuleManager::forSlug('down-payment-purchase-invoice');
+            } elseif ($isInvoiceDp && str_contains($endpoint, '/sales-invoice/')) {
+                $handler = \App\Modules\ModuleManager::forSlug('down-payment-sales-invoice');
+            } else {
+                $handler = \App\Modules\ModuleManager::forEndpoint($endpoint);
+            }
             $sharedContext = [];
             $meta = [];
+            if (preg_match('/\/api\/([^\/]+)\//', $endpoint, $matches)) {
+                $moduleSlug = $matches[1] ?? null;
+                if ($moduleSlug) {
+                    $meta['module'] = $moduleSlug;
+                }
+            }
             $handler->transformDetail($item, $sharedContext, $meta);
+
+            if (
+                str_contains($endpoint, '/purchase-invoice/')
+                && !$isInvoiceDp
+                && empty($item['charField1'])
+                && !empty($item['number'])
+            ) {
+                $item['charField1'] = (string) $item['number'];
+            }
 
             // Restore after handler filtering so cleanDataItem can honour source id rules.
             if ($injectedId !== null) { $item['id'] = $injectedId; }
@@ -338,9 +365,15 @@ class DataCleaner
                                     );
 
                                     if ($sourceReceiveItemNumber !== null && $sourceReceiveItemNumber !== '') {
-                                        $cleanedSubItem['receiveItemNumber'] = $this->resolveReceiveItemNumber(
+                                        $mappedReceiveItemNumber = $this->resolveReceiveItemNumber(
                                             (string) $sourceReceiveItemNumber
                                         );
+                                        $cleanedSubItem['receiveItemNumber'] = $mappedReceiveItemNumber;
+                                        
+                                        \Illuminate\Support\Facades\Log::debug('PURCHASE_INVOICE_RECEIVE_ITEM_MAPPED', [
+                                            'source_receive_item_number' => $sourceReceiveItemNumber,
+                                            'mapped_receive_item_number' => $mappedReceiveItemNumber,
+                                        ]);
                                     }
 
                                     unset($cleanedSubItem['receiveItem']);
@@ -431,10 +464,19 @@ class DataCleaner
                             if ($key === 'detailDownPayment' && (str_contains($endpoint, 'purchase-invoice') || str_contains($endpoint, 'sales-invoice'))) {
                                 if (isset($cleanedSubItem['invoice']['number'])) {
                                     $moduleSlug = str_contains($endpoint, 'purchase-invoice') ? 'purchase-invoice' : 'sales-invoice';
-                                    $cleanedSubItem['invoiceNumber'] = $this->numberMappingManager->getMappedNumber(
-                                        $moduleSlug,
-                                        $cleanedSubItem['invoice']['number']
-                                    );
+                                    if ($moduleSlug === 'purchase-invoice') {
+                                        $cleanedSubItem['invoiceNumber'] = $this->resolveDownPaymentPurchaseInvoiceNumber(
+                                            $cleanedSubItem['invoice']['number']
+                                        );
+                                    } else {
+                                        $cleanedSubItem['invoiceNumber'] = $this->numberMappingManager->getMappedNumber(
+                                            $moduleSlug,
+                                            $cleanedSubItem['invoice']['number']
+                                        );
+                                    }
+                                    unset ($cleanedSubItem['invoiceId']);
+                                    unset ($cleanedSubItem['invoice']);
+                                    unset ($cleanedSubItem['purchaseInvoiceId']);
                                 }
                             }
 
@@ -510,8 +552,7 @@ class DataCleaner
 
     private function resolvePurchaseInvoiceNumber(string $oldNumber): string
     {
-        $setting = \App\Models\Setting::first();
-        $source = $setting->purchase_invoice_number_source ?? 'mapping_table';
+        $source = $this->getSettingValue('purchase_invoice_number_source', 'mapping_table');
 
         if ($source === 'transaction_number_mappings') {
             return $this->numberMappingManager->getMappedNumber('purchase-invoice', $oldNumber);
@@ -527,15 +568,14 @@ class DataCleaner
             return $oldNumber;
         }
 
-        $databaseNames = array_values(array_unique(array_filter([
-            session('database_name'),
-            session('accurate_database.alias'),
-            session('accurate_database.name'),
-        ], static fn ($value) => is_string($value) && trim($value) !== '')));
+        $databaseNames = $this->getSessionDatabaseNames();
+        $cacheKey = 'purchase_invoice_mapping_number|' . $normalizedOldNumber . '|' . implode(',', $databaseNames);
+        if (array_key_exists($cacheKey, $this->mappingResultCache)) {
+            return $this->mappingResultCache[$cacheKey];
+        }
 
         $mappingQuery = \App\Models\PurchaseInvoiceMapping::query()
             ->whereRaw('TRIM(old_number) = ?', [$normalizedOldNumber]);
-
         if (!empty($databaseNames)) {
             $mappingQuery->whereIn('db_name', $databaseNames);
         }
@@ -549,16 +589,63 @@ class DataCleaner
         }
 
         if (!$mapping || !filled($mapping->new_number)) {
+            $this->mappingResultCache[$cacheKey] = $oldNumber;
             return $oldNumber;
         }
 
-        return (string) $mapping->new_number;
+        $this->mappingResultCache[$cacheKey] = (string) $mapping->new_number;
+        return $this->mappingResultCache[$cacheKey];
+    }
+
+    private function resolveDownPaymentPurchaseInvoiceNumber(string $oldNumber): string
+    {
+        $source = $this->getSettingValue('down_payment_purchase_invoice_number_source', 'mapping_table');
+
+        if ($source === 'transaction_number_mappings') {
+            return $this->numberMappingManager->getMappedNumber('down-payment-purchase-invoice', $oldNumber);
+        }
+
+        $normalizedOldNumber = trim($oldNumber);
+        if ($normalizedOldNumber === '') {
+            return $oldNumber;
+        }
+
+        if (!$this->hasTableCached('down_payment_purchase_invoice_mapping_number')) {
+            return $this->resolvePurchaseInvoiceNumber($oldNumber);
+        }
+
+        $databaseNames = $this->getSessionDatabaseNames();
+        $cacheKey = 'down_payment_purchase_invoice_mapping_number|' . $normalizedOldNumber . '|' . implode(',', $databaseNames);
+        if (array_key_exists($cacheKey, $this->mappingResultCache)) {
+            return $this->mappingResultCache[$cacheKey];
+        }
+
+        $mappingQuery = \App\Models\DownPaymentPurchaseInvoiceMapping::query()
+            ->whereRaw('TRIM(old_number) = ?', [$normalizedOldNumber]);
+        if (!empty($databaseNames)) {
+            $mappingQuery->whereIn('db_name', $databaseNames);
+        }
+
+        $mapping = $mappingQuery->first();
+
+        if (!$mapping && !empty($databaseNames)) {
+            $mapping = \App\Models\DownPaymentPurchaseInvoiceMapping::query()
+                ->whereRaw('TRIM(old_number) = ?', [$normalizedOldNumber])
+                ->first();
+        }
+
+        if (!$mapping || !filled($mapping->new_number)) {
+            $this->mappingResultCache[$cacheKey] = $this->resolvePurchaseInvoiceNumber($oldNumber);
+            return $this->mappingResultCache[$cacheKey];
+        }
+
+        $this->mappingResultCache[$cacheKey] = (string) $mapping->new_number;
+        return $this->mappingResultCache[$cacheKey];
     }
 
     private function resolveSalesInvoiceNumber(string $oldNumber): string
     {
-        $setting = \App\Models\Setting::first();
-        $source = $setting->sales_invoice_number_source ?? 'mapping_table';
+        $source = $this->getSettingValue('sales_invoice_number_source', 'mapping_table');
 
         if ($source === 'transaction_number_mappings') {
             return $this->numberMappingManager->getMappedNumber('sales-invoice', $oldNumber);
@@ -574,15 +661,14 @@ class DataCleaner
             return $oldNumber;
         }
 
-        $databaseNames = array_values(array_unique(array_filter([
-            session('database_name'),
-            session('accurate_database.alias'),
-            session('accurate_database.name'),
-        ], static fn ($value) => is_string($value) && trim($value) !== '')));
+        $databaseNames = $this->getSessionDatabaseNames();
+        $cacheKey = 'sales_invoice_mapping_number|' . $normalizedOldNumber . '|' . implode(',', $databaseNames);
+        if (array_key_exists($cacheKey, $this->mappingResultCache)) {
+            return $this->mappingResultCache[$cacheKey];
+        }
 
         $mappingQuery = \App\Models\SalesInvoiceMapping::query()
             ->whereRaw('TRIM(old_number) = ?', [$normalizedOldNumber]);
-
         if (!empty($databaseNames)) {
             $mappingQuery->whereIn('db_name', $databaseNames);
         }
@@ -596,16 +682,17 @@ class DataCleaner
         }
 
         if (!$mapping || !filled($mapping->new_number)) {
+            $this->mappingResultCache[$cacheKey] = $oldNumber;
             return $oldNumber;
         }
 
-        return (string) $mapping->new_number;
+        $this->mappingResultCache[$cacheKey] = (string) $mapping->new_number;
+        return $this->mappingResultCache[$cacheKey];
     }
 
     private function resolveReceiveItemNumber(string $oldNumber): string
     {
-        $setting = \App\Models\Setting::first();
-        $source = $setting->receive_item_number_source ?? 'mapping_table';
+        $source = $this->getSettingValue('receive_item_number_source', 'mapping_table');
 
         if ($source === 'transaction_number_mappings') {
             return $this->numberMappingManager->getMappedNumber('receive-item', $oldNumber);
@@ -621,19 +708,18 @@ class DataCleaner
             return $oldNumber;
         }
 
-        if (!\Illuminate\Support\Facades\Schema::hasTable('receive_item_mapping_number')) {
+        if (!$this->hasTableCached('receive_item_mapping_number')) {
             return $oldNumber;
         }
 
-        $databaseNames = array_values(array_unique(array_filter([
-            session('database_name'),
-            session('accurate_database.alias'),
-            session('accurate_database.name'),
-        ], static fn ($value) => is_string($value) && trim($value) !== '')));
+        $databaseNames = $this->getSessionDatabaseNames();
+        $cacheKey = 'receive_item_mapping_number|' . $normalizedOldNumber . '|' . implode(',', $databaseNames);
+        if (array_key_exists($cacheKey, $this->mappingResultCache)) {
+            return $this->mappingResultCache[$cacheKey];
+        }
 
         $mappingQuery = \Illuminate\Support\Facades\DB::table('receive_item_mapping_number')
             ->whereRaw('TRIM(old_number) = ?', [$normalizedOldNumber]);
-
         if (!empty($databaseNames)) {
             $mappingQuery->whereIn('db_name', $databaseNames);
         }
@@ -647,22 +733,61 @@ class DataCleaner
         }
 
         if (!$mapping || !isset($mapping->new_number) || !filled($mapping->new_number)) {
+            $this->mappingResultCache[$cacheKey] = $oldNumber;
             return $oldNumber;
         }
 
-        return (string) $mapping->new_number;
+        $this->mappingResultCache[$cacheKey] = (string) $mapping->new_number;
+        return $this->mappingResultCache[$cacheKey];
+    }
+
+    private function getSettingValue(string $key, string $default): string
+    {
+        if ($this->cachedSetting === null) {
+            $this->cachedSetting = \App\Models\Setting::first();
+        }
+
+        $value = $this->cachedSetting?->{$key} ?? $default;
+        return is_string($value) && trim($value) !== '' ? $value : $default;
+    }
+
+    private function getSessionDatabaseNames(): array
+    {
+        if ($this->cachedDatabaseNames !== null) {
+            return $this->cachedDatabaseNames;
+        }
+
+        $this->cachedDatabaseNames = array_values(array_unique(array_filter([
+            session('database_name'),
+            session('accurate_database.alias'),
+            session('accurate_database.name'),
+        ], static fn ($value) => is_string($value) && trim($value) !== '')));
+
+        return $this->cachedDatabaseNames;
+    }
+
+    private function hasTableCached(string $table): bool
+    {
+        if (!array_key_exists($table, $this->tableExistsCache)) {
+            $this->tableExistsCache[$table] = \Illuminate\Support\Facades\Schema::hasTable($table);
+        }
+
+        return $this->tableExistsCache[$table];
     }
 
     private function resolvePurchaseInvoiceReceiveItemNumber(array $rawSubValue, array $cleanedSubItem): ?string
     {
         $candidates = [
             $rawSubValue['receiveItem']['number'] ?? null,
+            $rawSubValue['receiveItem']['receiveNumber'] ?? null,
             $rawSubValue['receiveItem']['no'] ?? null,
             $rawSubValue['receiveItemDetail']['receiveItem']['number'] ?? null,
+            $rawSubValue['receiveItemDetail']['receiveItem']['receiveNumber'] ?? null,
             $rawSubValue['receiveItemDetail']['receiveItem']['no'] ?? null,
             $rawSubValue['receiveItemNumber'] ?? null,
             $cleanedSubItem['receiveItemNumber'] ?? null,
             $cleanedSubItem['receiveItem']['number'] ?? null,
+            $cleanedSubItem['receiveItem']['receiveNumber'] ?? null,
             $cleanedSubItem['receiveItem']['no'] ?? null,
         ];
 
