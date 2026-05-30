@@ -85,17 +85,15 @@ class TransactionSaver
         $requestBody = [
             'data' => $cleanedData
         ];
+
+        Log::info('SAVING_TO_ACCURATE', [
+            'data' => $requestBody
+        ]);
         $response = $client->post($endpoint, $requestBody);
 
         if ($response->failed()) {
             $status = $response->status();
             $body = $response->body();
-
-            Log::error('Failed to bulk save to Accurate API', [
-                'endpoint' => $endpoint,
-                'status' => $status,
-                'error' => $body,
-            ]);
 
             if ($this->isTokenInvalidResponse($status, $body)) {
                 throw new Exception('ACCURATE_TOKEN_INVALID: Sesi Accurate habis atau token tidak valid. Silakan login Accurate ulang.');

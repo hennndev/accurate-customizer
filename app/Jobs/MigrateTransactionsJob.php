@@ -149,7 +149,6 @@ class MigrateTransactionsJob implements ShouldQueue
 
 				if ($this->isDownPaymentModule($moduleSlug)) {
 					$data['invoiceDp'] = true;
-					$data['invoiceDP'] = true;
 				}
 
 				$bulkData[] = $data;
@@ -166,6 +165,11 @@ class MigrateTransactionsJob implements ShouldQueue
 
 			foreach ($chunks as $chunkIndex => $chunkData) {
 				try {
+          Log::info('MIGRATION_CHUNK_START', [
+            'module' => $moduleSlug,
+            'chunk_index' => $chunkIndex,
+            'items_count' => count($chunkData),
+          ]);
 					$result = $accurateService->bulkSaveToAccurate($endpoint, $chunkData, $this->targetDbInfo, $this->accessToken, $this->forceCreate);
 					$isOverallSuccess = isset($result['s']) && $result['s'] === true;
 					$itemResults = $result['d'] ?? [];
@@ -196,8 +200,6 @@ class MigrateTransactionsJob implements ShouldQueue
 						$isSuccess = ($isOverallSuccess && empty($itemResults)) || ($itemResult && isset($itemResult['s']) && $itemResult['s'] === true);
 
 						if ($isSuccess) {
-							$transaction->refresh();
-
 							$transaction->update([
 								'status' => 'success',
 								'migrated_at' => now(),

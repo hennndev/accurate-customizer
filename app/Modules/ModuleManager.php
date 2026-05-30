@@ -20,6 +20,8 @@ use App\Modules\Handlers\ItemCategoryHandler;
 use App\Modules\Handlers\ItemAdjustmentHandler;
 use App\Modules\Handlers\ItemTransferHandler;
 use App\Modules\Handlers\JournalVoucherHandler;
+use App\Modules\Handlers\DownPaymentPurchaseInvoiceHandler;
+use App\Modules\Handlers\DownPaymentSalesInvoiceHandler;
 use App\Modules\Handlers\PurchaseInvoiceHandler;
 use App\Modules\Handlers\UnitHandler;
 use App\Modules\Handlers\VendorCategoryHandler;
@@ -55,14 +57,14 @@ class ModuleManager
             'item-adjustment' => new ItemAdjustmentHandler(),
             'item-transfer' => new ItemTransferHandler(),
             'purchase-invoice' => new PurchaseInvoiceHandler(),
-            'down-payment-purchase-invoice' => new PurchaseInvoiceHandler(),
+            'down-payment-purchase-invoice' => new DownPaymentPurchaseInvoiceHandler(),
             'purchase-order' => new PurchaseOrderHandler(),
             'purchase-payment' => new PurchasePaymentHandler(),
             'purchase-requisition' => new PurchaseRequisitionHandler(),
             'purchase-return' => new PurchaseReturnHandler(),
             'receive-item' => new ReceiveItemHandler(),
             'sales-invoice' => new SalesInvoiceHandler(),
-            'down-payment-sales-invoice' => new SalesInvoiceHandler(),
+            'down-payment-sales-invoice' => new DownPaymentSalesInvoiceHandler(),
             'sales-order' => new SalesOrderHandler(),
             'sales-quotation' => new SalesQuotationHandler(),
             'sales-receipt' => new SalesReceiptHandler(),
@@ -118,6 +120,9 @@ class ModuleManager
             return new ItemTransferHandler();
         }
         if (str_contains($endpoint, '/purchase-invoice/')) {
+            if (str_contains($endpoint, '/down-payment-purchase-invoice/')) {
+                return new DownPaymentPurchaseInvoiceHandler();
+            }
             return new PurchaseInvoiceHandler();
         }
         if (str_contains($endpoint, '/purchase-order/')) {
@@ -136,6 +141,9 @@ class ModuleManager
             return new ReceiveItemHandler();
         }
         if (str_contains($endpoint, '/sales-invoice/')) {
+            if (str_contains($endpoint, '/down-payment-sales-invoice/')) {
+                return new DownPaymentSalesInvoiceHandler();
+            }
             return new SalesInvoiceHandler();
         }
         if (str_contains($endpoint, '/sales-order/')) {

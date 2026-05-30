@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Log;
 class ReceiveItemHandler extends BaseHandler
 {
   protected array $allowedFields = [
+    'number',
     'receiveNumber',
     'transDate',
     'vendorNo',
@@ -65,10 +66,10 @@ class ReceiveItemHandler extends BaseHandler
       }
     }
 
-    if (!empty($detailData['receiveNumber'])) {
-      $detailData['charField1'] = (string) $detailData['receiveNumber'];
-    } elseif (!empty($detailData['number'])) {
+    if (!empty($detailData['number'])) {
       $detailData['charField1'] = (string) $detailData['number'];
+    } elseif (!empty($detailData['receiveNumber'])) {
+      $detailData['charField1'] = (string) $detailData['receiveNumber'];
     }
 
     $filteredData = [];

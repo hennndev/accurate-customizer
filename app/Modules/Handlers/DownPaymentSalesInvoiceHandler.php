@@ -5,11 +5,10 @@ namespace App\Modules\Handlers;
 use App\Services\AccurateService;
 use Illuminate\Support\Facades\Log;
 
-class VendorHandler extends BaseHandler
+class DownPaymentSalesInvoiceHandler extends BaseHandler
 {
     public function preCapture(AccurateService $accurate, array &$sharedContext): void
     {
-        // Fetch branch list once
         try {
             $branchListData = $accurate->fetchModuleData('/api/branch/list.do', []);
             $map = [];
@@ -28,31 +27,26 @@ class VendorHandler extends BaseHandler
 
     public function transformDetail(array &$detailData, array $sharedContext, array $meta = []): void
     {
-        // Transform branchId → branchName
+        $sourceNumber = $detailData['number'] ?? null;
+
+        if ($sourceNumber !== null && $sourceNumber !== '') {
+            $detailData['charField1'] = (string) $sourceNumber;
+        }
+
         $branchList = $sharedContext['branchList'] ?? [];
         if (isset($detailData['branchId']) && !empty($branchList)) {
             $branchId = $detailData['branchId'];
             if (isset($branchList[$branchId]['name'])) {
                 $detailData['branchName'] = $branchList[$branchId]['name'];
-                Log::info('VENDOR_BRANCH_TRANSFORMED', [
-                    'item_id'          => $meta['itemId'] ?? null,
-                    'old_branch_id'    => $branchId,
-                    'new_branch_name'  => $detailData['branchName'],
-                ]);
             } else {
-                Log::warning('VENDOR_BRANCH_NOT_FOUND_IN_LIST', [
-                    'item_id'             => $meta['itemId'] ?? null,
-                    'branch_id'           => $branchId,
-                    'available_branches'  => array_keys($branchList),
+                Log::warning('SALES_INVOICE_BRANCH_NOT_FOUND_IN_LIST', [
+                    'item_id'            => $meta['itemId'] ?? null,
+                    'branch_id'          => $branchId,
+                    'available_branches' => array_keys($branchList),
                 ]);
             }
         }
 
-        Log::info('VENDOR_DETAIL_TRANSFORMED', [
-            'item_id'      => $detailData['id'] ?? null,
-            'vendor_no'    => $detailData['vendorNo'] ?? null,
-            'fields_count' => count($detailData),
-            'fields'       => array_keys($detailData),
-        ]);
+        // Keep full payload for down payment sales invoice capture.
     }
 }

@@ -336,6 +336,54 @@
               <p class="text-xs text-red-600">{{ $message }}</p>
             @enderror
           </div>
+
+          {{-- Down Payment Purchase Invoice Number Source --}}
+          <div class="flex flex-col gap-2 pt-2">
+            <label class="text-sm font-medium text-gray-700">
+              Down Payment Purchase Invoice Number Source
+              <span class="text-red-500">*</span>
+            </label>
+            <p class="text-xs text-gray-500 -mt-1">
+              Sumber nomor down payment purchase invoice yang dipakai untuk referensi detail down payment saat migrasi.
+            </p>
+            <div class="flex flex-col gap-3 mt-1">
+              @php $currentDppiSource = $setting->down_payment_purchase_invoice_number_source ?? 'mapping_table'; @endphp
+
+              <label class="flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors
+                                {{ $currentDppiSource === 'mapping_table' ? 'border-blue-400 bg-blue-50' : 'border-gray-200 bg-white hover:border-gray-300' }}">
+                <input type="radio"
+                       name="down_payment_purchase_invoice_number_source"
+                       value="mapping_table"
+                       class="mt-0.5 text-blue-600 focus:ring-blue-500"
+                       {{ $currentDppiSource === 'mapping_table' ? 'checked' : '' }}>
+                <div class="flex flex-col gap-0.5">
+                  <span class="text-sm font-medium text-gray-800">Down Payment Purchase Invoice Mapping Table</span>
+                  <span class="text-xs text-gray-500">
+                    Ambil nomor baru dari tabel <code class="bg-gray-100 px-1 rounded">down_payment_purchase_invoice_mapping_number</code>.
+                    Gunakan opsi ini jika sudah menjalankan <em>Capture Number Mapping</em> untuk DP purchase invoice.
+                  </span>
+                </div>
+              </label>
+
+              <label class="flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors
+                                {{ $currentDppiSource === 'transaction_number_mappings' ? 'border-blue-400 bg-blue-50' : 'border-gray-200 bg-white hover:border-gray-300' }}">
+                <input type="radio"
+                       name="down_payment_purchase_invoice_number_source"
+                       value="transaction_number_mappings"
+                       class="mt-0.5 text-blue-600 focus:ring-blue-500"
+                       {{ $currentDppiSource === 'transaction_number_mappings' ? 'checked' : '' }}>
+                <div class="flex flex-col gap-0.5">
+                  <span class="text-sm font-medium text-gray-800">Transaction Number Mappings</span>
+                  <span class="text-xs text-gray-500">
+                    Ambil nomor baru dari tabel <code class="bg-gray-100 px-1 rounded">transaction_number_mappings</code> dengan module slug <code class="bg-gray-100 px-1 rounded">down-payment-purchase-invoice</code>.
+                  </span>
+                </div>
+              </label>
+            </div>
+            @error('down_payment_purchase_invoice_number_source')
+              <p class="text-xs text-red-600">{{ $message }}</p>
+            @enderror
+          </div>
         </div>
       </div>
 
