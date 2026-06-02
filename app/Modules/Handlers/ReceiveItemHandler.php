@@ -7,30 +7,6 @@ use Illuminate\Support\Facades\Log;
 
 class ReceiveItemHandler extends BaseHandler
 {
-  protected array $allowedFields = [
-    'number',
-    'receiveNumber',
-    'transDate',
-    'vendorNo',
-    'vendor',
-    'branchName',    // hasil transform dari branchId
-    'description',
-    'detailItem',
-    'purchaseOrder',
-    'fobName',
-    'cashDiscount',
-    'currencyCode',
-    'inclusiveTax',
-    'paymentTermName',
-    'rate',
-    'shipDate',
-    'shipmentName',
-    'taxDate',
-    'taxable',
-    'toAddress',
-    'charField1',
-  ];
-
   public function preCapture(AccurateService $accurate, array &$sharedContext): void
   {
     try {
@@ -71,15 +47,6 @@ class ReceiveItemHandler extends BaseHandler
     } elseif (!empty($detailData['receiveNumber'])) {
       $detailData['charField1'] = (string) $detailData['receiveNumber'];
     }
-
-    $filteredData = [];
-    foreach ($this->allowedFields as $field) {
-      if (array_key_exists($field, $detailData)) {
-        $filteredData[$field] = $detailData[$field];
-      }
-    }
-
-    $detailData = $filteredData;
   }
 }
 
