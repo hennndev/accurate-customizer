@@ -502,9 +502,17 @@ class DataCleaner
                             if ($key === 'detailInvoice' && (str_contains($endpoint, 'purchase-payment') || str_contains($endpoint, 'sales-receipt'))) {
                                 if (isset($cleanedSubItem['invoice']['number'])) {
                                     if (str_contains($endpoint, 'purchase-payment')) {
-                                        $cleanedSubItem['invoiceNo'] = $this->resolvePurchaseInvoiceNumber(
-                                            $cleanedSubItem['invoice']['number']
-                                        );
+                                        $invoiceDpRaw = $cleanedSubItem['invoiceDp'] ?? $cleanedSubItem['invoiceDP'] ?? false;
+                                        $isInvoiceDp = filter_var($invoiceDpRaw, FILTER_VALIDATE_BOOLEAN);
+                                        if ($isInvoiceDp) {
+                                            $cleanedSubItem['invoiceNo'] = $this->resolveDownPaymentPurchaseInvoiceNumber(
+                                                $cleanedSubItem['invoice']['number']
+                                            );
+                                        } else {
+                                            $cleanedSubItem['invoiceNo'] = $this->resolvePurchaseInvoiceNumber(
+                                                $cleanedSubItem['invoice']['number']
+                                            );
+                                        }
                                     } else {
                                         $cleanedSubItem['invoiceNo'] = $this->resolveSalesInvoiceNumber(
                                             $cleanedSubItem['invoice']['number']
