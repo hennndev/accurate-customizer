@@ -78,8 +78,6 @@
                const captureDatabaseId = document.getElementById('capture_database_id')?.value || '';
                const startDate = document.getElementById('start_date')?.value || '';
                const endDate = document.getElementById('end_date')?.value || '';
-               const startTime = document.getElementById('start_time')?.value || '00:00';
-               const endTime = document.getElementById('end_time')?.value || '23:59';
                const filterType = document.querySelector('input[name=\'filter_type\']:checked')?.value || 'range';
        
                this.capturing = true;
@@ -108,8 +106,6 @@
                            capture_database_id: captureDatabaseId,
                            start_date: startDate,
                            end_date: endDate,
-                           start_time: startTime,
-                           end_time: endTime,
                            filter_type: filterType,
                        }),
                    });
@@ -233,12 +229,19 @@
         </form>
       </div>
 
-      <div class="bg-white rounded-xl border border-gray-200 p-5 flex flex-col gap-4">
-        <div class="grid grid-cols-1 md:grid-cols-7 gap-4">
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex flex-col gap-5">
+        <div class="flex items-center justify-between pb-3 border-b border-gray-100">
           <div>
-            <label class="block text-sm text-gray-700 mb-1">Database Capture</label>
+            <h2 class="text-lg font-bold text-gray-900">Capture Number Mapping</h2>
+            <p class="text-sm text-gray-500 mt-0.5">Tarik data dari Accurate ke sistem lokal</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-5 gap-5">
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1.5">Database Capture</label>
             <select id="capture_database_id"
-                    class="w-full border-gray-300 rounded-lg text-sm"
+                    class="w-full border-gray-300 rounded-xl shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm bg-gray-50/50"
                     :disabled="capturing">
               @foreach ($captureDatabaseOptions as $captureDb)
                 <option value="{{ $captureDb['id'] }}"
@@ -248,9 +251,9 @@
           </div>
 
           <div>
-            <label class="block text-sm text-gray-700 mb-1">Module Capture</label>
+            <label class="block text-sm font-semibold text-gray-700 mb-1.5">Module Capture</label>
             <select id="capture_module"
-                    class="w-full border-gray-300 rounded-lg text-sm"
+                    class="w-full border-gray-300 rounded-xl shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm bg-gray-50/50"
                     :disabled="capturing">
               @foreach ($moduleOptions as $slug => $label)
                 <option value="{{ $slug }}"
@@ -260,36 +263,18 @@
           </div>
 
           <div>
-            <label class="block text-sm text-gray-700 mb-1">Start Date</label>
+            <label class="block text-sm font-semibold text-gray-700 mb-1.5">Start Date</label>
             <input id="start_date"
                    type="date"
-                   class="w-full border-gray-300 rounded-lg text-sm"
+                   class="w-full border-gray-300 rounded-xl shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm bg-gray-50/50"
                    :disabled="capturing" />
           </div>
 
           <div>
-            <label class="block text-sm text-gray-700 mb-1">End Date</label>
+            <label class="block text-sm font-semibold text-gray-700 mb-1.5">End Date</label>
             <input id="end_date"
                    type="date"
-                   class="w-full border-gray-300 rounded-lg text-sm"
-                   :disabled="capturing" />
-          </div>
-
-          <div>
-            <label class="block text-sm text-gray-700 mb-1">Start Time</label>
-            <input id="start_time"
-                   type="time"
-                   value="00:00"
-                   class="w-full border-gray-300 rounded-lg text-sm"
-                   :disabled="capturing" />
-          </div>
-
-          <div>
-            <label class="block text-sm text-gray-700 mb-1">End Time</label>
-            <input id="end_time"
-                   type="time"
-                   value="23:59"
-                   class="w-full border-gray-300 rounded-lg text-sm"
+                   class="w-full border-gray-300 rounded-xl shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm bg-gray-50/50"
                    :disabled="capturing" />
           </div>
 
@@ -297,11 +282,16 @@
             <button type="button"
                     @click="captureData()"
                     :disabled="capturing"
-                    class="px-4 py-2 text-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 rounded-lg">Capture List</button>
+                    class="px-5 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-xl shadow-sm transition-all w-full flex justify-center items-center gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+              </svg>
+              Capture
+            </button>
             <button type="button"
                     @click="cancelCapture()"
                     x-show="capturing"
-                    class="px-4 py-2 text-sm text-white bg-rose-600 hover:bg-rose-700 rounded-lg">Cancel</button>
+                    class="px-5 py-2.5 text-sm font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-sm transition-all">Batal</button>
           </div>
         </div>
 
@@ -362,29 +352,31 @@
         </div>
       </div>
 
-      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mt-2">
         <div class="overflow-x-auto">
           <table class="min-w-full text-sm">
-            <thead class="bg-gray-50 border-b border-gray-200">
+            <thead class="bg-gray-50/80 border-b border-gray-100">
               <tr>
-                <th class="text-left px-4 py-3 font-medium text-gray-700">Database</th>
-                <th class="text-left px-4 py-3 font-medium text-gray-700">Module</th>
-                <th class="text-left px-4 py-3 font-medium text-gray-700">Old Number</th>
-                <th class="text-left px-4 py-3 font-medium text-gray-700">New Number</th>
+                <th class="text-left px-5 py-3.5 font-bold text-gray-700 w-16">No.</th>
+                <th class="text-left px-5 py-3.5 font-bold text-gray-700">Database</th>
+                <th class="text-left px-5 py-3.5 font-bold text-gray-700">Module</th>
+                <th class="text-left px-5 py-3.5 font-bold text-gray-700">Old Number</th>
+                <th class="text-left px-5 py-3.5 font-bold text-gray-700">New Number</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody class="divide-y divide-gray-50">
               @forelse ($mappings as $mapping)
-                <tr class="border-b border-gray-100">
-                  <td class="px-4 py-3 text-gray-700">{{ $mapping->db_name }}</td>
-                  <td class="px-4 py-3 text-gray-700">{{ $moduleOptions[$selectedModule] ?? 'Sales Invoice' }}</td>
-                  <td class="px-4 py-3 font-medium text-gray-900">{{ $mapping->old_number }}</td>
-                  <td class="px-4 py-3 text-gray-700">{{ $mapping->new_number ?: '-' }}</td>
+                <tr class="hover:bg-blue-50/30 transition-colors">
+                  <td class="px-5 py-4 text-gray-500 font-medium">{{ $mappings->firstItem() + $loop->index }}</td>
+                  <td class="px-5 py-4 text-gray-700">{{ $mapping->db_name }}</td>
+                  <td class="px-5 py-4 text-gray-700">{{ $moduleOptions[$selectedModule] ?? 'Sales Invoice' }}</td>
+                  <td class="px-5 py-4 font-bold text-gray-900">{{ $mapping->old_number }}</td>
+                  <td class="px-5 py-4 font-bold text-blue-600">{{ $mapping->new_number ?: '-' }}</td>
                 </tr>
               @empty
                 <tr>
-                  <td colspan="4"
-                      class="px-4 py-8 text-center text-gray-500">Belum ada data mapping number.</td>
+                  <td colspan="5"
+                      class="px-5 py-12 text-center text-gray-400 font-medium">Belum ada data mapping number.</td>
                 </tr>
               @endforelse
             </tbody>

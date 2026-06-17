@@ -60,15 +60,10 @@ class DataMigrateController extends Controller
         'created_at',
       ])
       ->selectRaw("JSON_UNQUOTE(JSON_EXTRACT(data, '$.transDate')) as trans_date_raw");
-    $customerNameExpression = "JSON_UNQUOTE(JSON_EXTRACT(data, '$.customer.name'))";
-    $programInjekExpression = "JSON_UNQUOTE(JSON_EXTRACT(data, '$.\"PROGRAM INJEK\"'))";
-    $customerProgramExpression = "JSON_UNQUOTE(JSON_EXTRACT(data, '$.\"CUSTOMER PROGRAM\"'))";
-    $transDateExpression = "COALESCE(
-      STR_TO_DATE(JSON_UNQUOTE(JSON_EXTRACT(data, '$.transDate')), '%d/%m/%Y'),
-      STR_TO_DATE(JSON_UNQUOTE(JSON_EXTRACT(data, '$.transDate')), '%Y-%m-%d'),
-      STR_TO_DATE(JSON_UNQUOTE(JSON_EXTRACT(data, '$.transDate')), '%d/%m/%Y %H:%i:%s'),
-      STR_TO_DATE(JSON_UNQUOTE(JSON_EXTRACT(data, '$.transDate')), '%Y-%m-%d %H:%i:%s')
-    )";
+    $customerNameExpression = "customer_name_virtual";
+    $programInjekExpression = "program_injek_virtual";
+    $customerProgramExpression = "customer_program_virtual";
+    $transDateExpression = "trans_date_virtual";
 
     if ($request->filled('search')) {
       $search = $request->search;
@@ -130,10 +125,10 @@ class DataMigrateController extends Controller
     // Module-specific detail field search (JSON array traversal)
     // Config: module name → list of JSON paths to search in
     $moduleDetailSearchConfig = [
-      'Sales Receipt'     => ['$.detailInvoice[*].invoice.number', '$.detailInvoice[*].invoiceNo'],
-      'Purchase Payment'  => ['$.detailInvoice[*].invoice.number', '$.detailInvoice[*].invoiceNo'],
-      'Sales Return'      => ['$.invoiceNo', '$.salesInvoiceNo'],
-      'Sales Invoice'     => ['$.number'],
+      'Sales Receipt' => ['$.detailInvoice[*].invoice.number', '$.detailInvoice[*].invoiceNo'],
+      'Purchase Payment' => ['$.detailInvoice[*].invoice.number', '$.detailInvoice[*].invoiceNo'],
+      'Sales Return' => ['$.invoiceNo', '$.salesInvoiceNo'],
+      'Sales Invoice' => ['$.number'],
     ];
 
     if ($request->filled('detail_field_search') && $request->filled('module') && $request->module !== 'All Modules') {
@@ -154,7 +149,6 @@ class DataMigrateController extends Controller
     }
 
     $sortDateDirection = strtolower((string) $request->input('sort_date', 'desc')) === 'asc' ? 'asc' : 'desc';
-    $query->orderByRaw("({$transDateExpression} IS NULL) ASC");
     $query->orderByRaw("{$transDateExpression} {$sortDateDirection}");
     $query->orderByDesc('id');
 
@@ -267,7 +261,7 @@ class DataMigrateController extends Controller
       'user_id' => Auth::id(),
     ]);
 
-    return redirect()->route('migrate.index')->with('delete_success', "Transaction {$transactionNo} berhasil dihapus.");
+    return back()->with('delete_success', "Transaction {$transactionNo} berhasil dihapus.");
   }
 
   // UPDATE TRANSACTION DATA (JSON)
@@ -280,9 +274,9 @@ class DataMigrateController extends Controller
     try {
       // Parse JSON to validate it's valid JSON
       $jsonData = json_decode($request->data, true);
-      
+
       if (json_last_error() !== JSON_ERROR_NONE) {
-        return redirect()->route('migrate.index')
+        return back()
           ->with('error', 'Invalid JSON format: ' . json_last_error_msg());
       }
 
@@ -305,11 +299,11 @@ class DataMigrateController extends Controller
         'user_id' => Auth::id(),
       ]);
 
-      return redirect()->route('migrate.index')
+      return back()
         ->with('edit_success', "Data transaksi {$transaction->transaction_no} berhasil diperbarui.");
-        
+
     } catch (\Exception $e) {
-      return redirect()->route('migrate.index')
+      return back()
         ->with('error', 'Failed to update transaction: ' . $e->getMessage());
     }
   }
@@ -364,7 +358,7 @@ class DataMigrateController extends Controller
       'user_id' => Auth::id(),
     ]);
 
-    return redirect()->route('migrate.index')->with('delete_success', count($ids) . ' transaksi berhasil dihapus: ' . implode(', ', $transactionNumbers) . '.');
+    return back()->with('delete_success', count($ids) . ' transaksi berhasil dihapus: ' . implode(', ', $transactionNumbers) . '.');
   }
 
 
@@ -379,7 +373,7 @@ class DataMigrateController extends Controller
     ]);
 
     $targetDbId = $request->input('target_database_id');
-    
+
     // Get database info from Accurate API and open fresh session for target database
     try {
       $dbInfo = $this->accurateService->openDatabaseById($targetDbId);
@@ -390,7 +384,7 @@ class DataMigrateController extends Controller
             'message' => 'Failed to connect to target database. Please try again.',
           ], 422);
         }
-        return redirect()->route('migrate.index')->with('error', 'Failed to connect to target database. Please try again.');
+        return back()->with('error', 'Failed to connect to target database. Please try again.');
       }
       $targetDbName = $dbInfo['name'] ?? $dbInfo['alias'] ?? 'Unknown Database';
 
@@ -409,7 +403,7 @@ class DataMigrateController extends Controller
           'message' => 'Failed to connect to database: ' . $e->getMessage(),
         ], 500);
       }
-      return redirect()->route('migrate.index')->with('error', 'Failed to connect to database: ' . $e->getMessage());
+      return back()->with('error', 'Failed to connect to database: ' . $e->getMessage());
     }
 
     $ids = $request->input('ids', []);
@@ -452,9 +446,28 @@ class DataMigrateController extends Controller
       ]);
     }
 
-    return redirect()->route('migrate.index')->with(
+    return back()->with(
       'success',
       "Migration queued. Monitor ID: {$tracker->id}. Cek progress di System Logs."
     );
   }
+
+    public function clearAllTransactions()
+    {
+        try {
+            \Illuminate\Support\Facades\Schema::disableForeignKeyConstraints();
+            \App\Models\Transaction::truncate();
+            \Illuminate\Support\Facades\Schema::enableForeignKeyConstraints();
+            return response()->json([
+                "success" => true,
+                "message" => "All transaction data has been permanently deleted."
+            ]);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Schema::enableForeignKeyConstraints();
+            return response()->json([
+                "success" => false,
+                "message" => "Error deleting transactions: " . $e->getMessage()
+            ], 500);
+        }
+    }
 }

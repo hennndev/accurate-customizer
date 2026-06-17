@@ -204,8 +204,8 @@ class CaptureModuleJob implements ShouldQueue
 
             CaptureListItemId::upsert(
                 $listIdCacheRows,
-                ['accurate_database_id', 'module_slug', 'params_hash', 'list_item_id'],
-                ['fallback_number', 'captured_from_list_at', 'updated_at']
+                ['accurate_database_id', 'module_slug', 'list_item_id'],
+                ['params_hash', 'fallback_number', 'captured_from_list_at', 'updated_at']
             );
 
             $listIdCacheRows = [];

@@ -617,60 +617,34 @@
                                                 {{ $log->status === 'success' ? 'border-green-300' : '' }}
                                                 {{ $log->status === 'info' ? 'border-blue-300' : '' }}
                                                 p-3 space-y-2">
-                        @if (isset($log->payload['module']))
-                          <div class="flex items-start gap-2">
-                            <span class="text-xs font-medium text-gray-500 min-w-[120px]">Module:</span>
-                            <span class="text-xs font-medium text-gray-900">{{ $log->payload['module'] }}</span>
-                          </div>
-                        @endif
-                        @if (isset($log->payload['target_database']))
-                          <div class="flex items-start gap-2">
-                            <span class="text-xs font-medium text-gray-500 min-w-[120px]">Target Database:</span>
-                            <span class="text-xs font-medium text-gray-900">{{ $log->payload['target_database'] }}</span>
-                          </div>
-                        @endif
-                        @if (isset($log->payload['total_items']))
-                          <div class="flex items-start gap-2">
-                            <span class="text-xs font-medium text-gray-500 min-w-[120px]">Total Items:</span>
-                            <span class="text-xs font-medium text-gray-900">{{ $log->payload['total_items'] }}</span>
-                          </div>
-                        @endif
-                        @if (isset($log->payload['success_items']))
-                          <div class="flex items-start gap-2">
-                            <span class="text-xs font-medium text-gray-500 min-w-[120px]">Success Items:</span>
-                            <span class="text-xs font-semibold text-green-600">{{ $log->payload['success_items'] }}</span>
-                          </div>
-                        @endif
-                        @if (isset($log->payload['failed_items']) && $log->payload['failed_items'] > 0)
-                          <div class="flex items-start gap-2">
-                            <span class="text-xs font-medium text-gray-500 min-w-[120px]">Failed Items:</span>
-                            <span class="text-xs font-semibold text-red-600">{{ $log->payload['failed_items'] }}</span>
-                          </div>
-                        @endif
-                        @if (isset($log->payload['endpoint']))
-                          <div class="flex items-start gap-2">
-                            <span class="text-xs font-medium text-gray-500 min-w-[120px]">API Endpoint:</span>
-                            <span class="text-xs font-medium text-gray-900 break-all">{{ $log->payload['endpoint'] }}</span>
-                          </div>
-                        @endif
-                        @if (isset($log->payload['transaction_ids']) && count($log->payload['transaction_ids']) > 0)
-                          <div class="flex items-start gap-2">
-                            <span class="text-xs font-medium text-gray-500 min-w-[120px]">Transaction IDs:</span>
-                            <span class="text-xs font-medium text-gray-900">{{ count($log->payload['transaction_ids']) }} transaction(s)</span>
-                          </div>
-                        @endif
-                        @if (isset($log->payload['transaction_no']))
-                          <div class="flex items-start gap-2">
-                            <span class="text-xs font-medium text-gray-500 min-w-[120px]">Transaction No:</span>
-                            <span class="text-xs font-medium text-gray-900">{{ $log->payload['transaction_no'] }}</span>
-                          </div>
-                        @endif
-                        @if (isset($log->payload['source_database']))
-                          <div class="flex items-start gap-2">
-                            <span class="text-xs font-medium text-gray-500 min-w-[120px]">Source Database:</span>
-                            <span class="text-xs font-medium text-gray-900">{{ $log->payload['source_database'] }}</span>
-                          </div>
-                        @endif
+                        @php
+                          $excludedKeys = ['error', 'errors'];
+                          $payloadArray = is_array($log->payload) ? $log->payload : [];
+                        @endphp
+                        @foreach ($payloadArray as $key => $value)
+                          @if(!in_array($key, $excludedKeys))
+                            <div class="flex items-start gap-2">
+                              <span class="text-xs font-medium text-gray-500 min-w-[150px] capitalize">{{ str_replace('_', ' ', $key) }}:</span>
+                              @if(is_array($value))
+                                @if(count($value) > 0)
+                                  <div class="flex flex-wrap gap-1 flex-1">
+                                    @foreach($value as $v)
+                                      <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-800 border border-gray-200">
+                                        {{ is_string($v) || is_numeric($v) ? $v : json_encode($v) }}
+                                      </span>
+                                    @endforeach
+                                  </div>
+                                @else
+                                  <span class="text-xs font-medium text-gray-400 italic">Empty array</span>
+                                @endif
+                              @elseif(is_bool($value))
+                                <span class="text-xs font-semibold {{ $value ? 'text-green-600' : 'text-gray-500' }}">{{ $value ? 'Yes' : 'No' }}</span>
+                              @else
+                                <span class="text-xs font-medium text-gray-900 break-all">{{ $value }}</span>
+                              @endif
+                            </div>
+                          @endif
+                        @endforeach
                       </div>
                     </div>
                   </div>
