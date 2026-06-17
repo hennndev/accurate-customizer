@@ -54,10 +54,10 @@ class SystemLogsController extends Controller
         // Filter by search (message or event_type)
         if ($request->filled('search')) {
             $search = $request->search;
-            $query->where(function($q) use ($search) {
+            $query->where(function ($q) use ($search) {
                 $q->where('message', 'like', "%{$search}%")
-                  ->orWhere('event_type', 'like', "%{$search}%")
-                  ->orWhere('module', 'like', "%{$search}%");
+                    ->orWhere('event_type', 'like', "%{$search}%")
+                    ->orWhere('module', 'like', "%{$search}%");
             });
         }
 
@@ -83,7 +83,7 @@ class SystemLogsController extends Controller
         $failedCount = SystemLog::where('status', 'failed')->count();
         $infoCount = SystemLog::where('status', 'info')->count();
         $warningCount = SystemLog::where('status', 'warning')->count();
-        
+
         $successRate = $totalEvents > 0 ? number_format(($successCount / $totalEvents) * 100, 1) : 0;
 
         return view('system-logs.index', compact(
@@ -110,19 +110,24 @@ class SystemLogsController extends Controller
             'message' => $log->message,
             'payload' => $log->payload,
             'updated_at' => $log->updated_at,
+        ])->withHeaders([
+            'Cache-Control' => 'no-cache, no-store, must-revalidate',
+            'Pragma' => 'no-cache',
+            'Expires' => '0',
         ]);
     }
 
     public function active(Request $request)
     {
-        $eventType = $request->input('event_type');
+        $eventTypeInput = $request->input('event_type');
+        $eventTypes = $eventTypeInput ? explode(',', $eventTypeInput) : [];
 
         SystemLog::query()
             ->whereIn('event_type', ['capture_queue', 'migrate_queue', 'transaction_number_mapping_queue'])
             ->whereIn('status', ['queued', 'running'])
             ->where('user_id', Auth::id())
-            ->when($eventType, function ($q) use ($eventType) {
-                $q->where('event_type', $eventType);
+            ->when(!empty($eventTypes), function ($q) use ($eventTypes) {
+                $q->whereIn('event_type', $eventTypes);
             })
             ->orderByDesc('updated_at')
             ->limit(10)
@@ -136,8 +141,8 @@ class SystemLogsController extends Controller
             ->where('user_id', Auth::id())
             ->orderByDesc('updated_at');
 
-        if ($eventType) {
-            $query->where('event_type', $eventType);
+        if (!empty($eventTypes)) {
+            $query->whereIn('event_type', $eventTypes);
         }
 
         $log = $query->first();
@@ -147,6 +152,10 @@ class SystemLogsController extends Controller
                 'success' => true,
                 'active' => false,
                 'log' => null,
+            ])->withHeaders([
+                'Cache-Control' => 'no-cache, no-store, must-revalidate',
+                'Pragma' => 'no-cache',
+                'Expires' => '0',
             ]);
         }
 
@@ -162,6 +171,10 @@ class SystemLogsController extends Controller
                 'payload' => $log->payload,
                 'updated_at' => $log->updated_at,
             ],
+        ])->withHeaders([
+            'Cache-Control' => 'no-cache, no-store, must-revalidate',
+            'Pragma' => 'no-cache',
+            'Expires' => '0',
         ]);
     }
 
@@ -287,5 +300,25 @@ class SystemLogsController extends Controller
             'success' => true,
             'message' => 'Capture dibatalkan',
         ]);
+    }
+
+    public function clearAllLogs()
+    {
+        try {
+            \Illuminate\Support\Facades\Schema::disableForeignKeyConstraints();
+            \App\Models\SystemLog::truncate();
+            \Illuminate\Support\Facades\DB::table("jobs")->truncate();
+            \Illuminate\Support\Facades\Schema::enableForeignKeyConstraints();
+            return response()->json([
+                "success" => true,
+                "message" => "All system logs and job queues have been permanently deleted."
+            ]);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Schema::enableForeignKeyConstraints();
+            return response()->json([
+                "success" => false,
+                "message" => "Error deleting logs: " . $e->getMessage()
+            ], 500);
+        }
     }
 }

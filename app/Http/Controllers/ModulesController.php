@@ -34,7 +34,6 @@ class ModulesController extends Controller
       ? Transaction::where("accurate_database_id", $databaseId)->count()
       : 0;
 
-    // Get all modules untuk database ini dengan transaction count
     $modules = $databaseId
       ? Module::where('accurate_database_id', $databaseId)
       ->withCount(['transactions' => function ($query) use ($databaseId) {
@@ -43,11 +42,24 @@ class ModulesController extends Controller
       ->get()
       : collect([]);
 
+    $allLocalDatabases = \App\Models\AccurateDatabase::all();
+    $globalCounts = \App\Models\Transaction::select('transactions.accurate_database_id', 'modules.slug', \DB::raw('count(*) as total'))
+      ->join('modules', 'transactions.module_id', '=', 'modules.id')
+      ->groupBy('transactions.accurate_database_id', 'modules.slug')
+      ->get();
+
+    $countsBySlugAndDb = [];
+    foreach ($globalCounts as $count) {
+      $countsBySlugAndDb[$count->slug][$count->accurate_database_id] = $count->total;
+    }
+
     return view('modules.index', [
       'databases' => $dbList,
       'current_database_name' => $currentDatabase,
       'total_transactions' => $totalTransactions,
       'modules' => $modules,
+      'allLocalDatabases' => $allLocalDatabases,
+      'countsBySlugAndDb' => $countsBySlugAndDb,
     ]);
   }
 

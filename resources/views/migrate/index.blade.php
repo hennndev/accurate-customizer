@@ -53,6 +53,32 @@
            migrateMonitorId: null,
            progress: 0,
            currentStatus: 'Preparing migration...',
+           showTargetDbModal: false,
+           modalSelectedDbId: '',
+           modalForceCreate: true,
+           modalTargetIds: [],
+           
+           openMigrateModal(singleId = null) {
+               if (this.migrating) {
+                   alert('Proses migrasi sedang berjalan. Harap tunggu hingga selesai.');
+                   return;
+               }
+               
+               if (!singleId && !this.selected.length) {
+                   alert('Pilih minimal 1 transaksi untuk migrate.');
+                   return;
+               }
+               this.showTargetDbModal = true;
+               this.modalTargetIds = singleId ? [String(singleId)] : [...new Set(this.selected.map(id => String(id)))];
+               this.modalSelectedDbId = document.getElementById('targetDatabaseSelect')?.value || '';
+               this.modalForceCreate = true;
+           },
+           
+           closeMigrateModal() {
+               this.showTargetDbModal = false;
+               this.modalTargetIds = [];
+           },
+
            migrateSuccessCount: 0,
            migrateFailedCount: 0,
            migrateTotalSelected: 0,
@@ -384,21 +410,13 @@
                }
            },
        
-           async migrateSelected() {
-               // Validate target database is selected
-               const targetDbSelect = document.getElementById('targetDatabaseSelect');
-               if (!targetDbSelect || !targetDbSelect.value) {
-                   alert('Please select a target database first!');
+           async executeMigration() {
+               if (!this.modalSelectedDbId) {
+                   alert('Please select a target database!');
                    return;
                }
-       
-               if (!this.selected.length) {
-                   alert('Pilih minimal 1 transaksi untuk migrate.');
-                   return;
-               }
-       
-               const migrateIds = [...new Set(this.selected.map(id => String(id)))];
-       
+
+               this.closeMigrateModal();
                this.migrating = true;
                this.migrateMonitorVisible = true;
                this.migrateMonitorId = null;
@@ -406,8 +424,8 @@
                this.currentStatus = 'Preparing migration...';
                this.migrateSuccessCount = 0;
                this.migrateFailedCount = 0;
-               this.migrateTotalSelected = migrateIds.length;
-       
+               this.migrateTotalSelected = this.modalTargetIds.length;
+
                try {
                    const response = await fetch('{{ route('migrate.toAccurate') }}', {
                        method: 'POST',
@@ -416,78 +434,29 @@
                            'Content-Type': 'application/json',
                            'Accept': 'application/json',
                            'X-Requested-With': 'XMLHttpRequest',
-                           'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                           'X-CSRF-TOKEN': '{{ csrf_token() }}'
                        },
                        body: JSON.stringify({
-                           target_database_id: Number(targetDbSelect.value),
-                           ids: migrateIds.map(id => Number(id)),
-                           force_create: true,
-                       }),
+                           target_database_id: Number(this.modalSelectedDbId),
+                           ids: this.modalTargetIds.map(id => Number(id)),
+                           force_create: this.modalForceCreate
+                       })
                    });
-       
+
                    const result = await response.json();
-                   if (!(response.ok && result?.success && result?.queued && result?.monitor_id)) {
-                       throw new Error(result?.message || 'Failed to queue migration');
+                   if (response.ok && result?.success && result?.queued && result?.monitor_id) {
+                       this.migrateMonitorId = result.monitor_id;
+                       this.currentStatus = result?.message || 'Migration queued';
+                       this.saveMigrateMonitorState();
+                       await this.pollMigrateStatus();
+                   } else {
+                       this.migrating = false;
+                       this.currentStatus = result.message || 'Failed to start migration';
+                       alert(this.currentStatus);
                    }
-       
-                   this.migrateMonitorId = result.monitor_id;
-                   this.currentStatus = result?.message || 'Migration queued';
-                   this.saveMigrateMonitorState();
-                   await this.pollMigrateStatus();
                } catch (error) {
                    this.migrating = false;
-                   this.currentStatus = error?.message || 'Migration request failed';
-                   this.clearMigrateMonitorState();
-                   alert(this.currentStatus);
-               }
-           },
-       
-           async migrateSingleCreate(transactionId) {
-               const targetDbSelect = document.getElementById('targetDatabaseSelect');
-               if (!targetDbSelect || !targetDbSelect.value) {
-                   alert('Please select a target database first!');
-                   return;
-               }
-       
-               this.migrating = true;
-               this.migrateMonitorVisible = true;
-               this.migrateMonitorId = null;
-               this.progress = 0;
-               this.currentStatus = 'Preparing migration...';
-               this.migrateSuccessCount = 0;
-               this.migrateFailedCount = 0;
-               this.migrateTotalSelected = 1;
-       
-               try {
-                   const response = await fetch('{{ route('migrate.toAccurate') }}', {
-                       method: 'POST',
-                       credentials: 'same-origin',
-                       headers: {
-                           'Content-Type': 'application/json',
-                           'Accept': 'application/json',
-                           'X-Requested-With': 'XMLHttpRequest',
-                           'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                       },
-                       body: JSON.stringify({
-                           target_database_id: Number(targetDbSelect.value),
-                           ids: [Number(transactionId)],
-                           force_create: true,
-                       }),
-                   });
-       
-                   const result = await response.json();
-                   if (!(response.ok && result?.success && result?.queued && result?.monitor_id)) {
-                       throw new Error(result?.message || 'Failed to queue migration');
-                   }
-       
-                   this.migrateMonitorId = result.monitor_id;
-                   this.currentStatus = result?.message || 'Migration queued';
-                   this.saveMigrateMonitorState();
-                   await this.pollMigrateStatus();
-               } catch (error) {
-                   this.migrating = false;
-                   this.currentStatus = error?.message || 'Migration request failed';
-                   this.clearMigrateMonitorState();
+                   this.currentStatus = 'Network error while starting migration.';
                    alert(this.currentStatus);
                }
            }
@@ -1033,7 +1002,7 @@
             </svg>
             <span>Remove <span x-text="selected.length"></span> Selected</span>
           </button>
-          <button @click.prevent="migrateSelected()"
+          <button @click.prevent="openMigrateModal()"
                   type="button"
                   :disabled="migrating"
                   class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 md:px-6 py-2 md:py-2.5 rounded-lg transition flex items-center gap-2 text-sm md:text-base disabled:opacity-60 disabled:cursor-not-allowed">
@@ -1485,7 +1454,6 @@
 
         @php
           $selectedCustomerName = (string) request('customer_name', '');
-          $selectedProgramValue = (string) request('program_value', '');
         @endphp
 
         <div class="relative w-full md:w-auto">
@@ -1497,20 +1465,6 @@
               <option value="{{ $customerName }}"
                       {{ (string) $customerName === $selectedCustomerName ? 'selected' : '' }}>
                 {{ $customerName }}
-              </option>
-            @endforeach
-          </select>
-        </div>
-
-        <div class="relative w-full md:w-auto">
-          <select name="program_value"
-                  class="bg-white w-full md:min-w-[220px] border border-gray-200 text-gray-700 text-xs md:text-sm rounded-md py-2 px-3 md:px-4 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium">
-            <option value=""
-                    {{ $selectedProgramValue === '' ? 'selected' : '' }}>PROGRAM: All</option>
-            @foreach ($programOptions ?? [] as $programOption)
-              <option value="{{ $programOption }}"
-                      {{ (string) $programOption === $selectedProgramValue ? 'selected' : '' }}>
-                {{ $programOption }}
               </option>
             @endforeach
           </select>
@@ -1823,9 +1777,11 @@
                     <div class="flex items-center justify-center gap-2">
                       @if ($transaction->status === 'success')
                         <!-- Create Again Button -->
-                        <button @click.prevent="migrateSingleCreate({{ $transaction->id }})"
+                        <button @click.prevent="openMigrateModal({{ $transaction->id }})"
                                 type="button"
-                                class="inline-flex items-center justify-center p-1.5 md:p-2 rounded-lg hover:bg-green-50 text-green-600 hover:text-green-700 transition"
+                                :disabled="migrating"
+                                class="inline-flex items-center justify-center p-1.5 md:p-2 rounded-lg transition"
+                                :class="migrating ? 'opacity-50 cursor-not-allowed text-gray-400' : 'hover:bg-green-50 text-green-600 hover:text-green-700'"
                                 title="Create Again (Force Create)">
                           <svg xmlns="http://www.w3.org/2000/svg"
                                fill="none"
@@ -2327,6 +2283,73 @@
         </template>
       </form>
 
+      
+      <!-- Target DB Selection Modal -->
+      <div x-show="showTargetDbModal" class="fixed inset-0 z-[100] overflow-y-auto" style="display: none;" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <div class="flex items-end justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+          <div x-show="showTargetDbModal" x-transition.opacity class="fixed inset-0 transition-opacity bg-gray-900/60 backdrop-blur-sm" aria-hidden="true"></div>
+          <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+          <div x-show="showTargetDbModal" 
+               x-transition:enter="ease-out duration-300" 
+               x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95" 
+               x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100" 
+               x-transition:leave="ease-in duration-200" 
+               x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100" 
+               x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95" 
+               class="inline-block overflow-hidden text-left align-bottom transition-all transform bg-white rounded-2xl shadow-2xl sm:my-8 sm:align-middle sm:max-w-lg sm:w-full border border-gray-100">
+            
+            <div class="px-6 py-5 bg-white border-b border-gray-100">
+              <h3 class="text-xl font-bold text-gray-900" id="modal-title">Konfirmasi Migrasi Data</h3>
+              <p class="mt-1 text-sm text-gray-500">Silakan lengkapi pengaturan di bawah ini sebelum memulai proses migrasi ke Accurate.</p>
+            </div>
+
+            <div class="px-6 py-6 bg-gray-50/30">
+              <div class="space-y-5">
+                
+                <!-- Migration Info Summary -->
+                <div class="grid grid-cols-2 gap-4">
+                  <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col items-center text-center">
+                    <span class="text-xs font-bold tracking-wider text-gray-500 uppercase mb-1">Total Data</span>
+                    <span class="text-2xl font-black text-blue-600" x-text="modalTargetIds.length"></span>
+                  </div>
+                  <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col items-center text-center">
+                    <span class="text-xs font-bold tracking-wider text-gray-500 uppercase mb-1">Filter Modul</span>
+                    <span class="text-sm font-bold text-indigo-600 mt-1" x-text="filterModuleSelected || 'All Modules'"></span>
+                  </div>
+                </div>
+
+                <!-- Database Selection -->
+                <div>
+                  <label class="block text-sm font-bold text-gray-700 mb-2">Pilih Target Database <span class="text-red-500">*</span></label>
+                  <select x-model="modalSelectedDbId" class="block w-full border-gray-300 rounded-xl shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm bg-white cursor-pointer py-2.5">
+                    <option value="">-- Pilih Database Accurate --</option>
+                    @foreach ($databases as $db)
+                      <option value="{{ $db['id'] }}">{{ $db['alias'] }} ({{ $db['id'] }})</option>
+                    @endforeach
+                  </select>
+                </div>
+
+                <!-- Force Create Option -->
+                <label for="force_create" class="flex items-start bg-white hover:bg-amber-50/30 p-4 rounded-xl border border-gray-200 cursor-pointer transition-colors shadow-sm">
+                  <div class="flex items-center h-5 mt-0.5">
+                    <input id="force_create" type="checkbox" x-model="modalForceCreate" class="w-4 h-4 text-amber-500 bg-white border-gray-300 rounded focus:ring-amber-500">
+                  </div>
+                  <div class="ml-3">
+                    <span class="block text-sm font-bold text-gray-900">Force Create if Exists</span>
+                    <span class="block text-xs text-gray-500 mt-1 leading-relaxed">Sistem akan memaksa membuat data baru di Accurate meskipun nomor transaksi sudah ada atau terjadi duplikasi data.</span>
+                  </div>
+                </label>
+
+              </div>
+            </div>
+
+            <div class="px-6 py-4 bg-gray-50 border-t border-gray-100 sm:flex sm:flex-row-reverse gap-3">
+              <button @click="executeMigration()" type="button" :disabled="!modalSelectedDbId" class="inline-flex justify-center w-full px-6 py-2.5 text-sm font-bold text-white bg-blue-600 border border-transparent rounded-xl shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95">Mulai Migrasi</button>
+              <button @click="closeMigrateModal()" type="button" class="mt-3 sm:mt-0 inline-flex justify-center w-full px-6 py-2.5 text-sm font-bold text-gray-700 bg-white border border-gray-300 rounded-xl shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-200 sm:w-auto transition-all active:scale-95">Batal</button>
+            </div>
+          </div>
+        </div>
+      </div>
       <!-- Hidden form for bulk migrate -->
       <form x-ref="migrateForm"
             action="{{ route('migrate.toAccurate') }}"

@@ -97,7 +97,10 @@ Route::middleware('auth')->group(function () {
       Route::get('/{log}/status', 'status')->name('system-logs.status');
       Route::post('/{log}/cancel', 'cancel')->name('system-logs.cancel');
       Route::delete('/queue', 'destroyMultiple')->name('system-logs.queue.destroyMultiple');
+      Route::post('/clear', 'clearAllLogs')->name('system-logs.clear');
     });
+
+    Route::post('/migrate/clear-transactions', [\App\Http\Controllers\DataMigrateController::class, 'clearAllTransactions'])->name('migrate.clear-transactions');
     Route::controller(UsersController::class)->middleware('can:manage_users')->prefix('users')->group(function () {
       Route::get('/', 'index')->name('users.index');
       Route::post('/', 'store')->name('users.store');

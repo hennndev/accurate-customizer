@@ -81,6 +81,8 @@ class MigrateTransactionsJob implements ShouldQueue
 		$successCount = 0;
 		$failedCount = 0;
 		$moduleResults = [];
+		$totalTransactions = count($this->transactionIds);
+		$processedTransactions = 0;
 
 		foreach ($groupedByModule as $moduleSlug => $moduleTransactions) {
 			$moduleIndex++;
@@ -238,6 +240,17 @@ class MigrateTransactionsJob implements ShouldQueue
 							}
 						}
 					}
+
+					$processedTransactions += count($chunkData);
+					$progress = min(99, round(($processedTransactions / $totalTransactions) * 100));
+
+					$this->updateTracker('running', "Migrating {$module->name}...", [
+						'progress' => $progress,
+						'success_count' => $successCount,
+						'failed_count' => $failedCount,
+						'module_results' => $moduleResults,
+					]);
+
 				} catch (\Exception $exception) {
 					Log::error('MIGRATION_CHUNK_EXCEPTION', [
 						'module' => $module->slug,
@@ -296,6 +309,17 @@ class MigrateTransactionsJob implements ShouldQueue
 				],
 				'message' => "Migrated {$moduleResults[$module->name]['success']} of {$moduleTransactions->count()} {$module->name} transaction(s) to {$this->targetDatabaseName}",
 				'user_id' => $this->userId,
+			]);
+
+			// Track skipped transactions that didn't go through the chunk loop
+			$processedTransactions += ($moduleTransactions->count() - count($bulkData));
+			$progress = min(99, round(($processedTransactions / $totalTransactions) * 100));
+
+			$this->updateTracker('running', "Completed {$module->name}", [
+				'progress' => $progress,
+				'success_count' => $successCount,
+				'failed_count' => $failedCount,
+				'module_results' => $moduleResults,
 			]);
 		}
 
