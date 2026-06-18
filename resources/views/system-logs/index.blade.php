@@ -661,7 +661,7 @@
                               border px-2 py-1 h-max w-max">
                 <p class="text-xs md:text-sm font-medium">{{ ucfirst($log->status) }}</p>
               </div>
-              <p class="text-gray-500 max-sm:text-xs text-sm">Dilakukan oleh: {{ $log->user->name }}</p>
+              <p class="text-gray-500 max-sm:text-xs text-sm">Dilakukan oleh: {{ $log->user?->name ?? 'System' }}</p>
               
               @if(in_array($log->event_type, ['migrate_queue', 'capture_queue']) && in_array($log->status, ['failed', 'warning', 'partial']))
                 <form action="{{ route('system-logs.resume', $log->id) }}" method="POST" class="mt-2 w-full flex justify-end">
