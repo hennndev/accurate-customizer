@@ -386,8 +386,8 @@ class DataMigrateController extends Controller
   {
     $request->validate([
       'ids' => 'required|array',
-      'ids.*' => 'required|integer|exists:transactions,id',
-      'target_database_id' => 'required|integer',
+      'ids.*' => 'required|numeric|exists:transactions,id',
+      'target_database_id' => 'required|numeric',
       'force_create' => 'nullable|boolean',
     ]);
 
