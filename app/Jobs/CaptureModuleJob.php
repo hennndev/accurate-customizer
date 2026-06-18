@@ -23,7 +23,8 @@ class CaptureModuleJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $timeout = 0;
-    public int $tries = 1;
+    public int $tries = 5;
+    public array $backoff = [60, 120, 300];
 
     public function __construct(
         public string $module,
@@ -108,7 +109,7 @@ class CaptureModuleJob implements ShouldQueue
             $handler->preCapture($accurate, $sharedContext);
         }
 
-        $currentPage = $this->startPage;
+        $currentPage = (int) ($existingPayload['next_page'] ?? $this->startPage);
         $pageFetchFailures = 0;
         $batchSize = (int) env('ACCURATE_CAPTURE_INSERT_BATCH', 20);
         if ($batchSize < 1) {
@@ -299,20 +300,19 @@ class CaptureModuleJob implements ShouldQueue
                     return;
                 }
 
-                $failedCount++;
-                $this->updateTracker('running', 'Capture page failed, continuing', [
+                $this->updateTracker('warning', 'Terjadi kesalahan jaringan (List). Menunggu auto-resume otomatis...', [
                     'progress' => min(95, 10 + ($processedPages * 5)),
                     'saved_count' => $savedCount,
                     'failed_count' => $failedCount,
                     'skipped_duplicate_count' => $skippedDuplicateCount,
                     'processed_pages' => $processedPages,
                     'processed_items' => $processedItems,
-                    'next_page' => $currentPage + 1,
+                    'next_page' => $currentPage, // Retain current page for retry
                     'page_fetch_failures' => $pageFetchFailures,
+                    'error' => $exception->getMessage(),
                 ]);
 
-                $currentPage++;
-                continue;
+                throw $exception;
             }
 
             $pageData = $pageResult['data'] ?? [];
@@ -569,7 +569,19 @@ class CaptureModuleJob implements ShouldQueue
                         return;
                     }
 
-                    $failedCount++;
+                    $this->updateTracker('warning', 'Terjadi kesalahan jaringan (Detail). Menunggu auto-resume otomatis...', [
+                        'progress' => min(95, 10 + ($processedPages * 5)),
+                        'saved_count' => $savedCount,
+                        'failed_count' => $failedCount,
+                        'skipped_duplicate_count' => $skippedDuplicateCount,
+                        'processed_pages' => $processedPages,
+                        'processed_items' => $processedItems,
+                        'next_page' => $currentPage,
+                        'detail_processed' => $detailProcessed,
+                        'error' => $exception->getMessage(),
+                    ]);
+
+                    throw $exception;
                 }
 
                 $detailProcessed++;

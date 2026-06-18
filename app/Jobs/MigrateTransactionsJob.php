@@ -20,7 +20,8 @@ class MigrateTransactionsJob implements ShouldQueue
 	use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
 	public int $timeout = 1800; // 30 minutes max per job
-	public int $tries = 1;
+	public int $tries = 5;
+	public array $backoff = [60, 120, 300];
 
 	public function __construct(
 		public array $transactionIds,
@@ -78,11 +79,13 @@ class MigrateTransactionsJob implements ShouldQueue
 		$totalModules = max(1, $groupedByModule->count());
 		$moduleIndex = 0;
 
-		$successCount = 0;
+		$successCount = \App\Models\Transaction::whereIn('id', $this->transactionIds)
+			->where('status', 'success')
+			->count();
 		$failedCount = 0;
 		$moduleResults = [];
 		$totalTransactions = count($this->transactionIds);
-		$processedTransactions = 0;
+		$processedTransactions = $successCount;
 
 		foreach ($groupedByModule as $moduleSlug => $moduleTransactions) {
 			$moduleIndex++;
@@ -95,7 +98,10 @@ class MigrateTransactionsJob implements ShouldQueue
 
 			if (!isset($moduleResults[$module->name])) {
 				$moduleResults[$module->name] = [
-					'success' => 0,
+					'success' => \App\Models\Transaction::whereIn('id', $this->transactionIds)
+						->where('module_id', $module->id)
+						->where('status', 'success')
+						->count(),
 					'failed' => 0,
 					'errors' => [],
 				];
@@ -267,18 +273,12 @@ class MigrateTransactionsJob implements ShouldQueue
 						return;
 					}
 
-					foreach ($chunkTransactions[$chunkIndex] as $transaction) {
-						$transaction->update([
-							'status' => 'failed',
-							'error_message' => $exception->getMessage(),
-						]);
-						$failedCount++;
-						$moduleResults[$module->name]['failed']++;
-					}
-
-					if (!in_array($exception->getMessage(), $moduleResults[$module->name]['errors'])) {
-						$moduleResults[$module->name]['errors'][] = $exception->getMessage();
-					}
+					// Network error, let Laravel automatically retry it
+					$this->updateTracker('warning', 'Terjadi kesalahan server/jaringan. Menunggu auto-resume otomatis...', [
+						'error' => $exception->getMessage(),
+					]);
+					
+					throw $exception;
 				}
 
 				$progress = min(95, (int) (($moduleIndex / $totalModules) * 100));

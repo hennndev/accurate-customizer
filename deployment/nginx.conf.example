@@ -1,0 +1,54 @@
+server {
+    root /var/www/accurate-customizer/public;
+    index index.php index.html;
+    server_name customizer.zenith-dev.my.id;
+
+
+    client_max_body_size 100M;
+
+    add_header X-Frame-Options "SAMEORIGIN";
+    add_header X-Content-Type-Options "nosniff";
+
+    charset utf-8;
+
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    location = /favicon.ico { access_log off; log_not_found off; }
+    location = /robots.txt  { access_log off; log_not_found off; }
+
+    error_log  /var/log/nginx/accurate-customizer-error.log;
+    access_log /var/log/nginx/accurate-customizer-access.log;
+
+    location ~ \.php$ {
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass unix:/run/php/php8.4-fpm.sock;
+        fastcgi_read_timeout 3600;
+    }
+
+    location ~ /\.(?!well-known).* {
+        deny all;
+    }
+
+    listen [::]:443 ssl; # managed by Certbot
+    listen 443 ssl; # managed by Certbot
+    ssl_certificate /etc/letsencrypt/live/customizer.zenith-dev.my.id/fullchain.pem; # managed by Certbot
+    ssl_certificate_key /etc/letsencrypt/live/customizer.zenith-dev.my.id/privkey.pem; # managed by Certbot
+    include /etc/letsencrypt/options-ssl-nginx.conf; # managed by Certbot
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem; # managed by Certbot
+
+}
+server {
+    if ($host = customizer.zenith-dev.my.id) {
+        return 301 https://$host$request_uri;
+    } # managed by Certbot
+
+
+    listen 80;
+    listen [::]:80;
+    server_name customizer.zenith-dev.my.id;
+    return 404; # managed by Certbot
+
+
+}

@@ -1,0 +1,14 @@
+[program:accurate-customizer-queue]
+process_name=%(program_name)s_%(process_num)02d
+# Adjust the command to match your server's PHP path and project path
+command=php /var/www/accurate-customizer/artisan queue:work --queue=capture,migrate,default --tries=3 --timeout=0 --sleep=1 --backoff=5
+autostart=true
+autorestart=true
+stopasgroup=true
+killasgroup=true
+user=www-data # or your standard server user like ubuntu/forge
+numprocs=4 # Number of queue workers you want to run simultaneously
+redirect_stderr=true
+# Path to your project's storage logs for queue worker output
+stdout_logfile=/var/www/accurate-customizer/storage/logs/worker.log
+stopwaitsecs=3600
