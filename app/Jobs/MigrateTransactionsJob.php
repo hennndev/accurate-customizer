@@ -49,11 +49,21 @@ class MigrateTransactionsJob implements ShouldQueue
 			session(['database_id' => $this->targetDbInfo['id']]);
 		}
 
+		$totalSelected = count($this->transactionIds);
+		
+		$successCount = \App\Models\Transaction::whereIn('id', $this->transactionIds)
+			->where('status', 'success')
+			->count();
+			
+		$failedCount = 0;
+		$processedTransactions = $successCount;
+		$progress = $totalSelected > 0 ? min(99, (int) round(($processedTransactions / $totalSelected) * 100)) : 0;
+
 		$this->updateTracker('running', 'Migration started', [
-			'progress' => 0,
-			'total_selected' => count($this->transactionIds),
-			'success_count' => 0,
-			'failed_count' => 0,
+			'progress' => $progress,
+			'total_selected' => $totalSelected,
+			'success_count' => $successCount,
+			'failed_count' => $failedCount,
 			'force_create' => $this->forceCreate,
 		]);
 
@@ -69,8 +79,8 @@ class MigrateTransactionsJob implements ShouldQueue
 		if ($transactions->isEmpty()) {
 			$this->updateTracker('failed', 'No transactions selected for migration', [
 				'progress' => 100,
-				'success_count' => 0,
-				'failed_count' => 0,
+				'success_count' => $successCount,
+				'failed_count' => $failedCount,
 			]);
 			return;
 		}
@@ -79,13 +89,8 @@ class MigrateTransactionsJob implements ShouldQueue
 		$totalModules = max(1, $groupedByModule->count());
 		$moduleIndex = 0;
 
-		$successCount = \App\Models\Transaction::whereIn('id', $this->transactionIds)
-			->where('status', 'success')
-			->count();
-		$failedCount = 0;
 		$moduleResults = [];
-		$totalTransactions = count($this->transactionIds);
-		$processedTransactions = $successCount;
+		$totalTransactions = $totalSelected;
 
 		foreach ($groupedByModule as $moduleSlug => $moduleTransactions) {
 			$moduleIndex++;
