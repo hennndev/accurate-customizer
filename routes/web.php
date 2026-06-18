@@ -96,6 +96,7 @@ Route::middleware('auth')->group(function () {
       Route::get('/active', 'active')->name('system-logs.active');
       Route::get('/{log}/status', 'status')->name('system-logs.status');
       Route::post('/{log}/cancel', 'cancel')->name('system-logs.cancel');
+      Route::post('/{log}/resume', 'resume')->name('system-logs.resume');
       Route::delete('/queue', 'destroyMultiple')->name('system-logs.queue.destroyMultiple');
       Route::post('/clear', 'clearAllLogs')->name('system-logs.clear');
     });

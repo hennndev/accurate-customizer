@@ -662,6 +662,18 @@
                 <p class="text-xs md:text-sm font-medium">{{ ucfirst($log->status) }}</p>
               </div>
               <p class="text-gray-500 max-sm:text-xs text-sm">Dilakukan oleh: {{ $log->user->name }}</p>
+              
+              @if(in_array($log->event_type, ['migrate_queue', 'capture_queue']) && in_array($log->status, ['failed', 'warning', 'partial']))
+                <form action="{{ route('system-logs.resume', $log->id) }}" method="POST" class="mt-2 w-full flex justify-end">
+                  @csrf
+                  <button type="submit" onclick="return confirm('Apakah Anda yakin ingin melanjutkan (resume) proses ini? Data yang sudah diproses sebelumnya akan dilanjutkan secara otomatis tanpa diulang dari awal.')" class="bg-blue-600 hover:bg-blue-700 shadow-sm text-white text-xs px-3 py-1.5 rounded-md font-medium transition-colors flex items-center gap-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
+                    </svg>
+                    Resume
+                  </button>
+                </form>
+              @endif
             </div>
           </div>
         @empty

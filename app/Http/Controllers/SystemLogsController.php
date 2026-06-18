@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\MigrateTransactionsJob;
 use App\Models\SystemLog;
+use App\Services\AccurateService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -10,6 +12,13 @@ use Illuminate\Support\Facades\DB;
 
 class SystemLogsController extends Controller
 {
+    protected $accurateService;
+
+    public function __construct(AccurateService $accurateService)
+    {
+        $this->accurateService = $accurateService;
+    }
+
     private function resolveStaleQueueTracker(SystemLog $log): SystemLog
     {
         if (!in_array($log->event_type, ['capture_queue', 'migrate_queue', 'transaction_number_mapping_queue'], true)) {
@@ -300,6 +309,151 @@ class SystemLogsController extends Controller
             'success' => true,
             'message' => 'Capture dibatalkan',
         ]);
+    }
+
+    public function resume(SystemLog $log)
+    {
+        if (!in_array($log->event_type, ['migrate_queue', 'capture_queue'], true)) {
+            if (request()->expectsJson()) {
+                return response()->json(['success' => false, 'message' => 'Only migrate_queue and capture_queue can be resumed.'], 400);
+            }
+            return back()->with('error', 'Only migrate_queue and capture_queue can be resumed.');
+        }
+
+        if (!in_array($log->status, ['failed', 'warning', 'partial'], true)) {
+            if (request()->expectsJson()) {
+                return response()->json(['success' => false, 'message' => 'Only failed, warning, or partial jobs can be resumed.'], 400);
+            }
+            return back()->with('error', 'Only failed, warning, or partial jobs can be resumed.');
+        }
+
+        if ((int) $log->user_id !== (int) Auth::id()) {
+            if (request()->expectsJson()) {
+                return response()->json(['success' => false, 'message' => 'Forbidden'], 403);
+            }
+            return back()->with('error', 'Forbidden.');
+        }
+
+        $payload = is_array($log->payload) ? $log->payload : [];
+        $targetDbId = $payload['target_database_id'] ?? $payload['database_id'] ?? null;
+        $targetDbName = $payload['target_database_name'] ?? $payload['database_name'] ?? 'Unknown Database';
+
+        if (!$targetDbId) {
+            if (request()->expectsJson()) {
+                return response()->json(['success' => false, 'message' => 'Invalid payload data for resume.'], 400);
+            }
+            return back()->with('error', 'Invalid payload data for resume.');
+        }
+
+        try {
+            $dbInfo = $this->accurateService->openDatabaseById($targetDbId);
+            if (!$dbInfo) {
+                if (request()->expectsJson()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Failed to connect to target database. Please try again.',
+                    ], 422);
+                }
+                return back()->with('error', 'Failed to connect to target database. Please try again.');
+            }
+            
+            $targetLocalDb = \App\Models\AccurateDatabase::firstOrCreate(
+                ['db_id' => $targetDbId],
+                ['db_name' => $targetDbName]
+            );
+            $dbInfo['_local_db_id'] = $targetLocalDb->id;
+        } catch (\Exception $e) {
+            if (request()->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to connect to database: ' . $e->getMessage(),
+                ], 500);
+            }
+            return back()->with('error', 'Failed to connect to database: ' . $e->getMessage());
+        }
+
+        $payload['resumed_at'] = now()->toDateTimeString();
+
+        if ($log->event_type === 'migrate_queue') {
+            $transactionIds = $payload['transaction_ids'] ?? [];
+            $forceCreate = $payload['force_create'] ?? false;
+
+            if (empty($transactionIds)) {
+                if (request()->expectsJson()) {
+                    return response()->json(['success' => false, 'message' => 'Invalid payload data for resume.'], 400);
+                }
+                return back()->with('error', 'Invalid payload data for resume.');
+            }
+
+            $log->update([
+                'status' => 'queued',
+                'message' => 'Migration resumed',
+                'payload' => $payload,
+            ]);
+
+            \App\Jobs\MigrateTransactionsJob::dispatch(
+                transactionIds: $transactionIds,
+                targetDatabaseId: $targetDbId,
+                targetDatabaseName: $targetDbName,
+                targetDbInfo: $dbInfo,
+                userId: Auth::id(),
+                trackerLogId: $log->id,
+                accessToken: session('accurate_access_token'),
+                forceCreate: $forceCreate,
+            )->onQueue('migrate');
+        } elseif ($log->event_type === 'capture_queue') {
+            $moduleSlug = $payload['module_slug'] ?? null;
+            $startPage = $payload['next_page'] ?? $payload['start_page'] ?? 1; // Resumes from the last known next_page!
+            $pageSize = $payload['page_size'] ?? 20;
+            $captureMode = $payload['capture_mode'] ?? 'list_and_detail';
+            $useListIdCache = $payload['use_list_id_cache'] ?? true;
+            $refreshListIdCache = $payload['refresh_list_id_cache'] ?? false;
+            $params = $payload['params'] ?? [];
+            $moduleInfo = $payload['module_info'] ?? [];
+
+            if (!$moduleSlug || empty($moduleInfo)) {
+                if (request()->expectsJson()) {
+                    return response()->json(['success' => false, 'message' => 'Missing module details in payload. Resume not possible for this older job.'], 400);
+                }
+                return back()->with('error', 'Missing module details in payload. Resume not possible for this older job.');
+            }
+
+            $cancelToken = 'capture-cancel:' . $log->id;
+            cache()->forget($cancelToken);
+
+            $log->update([
+                'status' => 'queued',
+                'message' => 'Capture resumed from page ' . $startPage,
+                'payload' => $payload,
+            ]);
+
+            \App\Jobs\CaptureModuleJob::dispatch(
+                module: $moduleSlug,
+                moduleInfo: $moduleInfo,
+                params: $params,
+                pageSize: $pageSize,
+                startPage: $startPage,
+                databaseId: $targetLocalDb->id,
+                databaseName: $targetDbName,
+                userId: Auth::id(),
+                trackerLogId: $log->id,
+                accessToken: session('accurate_access_token'),
+                sourceDbInfo: $dbInfo,
+                cancelToken: $cancelToken,
+                captureMode: $captureMode,
+                useListIdCache: $useListIdCache,
+                refreshListIdCache: $refreshListIdCache,
+            )->onQueue('capture');
+        }
+
+        if (request()->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Job resumed successfully.',
+            ]);
+        }
+
+        return back()->with('success', 'Job resumed successfully.');
     }
 
     public function clearAllLogs()

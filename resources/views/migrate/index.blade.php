@@ -1440,6 +1440,19 @@
           </div>
         </div>
 
+        <!-- Jenis Transaksi Dropdown (Hanya untuk Journal Voucher) -->
+        <div x-show="filterModuleSelected === 'Journal Voucher'" x-cloak class="relative w-full md:w-auto">
+          <select name="jenis_transaksi"
+                  class="bg-white w-full md:min-w-[180px] border border-gray-200 text-gray-700 text-xs md:text-sm rounded-md py-2 px-3 md:px-4 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium">
+            <option value="">Semua Jenis Transaksi</option>
+            @foreach ($transactionTypeOptions ?? [] as $type)
+              <option value="{{ $type }}" {{ request('jenis_transaksi') === $type ? 'selected' : '' }}>
+                {{ $type }}
+              </option>
+            @endforeach
+          </select>
+        </div>
+
         <div class="relative w-full md:w-auto">
           <select name="per_page"
                   class="bg-white w-full md:min-w-[110px] border border-gray-200 text-gray-700 text-xs md:text-sm rounded-md py-2 px-3 md:px-4 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium">

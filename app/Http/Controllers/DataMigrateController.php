@@ -103,6 +103,10 @@ class DataMigrateController extends Controller
       });
     }
 
+    if ($request->filled('jenis_transaksi')) {
+      $query->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(data, '$.transactionTypeName')) = ?", [$request->input('jenis_transaksi')]);
+    }
+
     if ($request->filled('trans_date_start')) {
       $query->whereRaw("{$transDateExpression} >= ?", [$request->input('trans_date_start')]);
     }
@@ -226,6 +230,20 @@ class DataMigrateController extends Controller
         ->sort()
         ->values();
     });
+
+    $transactionTypeOptions = Cache::remember('migrate:transaction_types:v1', now()->addMinutes(5), function () {
+      $options = Transaction::query()
+        ->selectRaw("JSON_UNQUOTE(JSON_EXTRACT(data, '$.transactionTypeName')) AS value")
+        ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(data, '$.transactionTypeName')) IS NOT NULL")
+        ->pluck('value')
+        ->filter(fn($value) => filled($value) && strtolower($value) !== 'null')
+        ->unique()
+        ->sort()
+        ->values();
+        
+      return $options->isEmpty() ? collect(['Jurnal Umum']) : $options;
+    });
+
     return view('migrate.index', compact(
       'transactions',
       'databases',
@@ -233,6 +251,7 @@ class DataMigrateController extends Controller
       'modules',
       'customerNames',
       'programOptions',
+      'transactionTypeOptions',
       'current_database_name',
       'currentPerPage',
       'perPageOptions',

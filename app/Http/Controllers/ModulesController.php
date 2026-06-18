@@ -636,6 +636,8 @@ class ModulesController extends Controller
           'use_list_id_cache' => $useListIdCache,
           'refresh_list_id_cache' => $refreshListIdCache,
           'progress' => 0,
+          'params' => $params,
+          'module_info' => $moduleInfo,
         ],
         'message' => "Queue capture {$moduleInfo['name']} created",
         'user_id' => Auth::id(),
