@@ -437,8 +437,8 @@
                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
                        },
                        body: JSON.stringify({
-                           target_database_id: Number(this.modalSelectedDbId),
-                           ids: this.modalTargetIds.map(id => Number(id)),
+                           target_database_id: this.modalSelectedDbId,
+                           ids: this.modalTargetIds,
                            force_create: this.modalForceCreate
                        })
                    });
@@ -451,7 +451,11 @@
                        await this.pollMigrateStatus();
                    } else {
                        this.migrating = false;
-                       this.currentStatus = result.message || 'Failed to start migration';
+                       let errorMsg = result.message || 'Failed to start migration';
+                       if (result.errors) {
+                           errorMsg += '\n\nDetail:\n' + Object.values(result.errors).flat().join('\n');
+                       }
+                       this.currentStatus = errorMsg;
                        alert(this.currentStatus);
                    }
                } catch (error) {
