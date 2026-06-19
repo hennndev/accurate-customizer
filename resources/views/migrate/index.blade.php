@@ -72,11 +72,13 @@
                this.modalTargetIds = singleId ? [String(singleId)] : [...new Set(this.selected.map(id => String(id)))];
                this.modalSelectedDbId = document.getElementById('targetDatabaseSelect')?.value || '';
                this.modalForceCreate = true;
+               this.modalAddJuSuffix = false;
            },
            
            closeMigrateModal() {
                this.showTargetDbModal = false;
                this.modalTargetIds = [];
+               this.modalAddJuSuffix = false;
            },
 
            migrateSuccessCount: 0,
@@ -420,6 +422,7 @@
                const targetDbId = this.modalSelectedDbId;
                const payloadIds = [...this.modalTargetIds];
                const forceCreate = this.modalForceCreate;
+               const addJuSuffix = this.modalAddJuSuffix;
 
                this.closeMigrateModal();
                this.migrating = true;
@@ -444,7 +447,8 @@
                        body: JSON.stringify({
                            target_database_id: targetDbId,
                            ids: payloadIds,
-                           force_create: forceCreate
+                           force_create: forceCreate,
+                           add_ju_suffix: addJuSuffix
                        })
                    });
 
@@ -2359,6 +2363,17 @@
                   <div class="ml-3">
                     <span class="block text-sm font-bold text-gray-900">Force Create if Exists</span>
                     <span class="block text-xs text-gray-500 mt-1 leading-relaxed">Sistem akan memaksa membuat data baru di Accurate meskipun nomor transaksi sudah ada atau terjadi duplikasi data.</span>
+                  </div>
+                </label>
+
+                <!-- JU Suffix Option (Only shown if module is Journal Voucher) -->
+                <label x-show="!filterModuleSelected || filterModuleSelected === 'journal-voucher'" for="add_ju_suffix" class="flex items-start bg-white hover:bg-blue-50/30 p-4 rounded-xl border border-gray-200 cursor-pointer transition-colors shadow-sm">
+                  <div class="flex items-center h-5 mt-0.5">
+                    <input id="add_ju_suffix" type="checkbox" x-model="modalAddJuSuffix" class="w-4 h-4 text-blue-500 bg-white border-gray-300 rounded focus:ring-blue-500">
+                  </div>
+                  <div class="ml-3">
+                    <span class="block text-sm font-bold text-gray-900">Tambahkan Suffix -JU (Journal Voucher)</span>
+                    <span class="block text-xs text-gray-500 mt-1 leading-relaxed">Khusus untuk modul Journal Voucher yang berstatus gagal, sistem akan menambahkan -JU pada nomor transaksi agar bisa dicoba ulang ke Accurate tanpa conflict duplikat.</span>
                   </div>
                 </label>
 

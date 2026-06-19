@@ -389,6 +389,7 @@ class DataMigrateController extends Controller
       'ids.*' => 'required|numeric|exists:transactions,id',
       'target_database_id' => 'required|numeric',
       'force_create' => 'nullable|boolean',
+      'add_ju_suffix' => 'nullable|boolean',
     ]);
 
     $targetDbId = $request->input('target_database_id');
@@ -427,6 +428,7 @@ class DataMigrateController extends Controller
 
     $ids = $request->input('ids', []);
     $forceCreate = $request->boolean('force_create', false);
+    $addJuSuffix = $request->boolean('add_ju_suffix', false);
 
     $tracker = SystemLog::create([
       'event_type' => 'migrate_queue',
@@ -438,6 +440,7 @@ class DataMigrateController extends Controller
         'target_database_name' => $targetDbName,
         'transaction_ids' => $ids,
         'force_create' => $forceCreate,
+        'add_ju_suffix' => $addJuSuffix,
         'total_selected' => count($ids),
         'progress' => 0,
       ],
@@ -454,6 +457,7 @@ class DataMigrateController extends Controller
       trackerLogId: $tracker->id,
       accessToken: session('accurate_access_token'),
       forceCreate: $forceCreate,
+      addJuSuffix: $addJuSuffix
     )->onQueue('migrate');
 
     if ($request->expectsJson() || $request->ajax()) {

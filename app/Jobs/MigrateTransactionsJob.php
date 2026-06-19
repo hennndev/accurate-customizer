@@ -32,6 +32,7 @@ class MigrateTransactionsJob implements ShouldQueue
 		public int $trackerLogId,
 		public ?string $accessToken,
 		public bool $forceCreate = false,
+		public bool $addJuSuffix = false,
 	) {
 	}
 
@@ -65,6 +66,7 @@ class MigrateTransactionsJob implements ShouldQueue
 			'success_count' => $successCount,
 			'failed_count' => $failedCount,
 			'force_create' => $this->forceCreate,
+			'add_ju_suffix' => $this->addJuSuffix,
 		]);
 
 		$transactionsQuery = Transaction::with(['module', 'accurateDatabase'])
@@ -158,6 +160,15 @@ class MigrateTransactionsJob implements ShouldQueue
 					$failedCount++;
 					$moduleResults[$module->name]['failed']++;
 					continue;
+				}
+
+				// Apply -JU suffix if module is journal-voucher, addJuSuffix is true, and transaction was previously failed
+				if ($moduleSlug === 'journal-voucher' && $this->addJuSuffix && $transaction->status === 'failed') {
+					if (isset($data['number'])) {
+						$data['number'] = $data['number'] . '-JU';
+					} elseif (isset($data['no'])) {
+						$data['no'] = $data['no'] . '-JU';
+					}
 				}
 
 				if ($this->isDownPaymentModule($moduleSlug)) {
