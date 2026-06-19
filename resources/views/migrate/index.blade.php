@@ -416,6 +416,11 @@
                    return;
                }
 
+               // Copy variables before closing the modal
+               const targetDbId = this.modalSelectedDbId;
+               const payloadIds = [...this.modalTargetIds];
+               const forceCreate = this.modalForceCreate;
+
                this.closeMigrateModal();
                this.migrating = true;
                this.migrateMonitorVisible = true;
@@ -424,7 +429,7 @@
                this.currentStatus = 'Preparing migration...';
                this.migrateSuccessCount = 0;
                this.migrateFailedCount = 0;
-               this.migrateTotalSelected = this.modalTargetIds.length;
+               this.migrateTotalSelected = payloadIds.length;
 
                try {
                    const response = await fetch('{{ route('migrate.toAccurate') }}', {
@@ -437,9 +442,9 @@
                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
                        },
                        body: JSON.stringify({
-                           target_database_id: this.modalSelectedDbId,
-                           ids: this.modalTargetIds,
-                           force_create: this.modalForceCreate
+                           target_database_id: targetDbId,
+                           ids: payloadIds,
+                           force_create: forceCreate
                        })
                    });
 
