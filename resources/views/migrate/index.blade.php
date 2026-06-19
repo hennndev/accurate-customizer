@@ -2367,7 +2367,7 @@
                 </label>
 
                 <!-- JU Suffix Option (Only shown if module is Journal Voucher) -->
-                <label x-show="!filterModuleSelected || filterModuleSelected === 'journal-voucher'" for="add_ju_suffix" class="flex items-start bg-white hover:bg-blue-50/30 p-4 rounded-xl border border-gray-200 cursor-pointer transition-colors shadow-sm">
+                <label x-show="!filterModuleSelected || filterModuleSelected === 'All Modules' || filterModuleSelected === 'Journal Voucher'" for="add_ju_suffix" class="flex items-start bg-white hover:bg-blue-50/30 p-4 rounded-xl border border-gray-200 cursor-pointer transition-colors shadow-sm">
                   <div class="flex items-center h-5 mt-0.5">
                     <input id="add_ju_suffix" type="checkbox" x-model="modalAddJuSuffix" class="w-4 h-4 text-blue-500 bg-white border-gray-300 rounded focus:ring-blue-500">
                   </div>
