@@ -28,8 +28,7 @@ class DataFetcher
         int $pageSize = 50,
         ?array $targetDbInfo = null,
         ?string $accessToken = null
-    ): array
-    {
+    ): array {
         $fields = $this->endpointFieldProvider->getFieldsForEndpoint($endpoint);
         if ($fields && !isset($params['fields']) && !isset($params['sp.fields'])) {
             $params['fields'] = $fields;
@@ -43,13 +42,6 @@ class DataFetcher
         }
 
         $params = $this->normalizeAccurateParams($params);
-
-        Log::info('ACCURATE_API_PARAMS', [
-            'endpoint' => $endpoint,
-            'page' => $pageNumber,
-            'params' => $params,
-        ]);
-
 
 
         $client = $targetDbInfo
@@ -96,8 +88,7 @@ class DataFetcher
         array $params = [],
         ?array $targetDbInfo = null,
         ?string $accessToken = null
-    ): array
-    {
+    ): array {
         try {
             $isDetailEndpoint = str_contains($endpoint, '/detail.do');
             $timeoutSeconds = $isDetailEndpoint ? (int) env('ACCURATE_DETAIL_TIMEOUT_SECONDS', 120) : 600;
@@ -172,7 +163,7 @@ class DataFetcher
                     'page' => $pageNumber,
                     'page_size' => $pageSize,
                 ]);
-                
+
                 $response = $this->sendGetWithRetry(
                     $client,
                     $endpoint,
@@ -193,29 +184,29 @@ class DataFetcher
                     ]);
                     throw new Exception('Failed to fetch module data from Accurate');
                 }
-                
+
                 $responseData = $response->json();
                 $pageData = $responseData['d'] ?? [];
-                
+
                 Log::info("Page fetched successfully", [
                     'endpoint' => $endpoint,
                     'page' => $pageNumber,
                     'records_in_page' => count($pageData),
                     'total_records_so_far' => count($allData) + count($pageData),
                 ]);
-                
+
                 $allData = array_merge($allData, $pageData);
                 $hasMoreData = count($pageData) === $pageSize;
 
                 $pageNumber++;
             } while ($hasMoreData);
-            
+
             Log::info("Fetch completed from Accurate API", [
                 'endpoint' => $endpoint,
                 'total_records' => count($allData),
                 'total_pages' => $pageNumber - 1,
             ]);
-            
+
             return $allData;
         } catch (\Exception $e) {
             Log::error("Exception during fetchModuleData", [
@@ -317,6 +308,8 @@ class DataFetcher
 
     private function isTokenInvalidResponse(int $status, string $body): bool
     {
+        \Illuminate\Support\Facades\Log::info("DEBUG_ACCURATE_RESPONSE", ['status' => $status, 'body' => $body]);
+        
         if (in_array($status, [401, 403], true)) {
             return true;
         }

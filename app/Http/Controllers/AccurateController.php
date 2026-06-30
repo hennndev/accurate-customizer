@@ -40,13 +40,13 @@ class AccurateController extends Controller
             $response = Http::asForm()->withHeaders([
                 'Authorization' => 'Basic ' . $authHeader,
             ])
-            ->timeout(30)
-            ->retry(3, 1000) // Retry 3x with 1 second delay
-            ->post(env('ACCURATE_API_URL') . '/oauth/token', [
-                'grant_type' => 'authorization_code',
-                'code' => $request->code,
-                'redirect_uri' => route('accurate.callback'),
-            ]);
+                ->timeout(30)
+                ->retry(3, 1000) // Retry 3x with 1 second delay
+                ->post(env('ACCURATE_API_URL') . '/oauth/token', [
+                    'grant_type' => 'authorization_code',
+                    'code' => $request->code,
+                    'redirect_uri' => route('accurate.callback'),
+                ]);
 
             if ($response->failed()) {
                 Log::error('ACCURATE_OAUTH_ERROR', ['response' => $response->body()]);
