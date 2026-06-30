@@ -20,6 +20,8 @@ use App\Modules\Handlers\ItemCategoryHandler;
 use App\Modules\Handlers\ItemAdjustmentHandler;
 use App\Modules\Handlers\ItemTransferHandler;
 use App\Modules\Handlers\JournalVoucherHandler;
+use App\Modules\Handlers\OtherDepositHandler;
+use App\Modules\Handlers\OtherPaymentHandler;
 use App\Modules\Handlers\DownPaymentPurchaseInvoiceHandler;
 use App\Modules\Handlers\DownPaymentSalesInvoiceHandler;
 use App\Modules\Handlers\PurchaseInvoiceHandler;
@@ -56,6 +58,8 @@ class ModuleManager
             'item-category' => new ItemCategoryHandler(),
             'item-adjustment' => new ItemAdjustmentHandler(),
             'item-transfer' => new ItemTransferHandler(),
+            'other-deposit' => new OtherDepositHandler(),
+            'other-payment' => new OtherPaymentHandler(),
             'purchase-invoice' => new PurchaseInvoiceHandler(),
             'down-payment-purchase-invoice' => new DownPaymentPurchaseInvoiceHandler(),
             'purchase-order' => new PurchaseOrderHandler(),
@@ -118,6 +122,12 @@ class ModuleManager
         }
         if (str_contains($endpoint, '/item-transfer/')) {
             return new ItemTransferHandler();
+        }
+        if (str_contains($endpoint, '/other-deposit/')) {
+            return new OtherDepositHandler();
+        }
+        if (str_contains($endpoint, '/other-payment/')) {
+            return new OtherPaymentHandler();
         }
         if (str_contains($endpoint, '/purchase-invoice/')) {
             if (str_contains($endpoint, '/down-payment-purchase-invoice/')) {

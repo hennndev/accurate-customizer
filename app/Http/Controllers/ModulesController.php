@@ -247,6 +247,20 @@ class ModulesController extends Controller
       ],
 
       // Financial
+      'other-deposit' => [
+        'name' => 'Cash Penerimaan',
+        'list_endpoint' => '/api/other-deposit/list.do',
+        'detail_endpoint' => '/api/other-deposit/detail.do',
+        'identifier_field' => 'number',
+        'type' => 'transaction',
+      ],
+      'other-payment' => [
+        'name' => 'Cash Pembayaran',
+        'list_endpoint' => '/api/other-payment/list.do',
+        'detail_endpoint' => '/api/other-payment/detail.do',
+        'identifier_field' => 'number',
+        'type' => 'transaction',
+      ],
       'journal-voucher' => [
         'name' => 'Journal Voucher',
         'list_endpoint' => '/api/journal-voucher/list.do',
