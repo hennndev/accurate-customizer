@@ -448,6 +448,16 @@ class DataMigrateController extends Controller
       'user_id' => Auth::id(),
     ]);
 
+    \Illuminate\Support\Facades\Log::info('MIGRATE_REQUEST_QUEUED', [
+      'target_database_id' => $targetDbId,
+      'target_database_name' => $targetDbName,
+      'total_transactions' => count($ids),
+      'force_create' => $forceCreate,
+      'add_ju_suffix' => $addJuSuffix,
+      'tracker_id' => $tracker->id,
+      'user_id' => Auth::id(),
+    ]);
+
     MigrateTransactionsJob::dispatch(
       transactionIds: $ids,
       targetDatabaseId: $targetDbId,

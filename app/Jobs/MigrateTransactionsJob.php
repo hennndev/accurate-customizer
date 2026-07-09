@@ -78,6 +78,12 @@ class MigrateTransactionsJob implements ShouldQueue
 
 		$transactions = $transactionsQuery->get();
 
+		// Mengurutkan ulang collection agar persis sesuai dengan urutan array $this->transactionIds dari UI
+		$idOrder = array_flip($this->transactionIds);
+		$transactions = $transactions->sortBy(function ($transaction) use ($idOrder) {
+			return $idOrder[$transaction->id] ?? 999999;
+		})->values();
+
 		if ($transactions->isEmpty()) {
 			$this->updateTracker('failed', 'No transactions selected for migration', [
 				'progress' => 100,
@@ -292,6 +298,7 @@ class MigrateTransactionsJob implements ShouldQueue
 					// Network error, let Laravel automatically retry it
 					$this->updateTracker('warning', 'Terjadi kesalahan server/jaringan. Menunggu auto-resume otomatis...', [
 						'error' => $exception->getMessage(),
+						'last_real_error' => $exception->getMessage(),
 					]);
 					
 					throw $exception;
@@ -359,9 +366,19 @@ class MigrateTransactionsJob implements ShouldQueue
 
 	public function failed(\Throwable $exception): void
 	{
-		$this->updateTracker('failed', 'Migration failed: ' . $exception->getMessage(), [
+		$errorMessage = $exception->getMessage();
+
+		if (str_contains($errorMessage, 'has been attempted too many times')) {
+			$log = SystemLog::find($this->trackerLogId);
+			$existingPayload = is_array($log?->payload) ? $log->payload : [];
+			if (!empty($existingPayload['last_real_error'])) {
+				$errorMessage = "Max retries reached. Last error: " . $existingPayload['last_real_error'];
+			}
+		}
+
+		$this->updateTracker('failed', 'Migration failed: ' . $errorMessage, [
 			'progress' => 100,
-			'error' => $exception->getMessage(),
+			'error' => $errorMessage,
 		]);
 	}
 

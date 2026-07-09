@@ -36,6 +36,7 @@
            selected: [],
            allTransactionIds: {{ $transactions->pluck('id')->toJson() }},
            transactionStatusById: {{ $transactions->pluck('status', 'id')->toJson() }},
+           transactionModuleById: {{ $transactions->mapWithKeys(fn($t) => [$t->id => $t->module->slug ?? ''])->toJson() }},
            showDeleteModal: false,
            showSingleDeleteModal: false,
            showEditModal: false,
@@ -57,8 +58,10 @@
            modalSelectedDbId: '',
            modalForceCreate: true,
            modalTargetIds: [],
+           showWarningModal: false,
+           pendingMigrateSingleId: null,
            
-           openMigrateModal(singleId = null) {
+           openMigrateModal(singleId = null, bypassWarning = false) {
                if (this.migrating) {
                    alert('Proses migrasi sedang berjalan. Harap tunggu hingga selesai.');
                    return;
@@ -68,8 +71,20 @@
                    alert('Pilih minimal 1 transaksi untuk migrate.');
                    return;
                }
+
+               let targetIds = singleId ? [String(singleId)] : [...new Set(this.selected.map(id => String(id)))];
+               let modulesToWarn = ['purchase-invoice', 'sales-invoice', 'sales-receipt', 'purchase-payment'];
+               let hasWarningModule = targetIds.some(id => modulesToWarn.includes(this.transactionModuleById[id]));
+
+               if (hasWarningModule && !bypassWarning) {
+                   this.pendingMigrateSingleId = singleId;
+                   this.showWarningModal = true;
+                   return;
+               }
+
+               this.showWarningModal = false;
                this.showTargetDbModal = true;
-               this.modalTargetIds = singleId ? [String(singleId)] : [...new Set(this.selected.map(id => String(id)))];
+               this.modalTargetIds = targetIds;
                this.modalSelectedDbId = document.getElementById('targetDatabaseSelect')?.value || '';
                this.modalForceCreate = true;
                this.modalAddJuSuffix = false;
@@ -1600,6 +1615,7 @@
                 </th>
                 <th class="p-2 md:p-4 text-left text-xs md:text-sm font-semibold text-gray-700">
                   Transaction No</th>
+                <th class="p-2 md:p-4 text-left text-xs md:text-sm font-semibold text-gray-700">Accurate ID</th>
                 <th class="p-2 md:p-4 text-left text-xs md:text-sm font-semibold text-gray-700">Source
                   DB</th>
                 <th class="p-2 md:p-4 text-left text-xs md:text-sm font-semibold text-gray-700">Module
@@ -1635,6 +1651,12 @@
                         </span>
                       @endif
                     </div>
+                  </td>
+                  <td class="p-2 md:p-4 text-xs md:text-sm text-gray-600 font-mono bg-gray-50/50">
+                    @php
+                        $tData = is_string($transaction->data) ? json_decode($transaction->data, true) : (array) $transaction->data;
+                    @endphp
+                    {{ $tData['id'] ?? '-' }}
                   </td>
                   <td class="p-2 md:p-4 text-xs md:text-sm text-gray-600">
                     {{ $transaction->accurateDatabase?->db_name ?? 'N/A' }}</td>
@@ -2387,6 +2409,53 @@
           </div>
         </div>
       </div>
+      <!-- Warning Modal -->
+      <div x-show="showWarningModal" class="fixed inset-0 z-[110] overflow-y-auto" style="display: none;" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <div class="flex items-end justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+          <div x-show="showWarningModal" x-transition.opacity class="fixed inset-0 transition-opacity bg-gray-900/60 backdrop-blur-sm" aria-hidden="true"></div>
+          <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+          <div x-show="showWarningModal" 
+               x-transition:enter="ease-out duration-300" 
+               x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95" 
+               x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100" 
+               x-transition:leave="ease-in duration-200" 
+               x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100" 
+               x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95" 
+               class="inline-block overflow-hidden text-left align-bottom transition-all transform bg-white rounded-2xl shadow-2xl sm:my-8 sm:align-middle sm:max-w-lg sm:w-full border border-gray-100">
+            
+            <div class="bg-white px-6 pt-6 pb-6">
+              <div class="sm:flex sm:items-start">
+                <div class="mx-auto flex-shrink-0 flex items-center justify-center h-14 w-14 rounded-full bg-yellow-100 sm:mx-0 sm:h-12 sm:w-12">
+                  <svg class="h-7 w-7 text-yellow-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <div class="mt-4 text-center sm:mt-0 sm:ml-5 sm:text-left">
+                  <h3 class="text-xl font-bold text-gray-900" id="modal-title">
+                    Peringatan Modul
+                  </h3>
+                  <div class="mt-2 space-y-2">
+                    <p class="text-sm text-gray-600 leading-relaxed">
+                      Anda memilih transaksi Faktur atau Pembayaran. Harap diperhatikan:
+                    </p>
+                    <p class="text-sm font-bold text-red-600 leading-relaxed">
+                      JANGAN LUPA UNTUK DAHULUKAN MIGRATE JURNAL UMUM (Bila Ada).
+                    </p>
+                    <p class="text-sm text-gray-600 leading-relaxed pt-2">
+                      Apakah Anda yakin ingin melanjutkan migrasi sekarang?
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="px-6 py-4 bg-gray-50 border-t border-gray-100 sm:flex sm:flex-row-reverse gap-3">
+              <button @click="showWarningModal = false; openMigrateModal(pendingMigrateSingleId, true)" type="button" class="inline-flex justify-center w-full px-6 py-2.5 text-sm font-bold text-white bg-yellow-600 border border-transparent rounded-xl shadow-sm hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 sm:w-auto transition-all active:scale-95">Lanjutkan Migrate</button>
+              <button @click="showWarningModal = false; pendingMigrateSingleId = null" type="button" class="mt-3 sm:mt-0 inline-flex justify-center w-full px-6 py-2.5 text-sm font-bold text-gray-700 bg-white border border-gray-300 rounded-xl shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-200 sm:w-auto transition-all active:scale-95">Batal</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Hidden form for bulk migrate -->
       <form x-ref="migrateForm"
             action="{{ route('migrate.toAccurate') }}"
