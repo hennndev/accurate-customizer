@@ -82,6 +82,7 @@ Route::middleware('auth')->group(function () {
       Route::get('/', 'index')->name('migrate.index');
       Route::get('/{transaction}/data', 'transactionData')->name('migrate.transactionData');
       Route::post('/migrate-to-accurate', 'migrateToAccurate')->name('migrate.toAccurate');
+      Route::post('/preview-numbers', 'previewCustomNumbering')->name('migrate.previewNumbers');
       Route::put('/{transaction}', 'update')->name('migrate.update');
       Route::delete('/{transaction}', 'destroy')->name('migrate.destroy');
       Route::delete('/', 'destroyMultiple')->name('migrate.destroyMultiple');

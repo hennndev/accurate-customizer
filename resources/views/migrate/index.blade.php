@@ -58,6 +58,10 @@
            modalSelectedDbId: '',
            modalForceCreate: true,
            modalTargetIds: [],
+           modalUseCustomNumbering: false,
+           modalPreviewData: [],
+           modalTargetNumbers: {},
+           modalPreviewLoading: false,
            showWarningModal: false,
            pendingMigrateSingleId: null,
            
@@ -88,12 +92,62 @@
                this.modalSelectedDbId = document.getElementById('targetDatabaseSelect')?.value || '';
                this.modalForceCreate = true;
                this.modalAddJuSuffix = false;
+               this.modalUseCustomNumbering = false;
+               this.modalPreviewData = [];
+               this.modalTargetNumbers = {};
+               
+               if (this.modalSelectedDbId) {
+                   this.fetchPreviewData();
+               }
            },
            
+           async fetchPreviewData() {
+               if (!this.modalTargetIds.length || !this.modalSelectedDbId) return;
+               this.modalPreviewLoading = true;
+               try {
+                   const response = await fetch('{{ route('migrate.previewNumbers') }}', {
+                       method: 'POST',
+                       headers: {
+                           'Content-Type': 'application/json',
+                           'Accept': 'application/json',
+                           'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                       },
+                       body: JSON.stringify({
+                           target_database_id: this.modalSelectedDbId,
+                           ids: this.modalTargetIds
+                       })
+                   });
+                   const data = await response.json();
+                   if (data.success) {
+                       this.modalPreviewData = data.data;
+                       data.data.forEach(item => {
+                           this.modalTargetNumbers[item.id] = '';
+                       });
+                   }
+               } catch (e) {
+                   console.error('Failed to fetch preview data', e);
+               } finally {
+                   this.modalPreviewLoading = false;
+               }
+           },
+
+           toggleCustomNumbering() {
+               if (this.modalUseCustomNumbering) {
+                   this.modalPreviewData.forEach(item => {
+                       this.modalTargetNumbers[item.id] = item.generated_number;
+                   });
+               } else {
+                   this.modalPreviewData.forEach(item => {
+                       this.modalTargetNumbers[item.id] = '';
+                   });
+               }
+           },
+
            closeMigrateModal() {
                this.showTargetDbModal = false;
                this.modalTargetIds = [];
                this.modalAddJuSuffix = false;
+               this.modalPreviewData = [];
            },
 
            migrateSuccessCount: 0,
@@ -438,6 +492,7 @@
                const payloadIds = [...this.modalTargetIds];
                const forceCreate = this.modalForceCreate;
                const addJuSuffix = this.modalAddJuSuffix;
+               const useCustomNumbering = this.modalUseCustomNumbering;
 
                this.closeMigrateModal();
                this.migrating = true;
@@ -463,7 +518,8 @@
                            target_database_id: targetDbId,
                            ids: payloadIds,
                            force_create: forceCreate,
-                           add_ju_suffix: addJuSuffix
+                           add_ju_suffix: addJuSuffix,
+                           target_numbers: this.modalTargetNumbers
                        })
                    });
 
@@ -1614,7 +1670,9 @@
                          class="w-5 h-5 rounded border-2 border-gray-400 text-blue-600 bg-white accent-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 cursor-pointer">
                 </th>
                 <th class="p-2 md:p-4 text-left text-xs md:text-sm font-semibold text-gray-700">
-                  Transaction No</th>
+                  Old Number</th>
+                <th class="p-2 md:p-4 text-left text-xs md:text-sm font-semibold text-gray-700">
+                  New Number</th>
                 <th class="p-2 md:p-4 text-left text-xs md:text-sm font-semibold text-gray-700">Accurate ID</th>
                 <th class="p-2 md:p-4 text-left text-xs md:text-sm font-semibold text-gray-700">Source
                   DB</th>
@@ -1652,11 +1710,11 @@
                       @endif
                     </div>
                   </td>
+                  <td class="p-2 md:p-4 text-xs md:text-sm text-green-700 font-medium">
+                    {{ $transaction->new_number ?? '-' }}
+                  </td>
                   <td class="p-2 md:p-4 text-xs md:text-sm text-gray-600 font-mono bg-gray-50/50">
-                    @php
-                        $tData = is_string($transaction->data) ? json_decode($transaction->data, true) : (array) $transaction->data;
-                    @endphp
-                    {{ $tData['id'] ?? '-' }}
+                    {{ $transaction->accurate_id_raw ?? '-' }}
                   </td>
                   <td class="p-2 md:p-4 text-xs md:text-sm text-gray-600">
                     {{ $transaction->accurateDatabase?->db_name ?? 'N/A' }}</td>
@@ -1878,7 +1936,7 @@
                 </tr>
               @empty
                 <tr>
-                  <td colspan="8"
+                  <td colspan="11"
                       class="p-8 text-center text-gray-500">
                     <div class="flex flex-col items-center gap-2">
                       <svg xmlns="http://www.w3.org/2000/svg"
@@ -2344,7 +2402,7 @@
                x-transition:leave="ease-in duration-200" 
                x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100" 
                x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95" 
-               class="inline-block overflow-hidden text-left align-bottom transition-all transform bg-white rounded-2xl shadow-2xl sm:my-8 sm:align-middle sm:max-w-lg sm:w-full border border-gray-100">
+               class="inline-block overflow-hidden text-left align-bottom transition-all transform bg-white rounded-2xl shadow-2xl sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full border border-gray-100">
             
             <div class="px-6 py-5 bg-white border-b border-gray-100">
               <h3 class="text-xl font-bold text-gray-900" id="modal-title">Konfirmasi Migrasi Data</h3>
@@ -2369,12 +2427,50 @@
                 <!-- Database Selection -->
                 <div>
                   <label class="block text-sm font-bold text-gray-700 mb-2">Pilih Target Database <span class="text-red-500">*</span></label>
-                  <select x-model="modalSelectedDbId" class="block w-full border-gray-300 rounded-xl shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm bg-white cursor-pointer py-2.5">
+                  <select x-model="modalSelectedDbId" @change="fetchPreviewData()" class="block w-full border-gray-300 rounded-xl shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm bg-white cursor-pointer py-2.5">
                     <option value="">-- Pilih Database Accurate --</option>
                     @foreach ($databases as $db)
                       <option value="{{ $db['id'] }}">{{ $db['alias'] }} ({{ $db['id'] }})</option>
                     @endforeach
                   </select>
+                </div>
+
+                <!-- Preview List -->
+                <div x-show="modalSelectedDbId" x-transition class="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-sm mt-4">
+                  <div class="px-4 py-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
+                    <span class="text-sm font-bold text-gray-700">Preview Transaksi (<span x-text="modalPreviewData.length"></span>)</span>
+                    <div x-show="modalPreviewLoading" class="text-xs text-blue-600 font-medium flex items-center gap-1.5">
+                      <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                      Loading...
+                    </div>
+                  </div>
+                  <div class="max-h-64 overflow-y-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                      <thead class="bg-white sticky top-0 z-10 shadow-sm">
+                        <tr>
+                          <th class="px-4 py-2 text-left text-xs font-semibold text-gray-600 bg-white">Old Number</th>
+                          <th class="px-4 py-2 text-left text-xs font-semibold text-gray-600 bg-white">Module</th>
+                          <th class="px-4 py-2 text-left text-xs font-semibold text-gray-600 bg-white">Date</th>
+                          <th class="px-4 py-2 text-left text-xs font-semibold text-gray-600 bg-white w-48">New Number (Target)</th>
+                        </tr>
+                      </thead>
+                      <tbody class="divide-y divide-gray-100 bg-white">
+                        <template x-for="item in modalPreviewData" :key="item.id">
+                          <tr class="hover:bg-gray-50 transition-colors">
+                            <td class="px-4 py-2 text-xs font-mono text-gray-900" x-text="item.old_number"></td>
+                            <td class="px-4 py-2 text-xs text-gray-600" x-text="item.module_name"></td>
+                            <td class="px-4 py-2 text-xs text-gray-600 whitespace-nowrap" x-text="item.trans_date"></td>
+                            <td class="px-4 py-1.5">
+                              <input type="text" x-model="modalTargetNumbers[item.id]" class="w-full text-xs font-mono border-gray-300 rounded shadow-sm focus:ring-indigo-500 focus:border-indigo-500 py-1.5 px-2" placeholder="Auto">
+                            </td>
+                          </tr>
+                        </template>
+                        <tr x-show="!modalPreviewLoading && modalPreviewData.length === 0">
+                          <td colspan="4" class="px-4 py-6 text-center text-sm text-gray-500">Pilih database untuk melihat preview data.</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
 
                 <!-- Force Create Option -->
@@ -2385,6 +2481,17 @@
                   <div class="ml-3">
                     <span class="block text-sm font-bold text-gray-900">Force Create if Exists</span>
                     <span class="block text-xs text-gray-500 mt-1 leading-relaxed">Sistem akan memaksa membuat data baru di Accurate meskipun nomor transaksi sudah ada atau terjadi duplikasi data.</span>
+                  </div>
+                </label>
+
+                <!-- Custom Auto-Numbering Option -->
+                <label for="use_custom_numbering" class="flex items-start bg-white hover:bg-indigo-50/30 p-4 rounded-xl border border-gray-200 cursor-pointer transition-colors shadow-sm">
+                  <div class="flex items-center h-5 mt-0.5">
+                    <input id="use_custom_numbering" type="checkbox" x-model="modalUseCustomNumbering" @change="toggleCustomNumbering()" class="w-4 h-4 text-indigo-500 bg-white border-gray-300 rounded focus:ring-indigo-500">
+                  </div>
+                  <div class="ml-3">
+                    <span class="block text-sm font-bold text-gray-900">Custom Auto-Numbering (Urut Berdasarkan Tanggal)</span>
+                    <span class="block text-xs text-gray-500 mt-1 leading-relaxed">Menggantikan Auto-Numbering Accurate dengan custom format (Contoh: SI.2026.07.11-1). Data diurutkan kronologis.</span>
                   </div>
                 </label>
 

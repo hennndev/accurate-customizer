@@ -85,8 +85,8 @@ class NumberMappingManager
                 continue;
             }
 
-            $oldNumber = $originalData[$index][$numberField]
-                ?? $originalData[$index]['_sourceNumber']
+            $oldNumber = $originalData[$index]['_sourceNumber']
+                ?? $originalData[$index][$numberField]
                 ?? $originalData[$index]['charField1']  // preserved by handler before number field is stripped by DataCleaner
                 ?? $originalData[$index]['charField2']
                 ?? null;
@@ -124,6 +124,15 @@ class NumberMappingManager
                 if (!isset($normalizedResult['r']['number']) && isset($normalizedResult['d']) && is_array($normalizedResult['d']) && !empty($normalizedResult['d'][$altField])) {
                     $normalizedResult['r']['number'] = $normalizedResult['d'][$altField];
                     break;
+                }
+            }
+
+            // Always prioritize the injected custom preview number if available, 
+            // as requested by the user, to ensure mapping matches the preview.
+            if (!empty($originalData[$index]['_custom_number'])) {
+                $customNumber = $originalData[$index]['number'] ?? $originalData[$index]['no'] ?? null;
+                if ($customNumber) {
+                    $normalizedResult['r']['number'] = $customNumber;
                 }
             }
 
