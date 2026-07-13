@@ -33,6 +33,7 @@ class MigrateTransactionsJob implements ShouldQueue
 		public ?string $accessToken,
 		public bool $forceCreate = false,
 		public bool $addJuSuffix = false,
+		public array $targetNumbers = [],
 	) {
 	}
 
@@ -91,6 +92,21 @@ class MigrateTransactionsJob implements ShouldQueue
 				'failed_count' => $failedCount,
 			]);
 			return;
+		}
+
+		if (!empty($this->targetNumbers)) {
+			foreach ($transactions as $t) {
+				if (!empty($this->targetNumbers[$t->id])) {
+					$data = is_string($t->data) ? json_decode($t->data, true) : (array)$t->data;
+					if (!isset($data['_sourceNumber'])) {
+						$data['_sourceNumber'] = $data['number'] ?? $data['no'] ?? null;
+					}
+					$data['number'] = $this->targetNumbers[$t->id];
+					$data['no'] = $this->targetNumbers[$t->id];
+					$data['_custom_number'] = true;
+					$t->data = json_encode($data);
+				}
+			}
 		}
 
 		$groupedByModule = $transactions->groupBy('module.slug');

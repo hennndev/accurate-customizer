@@ -27,8 +27,9 @@ class DataCleaner
         // Recursive calls for detail sub-items skip this — detail lines are
         // handled by cleanDataItem's own transformation logic below.
         if (!$isSubItem) {
-            // Save source id before transformDetail overwrites $item.
+            // Save internal flags before transformDetail overwrites $item.
             $injectedId = $item['id'] ?? null;
+            $injectedCustomNumber = $item['_custom_number'] ?? null;
 
             $invoiceDpRaw = $item['invoiceDp'] ?? $item['invoiceDP'] ?? false;
             $isInvoiceDp = filter_var($invoiceDpRaw, FILTER_VALIDATE_BOOLEAN);
@@ -58,8 +59,10 @@ class DataCleaner
                 $item['charField1'] = (string) $item['number'];
             }
 
-            // Restore after handler filtering so cleanDataItem can honour source id rules.
+            // Restore after handler filtering so cleanDataItem can honour source id rules and custom flags.
             if ($injectedId !== null) { $item['id'] = $injectedId; }
+            if ($injectedCustomNumber !== null) { $item['_custom_number'] = $injectedCustomNumber; }
+
 
         }
 
@@ -100,7 +103,10 @@ class DataCleaner
             if (str_contains($endpoint, '/tax/') && ($key === 'salesTaxGlAccountId' || $key === 'purchaseTaxGlAccountId')) {
                 continue;
             }
-            if ($key === 'number' && (
+            if ($key === '_custom_number') {
+                continue;
+            }
+            if ($key === 'number' && empty($item['_custom_number']) && (
                 str_contains($endpoint, 'delivery-order') ||
                 str_contains($endpoint, 'purchase-invoice') ||
                 str_contains($endpoint, 'purchase-order') ||

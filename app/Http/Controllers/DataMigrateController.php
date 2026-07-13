@@ -59,7 +59,8 @@ class DataMigrateController extends Controller
         'migrated_at',
         'created_at',
       ])
-      ->selectRaw("JSON_UNQUOTE(JSON_EXTRACT(data, '$.transDate')) as trans_date_raw");
+      ->selectRaw("JSON_UNQUOTE(JSON_EXTRACT(data, '$.transDate')) as trans_date_raw")
+      ->selectRaw("JSON_UNQUOTE(JSON_EXTRACT(data, '$.id')) as accurate_id_raw");
     $customerNameExpression = "customer_name_virtual";
     $programInjekExpression = "program_injek_virtual";
     $customerProgramExpression = "customer_program_virtual";
@@ -181,6 +182,24 @@ class DataMigrateController extends Controller
 
     $transactions = $query->paginate($currentPerPage)->appends($request->except('page'));
 
+    $transactionNos = $transactions->pluck('transaction_no')->filter()->unique()->toArray();
+    $dbIds = $transactions->pluck('accurate_database_id')->filter()->unique()->toArray();
+
+    if (!empty($transactionNos)) {
+      $mappings = \App\Models\TransactionNumberMapping::whereIn('old_number', $transactionNos)
+        ->get()
+        ->groupBy(function ($item) {
+          return $item->module_slug . '_' . $item->old_number;
+        });
+
+      foreach ($transactions as $transaction) {
+        if ($transaction->module && $transaction->transaction_no) {
+          $key = $transaction->module->slug . '_' . $transaction->transaction_no;
+          $transaction->new_number = isset($mappings[$key]) ? $mappings[$key]->first()->new_number : null;
+        }
+      }
+    }
+
     // Highlight duplicate numbers only within current page to avoid expensive full-table scan.
     $duplicateTransactionNos = $transactions
       ->pluck('transaction_no')
@@ -240,7 +259,7 @@ class DataMigrateController extends Controller
         ->unique()
         ->sort()
         ->values();
-        
+
       return $options->isEmpty() ? collect(['Jurnal Umum']) : $options;
     });
 
@@ -390,6 +409,7 @@ class DataMigrateController extends Controller
       'target_database_id' => 'required|numeric',
       'force_create' => 'nullable|boolean',
       'add_ju_suffix' => 'nullable|boolean',
+      'target_numbers' => 'nullable|array',
     ]);
 
     $targetDbId = $request->input('target_database_id');
@@ -429,11 +449,11 @@ class DataMigrateController extends Controller
     $ids = $request->input('ids', []);
     $forceCreate = $request->boolean('force_create', false);
     $addJuSuffix = $request->boolean('add_ju_suffix', false);
+    $targetNumbers = $request->input('target_numbers', []);
 
     $tracker = SystemLog::create([
-      'event_type' => 'migrate_queue',
-      'module' => 'Multiple Modules',
-      'transaction_id' => null,
+      'event_type' => 'migrate',
+      'module' => 'System',
       'status' => 'queued',
       'payload' => [
         'target_database_id' => $targetDbId,
@@ -441,6 +461,7 @@ class DataMigrateController extends Controller
         'transaction_ids' => $ids,
         'force_create' => $forceCreate,
         'add_ju_suffix' => $addJuSuffix,
+        'target_numbers' => $targetNumbers,
         'total_selected' => count($ids),
         'progress' => 0,
       ],
@@ -454,6 +475,7 @@ class DataMigrateController extends Controller
       'total_transactions' => count($ids),
       'force_create' => $forceCreate,
       'add_ju_suffix' => $addJuSuffix,
+      'target_numbers' => $targetNumbers,
       'tracker_id' => $tracker->id,
       'user_id' => Auth::id(),
     ]);
@@ -467,7 +489,8 @@ class DataMigrateController extends Controller
       trackerLogId: $tracker->id,
       accessToken: session('accurate_access_token'),
       forceCreate: $forceCreate,
-      addJuSuffix: $addJuSuffix
+      addJuSuffix: $addJuSuffix,
+      targetNumbers: $targetNumbers
     )->onQueue('migrate');
 
     if ($request->expectsJson() || $request->ajax()) {
@@ -484,23 +507,148 @@ class DataMigrateController extends Controller
       "Migration queued. Monitor ID: {$tracker->id}. Cek progress di System Logs."
     );
   }
+  public function previewCustomNumbering(Request $request)
+  {
+    $request->validate([
+      'ids' => 'required|array',
+      'ids.*' => 'required|numeric|exists:transactions,id',
+      'target_database_id' => 'required|numeric',
+    ]);
 
-    public function clearAllTransactions()
-    {
+    $ids = $request->input('ids');
+    $targetDbId = $request->input('target_database_id');
+
+    // Mengurutkan sesuai dengan urutan array $ids
+    $idOrder = array_flip($ids);
+    $transactions = Transaction::with('module')->whereIn('id', $ids)->get()->sortBy(function ($t) use ($idOrder) {
+      return $idOrder[$t->id] ?? 999999;
+    })->values();
+
+    $prefixes = [
+      'sales-invoice' => 'SI',
+      'purchase-invoice' => 'PI',
+      'sales-receipt' => 'SR',
+      'purchase-payment' => 'PP',
+      'journal-voucher' => 'JV',
+      'receive-item' => 'RI',
+      'item-adjustment' => 'IA',
+      'delivery-order' => 'DO',
+      'sales-order' => 'SO',
+      'purchase-order' => 'PO',
+      'sales-quotation' => 'SQ',
+      'sales-return' => 'SRT',
+      'purchase-return' => 'PRT',
+      'purchase-requisition' => 'PRQ',
+      'other-deposit' => 'OD',
+      'other-payment' => 'OP',
+    ];
+
+    $grouped = $transactions->groupBy(function ($t) {
+      $data = is_string($t->data) ? json_decode($t->data, true) : (array) $t->data;
+      $date = $data['transDate'] ?? null;
+      if ($date) {
         try {
-            \Illuminate\Support\Facades\Schema::disableForeignKeyConstraints();
-            \App\Models\Transaction::truncate();
-            \Illuminate\Support\Facades\Schema::enableForeignKeyConstraints();
-            return response()->json([
-                "success" => true,
-                "message" => "All transaction data has been permanently deleted."
-            ]);
+          $date = \Carbon\Carbon::createFromFormat('d/m/Y', $date)->format('Y-m-d');
         } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Schema::enableForeignKeyConstraints();
-            return response()->json([
-                "success" => false,
-                "message" => "Error deleting transactions: " . $e->getMessage()
-            ], 500);
+          try {
+            $date = \Carbon\Carbon::parse($date)->format('Y-m-d');
+          } catch (\Exception $e) {
+          }
         }
+      }
+      return ($t->module->slug ?? '') . '|' . $date;
+    });
+
+    $previewData = [];
+
+    foreach ($grouped as $key => $groupTransactions) {
+      $parts = explode('|', $key);
+      $moduleSlug = $parts[0];
+      $dateStr = $parts[1] ?? '';
+
+      if (!$dateStr) {
+        foreach ($groupTransactions as $t) {
+          $data = is_string($t->data) ? json_decode($t->data, true) : (array) $t->data;
+          $previewData[] = [
+            'id' => $t->id,
+            'old_number' => $t->transaction_no,
+            'module_name' => $t->module->name ?? 'Unknown',
+            'trans_date' => $data['transDate'] ?? '-',
+            'generated_number' => ''
+          ];
+        }
+        continue;
+      }
+
+      $prefix = $prefixes[$moduleSlug] ?? strtoupper(substr($moduleSlug, 0, 2));
+      $dateFormatted = \Carbon\Carbon::parse($dateStr)->format('Y.m.d');
+      $baseFormat = "{$prefix}.{$dateFormatted}.";
+
+      $maxMapping = \App\Models\TransactionNumberMapping::where('accurate_database_id', $targetDbId)
+        ->where('module_slug', $moduleSlug)
+        ->where('new_number', 'LIKE', $baseFormat . '%')
+        ->orderByRaw('CAST(SUBSTRING_INDEX(new_number, ".", -1) AS UNSIGNED) DESC')
+        ->first();
+
+      $currentSequence = 0;
+      if ($maxMapping && preg_match('/\.(\d+)$/', $maxMapping->new_number, $matches)) {
+        $currentSequence = (int) $matches[1];
+      }
+
+      $sortedTransactions = $groupTransactions->sortBy('id');
+
+      foreach ($sortedTransactions as $t) {
+        $existingMapping = \App\Models\TransactionNumberMapping::where('accurate_database_id', $targetDbId)
+          ->where('module_slug', $moduleSlug)
+          ->where('old_number', $t->transaction_no)
+          ->first();
+
+        $data = is_string($t->data) ? json_decode($t->data, true) : (array) $t->data;
+        $generated = '';
+
+        if ($existingMapping && $existingMapping->new_number) {
+          $generated = $existingMapping->new_number;
+        } else {
+          $currentSequence++;
+          $generated = $baseFormat . str_pad($currentSequence, 3, '0', STR_PAD_LEFT);
+        }
+
+        $previewData[] = [
+          'id' => $t->id,
+          'old_number' => $t->transaction_no,
+          'module_name' => $t->module->name ?? 'Unknown',
+          'trans_date' => $data['transDate'] ?? '-',
+          'generated_number' => $generated
+        ];
+      }
     }
+
+    // Sort previewData to match the original $ids order requested by UI
+    usort($previewData, function ($a, $b) use ($idOrder) {
+      $orderA = $idOrder[$a['id']] ?? 999999;
+      $orderB = $idOrder[$b['id']] ?? 999999;
+      return $orderA <=> $orderB;
+    });
+
+    return response()->json(['success' => true, 'data' => $previewData]);
+  }
+
+  public function clearAllTransactions()
+  {
+    try {
+      \Illuminate\Support\Facades\Schema::disableForeignKeyConstraints();
+      \App\Models\Transaction::truncate();
+      \Illuminate\Support\Facades\Schema::enableForeignKeyConstraints();
+      return response()->json([
+        "success" => true,
+        "message" => "All transaction data has been permanently deleted."
+      ]);
+    } catch (\Exception $e) {
+      \Illuminate\Support\Facades\Schema::enableForeignKeyConstraints();
+      return response()->json([
+        "success" => false,
+        "message" => "Error deleting transactions: " . $e->getMessage()
+      ], 500);
+    }
+  }
 }
