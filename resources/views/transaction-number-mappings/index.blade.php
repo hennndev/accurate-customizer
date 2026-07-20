@@ -1,5 +1,5 @@
 <x-app-layout>
-  <x-slot name="title">Transaction Number Mapping</x-slot>
+  <x-slot name="title">Pemetaan Nomor Transaksi</x-slot>
   <x-slot name="header">
     <div class="flex items-center gap-3">
       <div class="flex items-center justify-center w-9 h-9 rounded-[14px] bg-[linear-gradient(135deg,#155DFC_0%,#4F39F6_100%)] shadow-[0_10px_15px_-3px_rgba(0,0,0,0.10),0_4px_6px_-4px_rgba(0,0,0,0.10)] flex-shrink-0">
@@ -15,7 +15,7 @@
         </svg>
       </div>
       <div class="flex flex-col gap-1">
-        <p class="text-[16px] font-medium text-black">Transaction Number Mapping</p>
+        <p class="text-[16px] font-medium text-black">Pemetaan Nomor Transaksi</p>
         <p class="text-sm font-medium text-gray-600">Capture dan kelola list mapping nomor transaksi</p>
       </div>
     </div>

@@ -1,5 +1,5 @@
 <x-app-layout>
-  <x-slot name="title">Queue List</x-slot>
+  <x-slot name="title">Daftar Antrean</x-slot>
   <x-slot name="header">
     <div class="flex items-center gap-3">
       <div class="flex items-center justify-center w-9 h-9 rounded-[14px] bg-[linear-gradient(135deg,#155DFC_0%,#4F39F6_100%)] shadow-[0_10px_15px_-3px_rgba(0,0,0,0.10),0_4px_6px_-4px_rgba(0,0,0,0.10)] flex-shrink-0">
@@ -8,8 +8,8 @@
         </svg>
       </div>
       <div class="flex flex-col gap-1">
-        <p class="text-[16px] font-medium text-black">Queue List</p>
-        <p class="text-sm font-medium text-gray-600">Semua antrian aktif dan riwayat status queue</p>
+        <p class="text-[16px] font-medium text-black">Daftar Antrean</p>
+        <p class="text-sm font-medium text-gray-600">Semua antrean aktif dan riwayat status queue</p>
       </div>
     </div>
   </x-slot>
@@ -40,11 +40,11 @@
                   @change="$event.target.form.submit()"
                   class="w-full appearance-none bg-white border border-gray-200 text-gray-700 text-sm rounded-xl py-2.5 px-4 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-medium shadow-sm transition cursor-pointer">
             <option value="all" @selected(request('queue_status', 'all') === 'all')>Semua Status</option>
-            <option value="queued" @selected(request('queue_status') === 'queued')>Queued</option>
-            <option value="running" @selected(request('queue_status') === 'running')>Running</option>
-            <option value="success" @selected(request('queue_status') === 'success')>Success</option>
-            <option value="warning" @selected(request('queue_status') === 'warning')>Warning</option>
-            <option value="failed" @selected(request('queue_status') === 'failed')>Failed</option>
+            <option value="queued" @selected(request('queue_status') === 'queued')>Antre</option>
+            <option value="running" @selected(request('queue_status') === 'running')>Berjalan</option>
+            <option value="success" @selected(request('queue_status') === 'success')>Sukses</option>
+            <option value="warning" @selected(request('queue_status') === 'warning')>Peringatan</option>
+            <option value="failed" @selected(request('queue_status') === 'failed')>Gagal</option>
             <option value="info" @selected(request('queue_status') === 'info')>Info</option>
           </select>
           <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-500">
@@ -71,7 +71,7 @@
               <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"></path>
             </svg>
           </div>
-          <span class="text-sm font-semibold text-gray-700 group-hover:text-black transition">Select All</span>
+          <span class="text-sm font-semibold text-gray-700 group-hover:text-black transition">Pilih Semua</span>
         </label>
         
         <button type="submit" 
@@ -81,7 +81,7 @@
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
             <path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
           </svg>
-          <span x-text="selected.length > 0 ? `Delete / Stop (${selected.length})` : 'Delete / Stop Selected'"></span>
+          <span x-text="selected.length > 0 ? `Hapus / Hentikan (${selected.length})` : 'Hapus / Hentikan Terpilih'"></span>
         </button>
       </div>
 
@@ -92,10 +92,10 @@
               <tr>
                 <th class="p-4 w-12 text-center">#</th>
                 <th class="p-4 font-semibold whitespace-nowrap">Waktu</th>
-                <th class="p-4 font-semibold whitespace-nowrap">Type</th>
-                <th class="p-4 font-semibold whitespace-nowrap">Module</th>
+                <th class="p-4 font-semibold whitespace-nowrap">Tipe</th>
+                <th class="p-4 font-semibold whitespace-nowrap">Modul</th>
                 <th class="p-4 font-semibold whitespace-nowrap">Status</th>
-                <th class="p-4 font-semibold whitespace-nowrap">Message</th>
+                <th class="p-4 font-semibold whitespace-nowrap">Pesan</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100">
@@ -113,7 +113,14 @@
                       {{ $log->event_type === 'delete' || $log->event_type === 'mass delete' ? 'bg-red-50 text-red-600 border border-red-100' : '' }}
                       {{ $log->event_type === 'migrate' || $log->event_type === 'migrate_queue' ? 'bg-blue-50 text-blue-600 border border-blue-100' : '' }}
                       {{ $log->event_type === 'capture' || $log->event_type === 'capture_queue' ? 'bg-violet-50 text-violet-600 border border-violet-100' : '' }}">
-                      {{ ucfirst($log->event_type) }}
+                      {{ [
+                          'delete' => 'Hapus',
+                          'mass delete' => 'Hapus Massal',
+                          'migrate' => 'Migrasi',
+                          'migrate_queue' => 'Antrean Migrasi',
+                          'capture' => 'Capture',
+                          'capture_queue' => 'Antrean Capture',
+                      ][$log->event_type] ?? ucfirst($log->event_type) }}
                     </span>
                   </td>
                   <td class="p-4 text-gray-900 font-medium">{{ $log->module ?? '-' }}</td>
@@ -128,7 +135,15 @@
                       @if($log->status === 'running')
                         <svg class="animate-spin -ml-0.5 mr-1.5 h-3 w-3 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
                       @endif
-                      {{ ucfirst($log->status) }}
+                      {{ [
+                          'success' => 'Sukses',
+                          'failed' => 'Gagal',
+                          'warning' => 'Peringatan',
+                          'partial' => 'Sebagian',
+                          'info' => 'Info',
+                          'queued' => 'Antre',
+                          'running' => 'Berjalan',
+                      ][$log->status] ?? ucfirst($log->status) }}
                     </span>
                   </td>
                   <td class="p-4 text-gray-600 text-sm max-w-md truncate" title="{{ $log->message }}">{{ $log->message }}</td>

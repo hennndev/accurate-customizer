@@ -3,7 +3,7 @@
 @endphp
 
 <x-app-layout>
-  <x-slot name="title">System Logs</x-slot>
+  <x-slot name="title">Log Sistem</x-slot>
   <x-slot name="header">
     <div class="flex items-center gap-3">
       <div class="flex items-center justify-center w-9 h-9 rounded-[14px] bg-[linear-gradient(135deg,#155DFC_0%,#4F39F6_100%)] shadow-[0_10px_15px_-3px_rgba(0,0,0,0.10),0_4px_6px_-4px_rgba(0,0,0,0.10)] flex-shrink-0">
@@ -19,8 +19,8 @@
         </svg>
       </div>
       <div class="flex flex-col gap-1">
-        <p class="text-[16px] font-medium text-black">System Logs</p>
-        <p class="text-sm font-medium text-gray-600">View system activities and events</p>
+        <p class="text-[16px] font-medium text-black">Log Sistem</p>
+        <p class="text-sm font-medium text-gray-600">Lihat riwayat aktivitas dan kejadian sistem</p>
       </div>
     </div>
   </x-slot>
@@ -42,19 +42,19 @@
             </svg>
           </div>
           <div class="flex flex-col">
-            <p class="text-white font-semibold text-lg md:text-xl lg:text-2xl">System Activity Log</p>
-            <p class="text-white text-sm md:text-base font-normal">Monitor all system activities and events</p>
+            <p class="text-white font-semibold text-lg md:text-xl lg:text-2xl">Log Aktivitas Sistem</p>
+            <p class="text-white text-sm md:text-base font-normal">Pantau semua aktivitas dan kejadian sistem</p>
           </div>
         </div>
       </div>
 
       <div class="flex flex-row items-center justify-between sm:justify-start gap-6 sm:gap-8 md:gap-10 w-full lg:w-auto">
         <div class="flex flex-col gap-1">
-          <p class="text-white font-medium text-xs md:text-sm">Total Events</p>
+          <p class="text-white font-medium text-xs md:text-sm">Total Kejadian</p>
           <p class="text-2xl md:text-3xl font-bold text-white self-end">{{ $totalEvents }}</p>
         </div>
         <div class="flex flex-col">
-          <p class="text-white font-medium text-xs md:text-sm">Success Rate</p>
+          <p class="text-white font-medium text-xs md:text-sm">Tingkat Keberhasilan</p>
           <p class="text-2xl md:text-3xl font-bold text-white self-end">{{ $successRate }} %</p>
         </div>
       </div>
@@ -63,7 +63,7 @@
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5 lg:gap-7">
       <div class="flex border border-gray-200 min-h-[120px] md:min-h-[150px] items-center justify-between shadow-md rounded-xl bg-white p-5 md:p-7 md:pt-10">
         <div class="flex flex-col gap-1">
-          <p class="text-gray-500 text-sm md:text-base">Total Events</p>
+          <p class="text-gray-500 text-sm md:text-base">Total Kejadian</p>
           <p class="text-black text-2xl md:text-3xl font-medium">{{ $totalEvents }}</p>
         </div>
         <svg xmlns="http://www.w3.org/2000/svg"
@@ -79,7 +79,7 @@
       </div>
       <div class="flex border border-gray-200 min-h-[120px] md:min-h-[150px] items-center justify-between shadow-md rounded-xl bg-white p-5 md:p-7 md:pt-10">
         <div class="flex flex-col gap-1">
-          <p class="text-gray-500 text-sm md:text-base">Success</p>
+          <p class="text-gray-500 text-sm md:text-base">Sukses</p>
           <p class="text-green-600 text-2xl md:text-3xl font-medium">{{ $successCount }}</p>
         </div>
         <svg xmlns="http://www.w3.org/2000/svg"
@@ -95,7 +95,7 @@
       </div>
       <div class="flex border border-gray-200 min-h-[120px] md:min-h-[150px] items-center justify-between shadow-md rounded-xl bg-white p-5 md:p-7 md:pt-10">
         <div class="flex flex-col gap-1">
-          <p class="text-gray-500 text-sm md:text-base">Errors</p>
+          <p class="text-gray-500 text-sm md:text-base">Error</p>
           <p class="text-orange-600 text-2xl md:text-3xl font-medium">{{ $errorCount }}</p>
         </div>
         <svg xmlns="http://www.w3.org/2000/svg"

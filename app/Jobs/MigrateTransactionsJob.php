@@ -34,11 +34,16 @@ class MigrateTransactionsJob implements ShouldQueue
 		public bool $forceCreate = false,
 		public bool $addJuSuffix = false,
 		public array $targetNumbers = [],
+		public string $numberingMode = 'accurate',
 	) {
 	}
 
 	public function handle(AccurateService $accurateService, NumberMappingManager $numberMappingManager): void
 	{
+		if ($this->isCancelled()) {
+			return;
+		}
+
 		if ($this->accessToken) {
 			session(['accurate_access_token' => $this->accessToken]);
 		}
@@ -70,14 +75,9 @@ class MigrateTransactionsJob implements ShouldQueue
 			'add_ju_suffix' => $this->addJuSuffix,
 		]);
 
-		$transactionsQuery = Transaction::with(['module', 'accurateDatabase'])
-			->whereIn('id', $this->transactionIds);
-
-		if (!$this->forceCreate) {
-			$transactionsQuery->where('status', '!=', 'success');
-		}
-
-		$transactions = $transactionsQuery->get();
+		$transactions = Transaction::with(['module', 'accurateDatabase'])
+			->whereIn('id', $this->transactionIds)
+			->get();
 
 		// Mengurutkan ulang collection agar persis sesuai dengan urutan array $this->transactionIds dari UI
 		$idOrder = array_flip($this->transactionIds);
@@ -94,18 +94,59 @@ class MigrateTransactionsJob implements ShouldQueue
 			return;
 		}
 
-		if (!empty($this->targetNumbers)) {
+		$numberingMode = $this->numberingMode ?? 'accurate';
+
+		$isMasterModule = function ($t) {
+			$slug = $t->module?->slug;
+			$masterModules = [
+				'customer', 'vendor', 'item', 'branch', 'department', 'employee', 'warehouse', 'project',
+				'customer-category', 'vendor-category', 'item-category', 'price-category', 'data-classification',
+				'vendor-price', 'glaccount', 'currency', 'tax', 'unit', 'fob', 'bill-of-material'
+			];
+			return in_array($slug, $masterModules, true) || ($t->module?->type === 'master');
+		};
+
+		if ($numberingMode === 'original') {
 			foreach ($transactions as $t) {
-				if (!empty($this->targetNumbers[$t->id])) {
-					$data = is_string($t->data) ? json_decode($t->data, true) : (array)$t->data;
+				$data = is_string($t->data) ? json_decode($t->data, true) : (array)$t->data;
+				$originalNo = $t->transaction_no;
+				// For GL Account, if raw JSON already has the account number 'no', prefer it over transaction_no
+				if ($t->module?->slug === 'glaccount' && !empty($data['no'])) {
+					$originalNo = $data['no'];
+				}
+				if ($originalNo) {
+					$this->targetNumbers[$t->id] = $originalNo;
 					if (!isset($data['_sourceNumber'])) {
 						$data['_sourceNumber'] = $data['number'] ?? $data['no'] ?? null;
 					}
+					if (!$isMasterModule($t)) {
+						$data['number'] = $originalNo;
+						$data['no'] = $originalNo;
+						$data['_custom_number'] = true;
+					} else {
+						// Master data modules keep their original code/number field
+						if ($t->module?->slug === 'glaccount') {
+							$data['no'] = $originalNo;
+						}
+					}
+					$t->data = json_encode($data);
+				}
+			}
+		} elseif ($numberingMode === 'custom' && !empty($this->targetNumbers)) {
+			foreach ($transactions as $t) {
+				$data = is_string($t->data) ? json_decode($t->data, true) : (array)$t->data;
+				if (!isset($data['_sourceNumber'])) {
+					$data['_sourceNumber'] = $data['number'] ?? $data['no'] ?? null;
+				}
+				if (!$isMasterModule($t) && !empty($this->targetNumbers[$t->id])) {
 					$data['number'] = $this->targetNumbers[$t->id];
 					$data['no'] = $this->targetNumbers[$t->id];
 					$data['_custom_number'] = true;
-					$t->data = json_encode($data);
+				} elseif ($t->module?->slug === 'glaccount' && !empty($data['no'])) {
+					// Ensure GL Account retains its account number no
+					$data['no'] = $data['no'];
 				}
+				$t->data = json_encode($data);
 			}
 		}
 
@@ -117,6 +158,9 @@ class MigrateTransactionsJob implements ShouldQueue
 		$totalTransactions = $totalSelected;
 
 		foreach ($groupedByModule as $moduleSlug => $moduleTransactions) {
+			if ($this->isCancelled()) {
+				return;
+			}
 			$moduleIndex++;
 			$module = $moduleTransactions->first()->module;
 
@@ -139,37 +183,7 @@ class MigrateTransactionsJob implements ShouldQueue
 			$bulkData = [];
 			$payloadTransactions = [];
 
-			$salesInvoiceOldNumberMap = [];
-			if ($moduleSlug === 'sales-invoice') {
-				$candidateNumbers = $moduleTransactions
-					->pluck('transaction_no')
-					->filter(fn ($number) => filled($number))
-					->values()
-					->all();
-
-				if (!empty($candidateNumbers)) {
-					$mappedOldNumbers = SalesInvoiceMapping::query()
-						->where('db_name', $this->targetDatabaseName)
-						->whereIn('old_number', $candidateNumbers)
-						->pluck('old_number')
-						->all();
-
-					$salesInvoiceOldNumberMap = array_flip($mappedOldNumbers);
-				}
-			}
-
 			foreach ($moduleTransactions as $transaction) {
-				if ($moduleSlug === 'sales-invoice' && isset($salesInvoiceOldNumberMap[$transaction->transaction_no])) {
-					$transaction->update([
-						'status' => 'success',
-						'migrated_at' => now(),
-						'error_message' => null,
-					]);
-
-					$successCount++;
-					$moduleResults[$module->name]['success']++;
-					continue;
-				}
 
 				$data = json_decode($transaction->data, true);
 				if (json_last_error() !== JSON_ERROR_NONE || !is_array($data) || empty($data)) {
@@ -210,6 +224,9 @@ class MigrateTransactionsJob implements ShouldQueue
 			$chunkTransactions = array_chunk($payloadTransactions, 100);
 
 			foreach ($chunks as $chunkIndex => $chunkData) {
+				if ($this->isCancelled()) {
+					return;
+				}
 				try {
           Log::info('MIGRATION_CHUNK_START', [
             'module' => $moduleSlug,
@@ -430,5 +447,11 @@ class MigrateTransactionsJob implements ShouldQueue
 			|| str_contains($message, 'invalid_token')
 			|| str_contains($message, 'token tidak valid')
 			|| str_contains($message, 'sesi accurate habis');
+	}
+
+	private function isCancelled(): bool
+	{
+		$log = SystemLog::find($this->trackerLogId);
+		return $log && ($log->status === 'failed' || ($log->payload['cancelled'] ?? false));
 	}
 }

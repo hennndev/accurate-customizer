@@ -31,4 +31,32 @@ class Transaction extends Model
     {
         return $this->belongsTo(Module::class, 'module_id');
     }
+
+    public function getEntityNameAttribute(): ?string
+    {
+        $data = is_string($this->data) ? json_decode($this->data, true) : (array) $this->data;
+        if (!is_array($data)) {
+            return null;
+        }
+
+        $val = $data['name']
+            ?? $data['customer']['name']
+            ?? $data['vendor']['name']
+            ?? $data['customerName']
+            ?? $data['vendorName']
+            ?? $data['itemName']
+            ?? $data['item']['name']
+            ?? $data['payTo']
+            ?? $data['receivedFrom']
+            ?? $data['description']
+            ?? $data['memo']
+            ?? null;
+
+        if (is_string($val)) {
+            $val = trim($val);
+            return $val !== '' ? $val : null;
+        }
+
+        return null;
+    }
 }

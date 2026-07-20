@@ -30,6 +30,7 @@ class DataCleaner
             // Save internal flags before transformDetail overwrites $item.
             $injectedId = $item['id'] ?? null;
             $injectedCustomNumber = $item['_custom_number'] ?? null;
+            $injectedSourceNumber = $item['_sourceNumber'] ?? null;
 
             $invoiceDpRaw = $item['invoiceDp'] ?? $item['invoiceDP'] ?? false;
             $isInvoiceDp = filter_var($invoiceDpRaw, FILTER_VALIDATE_BOOLEAN);
@@ -48,7 +49,26 @@ class DataCleaner
                     $meta['module'] = $moduleSlug;
                 }
             }
+
+            // Temporarily replace number & no with _sourceNumber so that handlers
+            // extract the original old number (rather than the injected custom target number).
+            $hasSourceNumber = isset($item['_sourceNumber']);
+            $customNumber = null;
+            $customNo = null;
+            if ($hasSourceNumber) {
+                $customNumber = $item['number'] ?? null;
+                $customNo = $item['no'] ?? null;
+                $item['number'] = $item['_sourceNumber'];
+                $item['no'] = $item['_sourceNumber'];
+            }
+
             $handler->transformDetail($item, $sharedContext, $meta);
+
+            // Restore custom number
+            if ($hasSourceNumber) {
+                if ($customNumber !== null) { $item['number'] = $customNumber; } else { unset($item['number']); }
+                if ($customNo !== null) { $item['no'] = $customNo; } else { unset($item['no']); }
+            }
 
             if (
                 str_contains($endpoint, '/purchase-invoice/')
@@ -56,14 +76,12 @@ class DataCleaner
                 && empty($item['charField1'])
                 && !empty($item['number'])
             ) {
-                $item['charField1'] = (string) $item['number'];
+                $item['charField1'] = (string) ($injectedSourceNumber ?? $item['number']);
             }
 
             // Restore after handler filtering so cleanDataItem can honour source id rules and custom flags.
             if ($injectedId !== null) { $item['id'] = $injectedId; }
             if ($injectedCustomNumber !== null) { $item['_custom_number'] = $injectedCustomNumber; }
-
-
         }
 
         $cleaned = [];

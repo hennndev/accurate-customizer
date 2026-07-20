@@ -1,5 +1,5 @@
 <x-app-layout>
-  <x-slot name="title">Modules Management</x-slot>
+  <x-slot name="title">Manajemen Modul</x-slot>
   <x-slot name="header">
     <div class="flex items-center gap-3">
       <div class="flex items-center justify-center w-9 h-9 rounded-[14px] bg-[linear-gradient(135deg,#155DFC_0%,#4F39F6_100%)] shadow-[0_10px_15px_-3px_rgba(0,0,0,0.10),0_4px_6px_-4px_rgba(0,0,0,0.10)] flex-shrink-0">
@@ -15,8 +15,8 @@
         </svg>
       </div>
       <div class="flex flex-col gap-1">
-        <p class="text-[16px] font-medium text-black">Modules</p>
-        <p class="text-sm font-medium text-gray-600">Capture data from Accurate modules</p>
+        <p class="text-[16px] font-medium text-black">Manajemen Modul</p>
+        <p class="text-sm font-medium text-gray-600">Ambil data dari modul-modul Accurate</p>
       </div>
     </div>
   </x-slot>
@@ -511,8 +511,8 @@
                   d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" />
           </svg>
           <div class="flex flex-col">
-            <p class="text-white font-normal text-sm tracking-wide">Source Database</p>
-            <p class="text-white text-lg font-semibold">Select database to capture data from</p>
+            <p class="text-white font-normal text-sm tracking-wide">Database Sumber</p>
+            <p class="text-white text-lg font-semibold">Pilih database tempat pengambilan data</p>
           </div>
         </div>
 
@@ -528,7 +528,7 @@
 
             <div x-data="{
                 open: false,
-                selected: @js($current_database_name ?? 'Select Database'),
+                selected: @js($current_database_name ?? 'Pilih Database'),
                 loading: false,
                 selectDb(dbId, dbAlias, dbData) {
                     this.selected = dbAlias;
@@ -569,7 +569,7 @@
                           d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
                     </path>
                   </svg>
-                  Switching database...
+                  Mengalihkan database...
                 </span>
                 <svg x-show="!loading"
                      xmlns="http://www.w3.org/2000/svg"
@@ -622,12 +622,12 @@
 
       <div class="flex flex-col sm:flex-row items-start sm:items-center gap-5 sm:gap-10">
         <div class="flex flex-col gap-1">
-          <p class="text-white font-medium text-sm">Modules Captured</p>
+          <p class="text-white font-medium text-sm">Modul Terambil</p>
           <p class="text-2xl md:text-3xl font-bold text-white self-start sm:self-end">{{ $modules->count() }}
           </p>
         </div>
         <div class="flex flex-col">
-          <p class="text-white font-medium text-sm">Total Transactions</p>
+          <p class="text-white font-medium text-sm">Total Transaksi</p>
           <p class="text-2xl md:text-3xl font-bold text-white self-start sm:self-end">
             {{ $total_transactions }}</p>
         </div>
@@ -656,7 +656,7 @@
         <div class="flex flex-col gap-1">
           <p class="text-lg text-green-800 font-bold">{{ session('success') }}</p>
           <p class="text-green-800 font-normal text-[15px]">
-            You can now capture module data from this database.
+            Anda sekarang dapat mengambil data modul dari database ini.
           </p>
         </div>
       </div>
@@ -670,7 +670,7 @@
               class="flex flex-col gap-4">
           {{-- Filter Type Selection --}}
           <div class="flex items-center gap-4">
-            <label class="block text-sm font-semibold text-gray-700">Filter Type:</label>
+            <label class="block text-sm font-semibold text-gray-700">Tipe Filter:</label>
             <div class="flex gap-4">
               <label class="flex items-center gap-2 cursor-pointer">
                 <input type="radio"
@@ -679,7 +679,7 @@
                        {{ request('filter_type', 'range') === 'range' ? 'checked' : '' }}
                        onchange="toggleFilterType(this.value)"
                        class="w-4 h-4 text-blue-600 focus:ring-blue-500">
-                <span class="text-sm font-medium text-gray-700">Date Range</span>
+                <span class="text-sm font-medium text-gray-700">Rentang Tanggal</span>
               </label>
               <label class="flex items-center gap-2 cursor-pointer">
                 <input type="radio"
@@ -688,7 +688,7 @@
                        {{ request('filter_type') === 'equal' ? 'checked' : '' }}
                        onchange="toggleFilterType(this.value)"
                        class="w-4 h-4 text-blue-600 focus:ring-blue-500">
-                <span class="text-sm font-medium text-gray-700">Specific Date</span>
+                <span class="text-sm font-medium text-gray-700">Tanggal Spesifik</span>
               </label>
               <label class="flex items-center gap-2 cursor-pointer">
                 <input type="radio"
@@ -697,7 +697,7 @@
                        {{ request('filter_type') === 'last_update' ? 'checked' : '' }}
                        onchange="toggleFilterType(this.value)"
                        class="w-4 h-4 text-blue-600 focus:ring-blue-500">
-                <span class="text-sm font-medium text-gray-700">Last Update (Range)</span>
+                <span class="text-sm font-medium text-gray-700">Terakhir Diperbarui (Rentang)</span>
               </label>
               <label class="flex items-center gap-2 cursor-pointer">
                 <input type="radio"
@@ -706,7 +706,7 @@
                        {{ request('filter_type') === 'last_update_equal' ? 'checked' : '' }}
                        onchange="toggleFilterType(this.value)"
                        class="w-4 h-4 text-blue-600 focus:ring-blue-500">
-                <span class="text-sm font-medium text-gray-700">Last Update (Specific)</span>
+                <span class="text-sm font-medium text-gray-700">Terakhir Diperbarui (Spesifik)</span>
               </label>
             </div>
           </div>
@@ -717,7 +717,7 @@
                  id="start-date-container">
               <label for="start_date"
                      class="block text-sm font-medium text-gray-700 mb-2">
-                <span id="start-date-label">Start Date</span>
+                <span id="start-date-label">Tanggal Mulai</span>
               </label>
               <div class="flex gap-2">
                 <input type="date"
@@ -737,7 +737,7 @@
                  id="end-date-container">
               <label for="end_date"
                      class="block text-sm font-medium text-gray-700 mb-2">
-                <span id="end-date-label">End Date</span>
+                <span id="end-date-label">Tanggal Selesai</span>
               </label>
               <div class="flex gap-2">
                 <input type="date"
@@ -766,7 +766,7 @@
                         stroke-linejoin="round"
                         d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
                 </svg>
-                Apply Filter
+                Terapkan Filter
               </button>
               @if (request('start_date') || request('end_date') || request('filter_type'))
                 <a href="{{ route('modules.index') }}"
@@ -781,7 +781,7 @@
                           stroke-linejoin="round"
                           d="M6 18 18 6M6 6l12 12" />
                   </svg>
-                  Clear
+                  Hapus Filter
                 </a>
               @endif
             </div>
@@ -811,20 +811,20 @@
 
             if (type === 'equal') {
               endDateContainer.style.display = 'none';
-              startDateLabel.textContent = 'Transaction Date';
+              startDateLabel.textContent = 'Tanggal Transaksi';
               endDateInput.value = '';
             } else if (type === 'last_update_equal') {
               endDateContainer.style.display = 'none';
-              startDateLabel.textContent = 'Last Updated Date';
+              startDateLabel.textContent = 'Tanggal Terakhir Diperbarui';
               endDateInput.value = '';
             } else if (type === 'last_update') {
               endDateContainer.style.display = '';
-              startDateLabel.textContent = 'Last Updated From';
-              endDateLabel.textContent = 'Last Updated To';
+              startDateLabel.textContent = 'Terakhir Diperbarui Dari';
+              endDateLabel.textContent = 'Terakhir Diperbarui Sampai';
             } else {
               endDateContainer.style.display = '';
-              startDateLabel.textContent = 'Start Date';
-              endDateLabel.textContent = 'End Date';
+              startDateLabel.textContent = 'Tanggal Mulai';
+              endDateLabel.textContent = 'Tanggal Selesai';
             }
           }
 
@@ -900,7 +900,7 @@
         </div>
         <input type="text"
                x-model="searchQuery"
-               placeholder="Search modules by name or description..."
+               placeholder="Cari modul berdasarkan nama atau deskripsi..."
                class="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition">
         <div x-show="searchQuery"
              @click="searchQuery = ''"
@@ -934,7 +934,7 @@
                 stroke-linejoin="round"
                 d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z" />
         </svg>
-        <span>All Modules</span>
+        <span>Semua Modul</span>
         <span x-show="activeFilter === 'all'"
               class="ml-1 px-2 py-0.5 bg-white/20 rounded-full text-xs font-semibold">51</span>
       </button>
