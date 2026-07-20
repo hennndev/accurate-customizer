@@ -26,6 +26,8 @@ class DataMigrateController extends Controller
   // HALAMAN INDEX MIGRATE DATA
   public function index(Request $request)
   {
+    @ini_set('memory_limit', '512M');
+
     try {
       $databases = $this->accurateService->getDatabaseList();
     } catch (\Exception $e) {
@@ -53,7 +55,6 @@ class DataMigrateController extends Controller
         'transaction_no',
         'accurate_database_id',
         'module_id',
-        'data',
         'description',
         'status',
         'error_message',
@@ -61,7 +62,17 @@ class DataMigrateController extends Controller
         'created_at',
       ])
       ->selectRaw("JSON_UNQUOTE(JSON_EXTRACT(data, '$.transDate')) as trans_date_raw")
-      ->selectRaw("JSON_UNQUOTE(JSON_EXTRACT(data, '$.id')) as accurate_id_raw");
+      ->selectRaw("JSON_UNQUOTE(JSON_EXTRACT(data, '$.id')) as accurate_id_raw")
+      ->selectRaw("COALESCE(
+          NULLIF(JSON_UNQUOTE(JSON_EXTRACT(data, '$.name')), ''),
+          NULLIF(JSON_UNQUOTE(JSON_EXTRACT(data, '$.customer.name')), ''),
+          NULLIF(JSON_UNQUOTE(JSON_EXTRACT(data, '$.vendor.name')), ''),
+          NULLIF(JSON_UNQUOTE(JSON_EXTRACT(data, '$.customerName')), ''),
+          NULLIF(JSON_UNQUOTE(JSON_EXTRACT(data, '$.vendorName')), ''),
+          NULLIF(JSON_UNQUOTE(JSON_EXTRACT(data, '$.payTo')), ''),
+          NULLIF(JSON_UNQUOTE(JSON_EXTRACT(data, '$.receivedFrom')), ''),
+          NULLIF(JSON_UNQUOTE(JSON_EXTRACT(data, '$.description')), '')
+      ) as entity_name_raw");
     $customerNameExpression = "customer_name_virtual";
     $programInjekExpression = "program_injek_virtual";
     $customerProgramExpression = "customer_program_virtual";
@@ -225,6 +236,7 @@ class DataMigrateController extends Controller
         ->whereRaw("{$customerNameExpression} IS NOT NULL")
         ->whereRaw("{$customerNameExpression} != ''")
         ->orderBy('value')
+        ->limit(1000)
         ->pluck('value');
     });
 
@@ -234,6 +246,7 @@ class DataMigrateController extends Controller
         ->whereRaw("{$programInjekExpression} IS NOT NULL")
         ->whereRaw("{$programInjekExpression} != ''")
         ->orderBy('value')
+        ->limit(500)
         ->pluck('value');
 
       $customerProgramOptions = Transaction::query()
@@ -241,6 +254,7 @@ class DataMigrateController extends Controller
         ->whereRaw("{$customerProgramExpression} IS NOT NULL")
         ->whereRaw("{$customerProgramExpression} != ''")
         ->orderBy('value')
+        ->limit(500)
         ->pluck('value');
 
       return $programInjekOptions
@@ -253,8 +267,9 @@ class DataMigrateController extends Controller
 
     $transactionTypeOptions = Cache::remember('migrate:transaction_types:v1', now()->addMinutes(5), function () {
       $options = Transaction::query()
-        ->selectRaw("JSON_UNQUOTE(JSON_EXTRACT(data, '$.transactionTypeName')) AS value")
+        ->selectRaw("DISTINCT JSON_UNQUOTE(JSON_EXTRACT(data, '$.transactionTypeName')) AS value")
         ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(data, '$.transactionTypeName')) IS NOT NULL")
+        ->limit(500)
         ->pluck('value')
         ->filter(fn($value) => filled($value) && strtolower($value) !== 'null')
         ->unique()
