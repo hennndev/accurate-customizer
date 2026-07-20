@@ -34,6 +34,10 @@ class Transaction extends Model
 
     public function getEntityNameAttribute(): ?string
     {
+        if (!empty($this->attributes['entity_name_raw'])) {
+            return $this->attributes['entity_name_raw'];
+        }
+
         $data = is_string($this->data) ? json_decode($this->data, true) : (array) $this->data;
         if (!is_array($data)) {
             return null;

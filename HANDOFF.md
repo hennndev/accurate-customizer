@@ -82,9 +82,11 @@ Capture Data Job            Preview Custom Numbering               MigrateTransa
   - **Penyebab 1:** Saat pengambilan data list (`fetchModuleDataPage`), field `vendorNo` dan `customerNo` tidak dieksplisitkan dalam `fieldsToRequest`, menyebabkan `$fallback_number` kandidat bernilai `null` sehingga pengecekan duplikat sebelum fetch detail dilewati.
   - **Penyebab 2:** Query pengecekan duplikat di `CaptureModuleJob.php` sebelumnya hanya menyaring berdasarkan `accurate_database_id` tanpa menyertakan `module_id`, menyebabkan potensi salah deteksi duplikat antar modul yang berbeda.
   - **Solusi:** `CaptureModuleJob.php` telah diperbarui: `fieldsToRequest` kini menyertakan `vendorNo`, `customerNo`, `no`, `number`; resolusi `fallback_number` ditingkatkan; dan query pengecekan duplikat kini wajib memfilter `module_id`.
-- **Penambahan & Penyesuaian Kolom Nama pada Tabel Migrasi:** 
+- **Penambahan & Penyesuaian Kolom Nama pada Tabel Migrasi & Optimasi Memori:** 
   - Menambahkan & menyempurnakan accessor `getEntityNameAttribute()` pada model `Transaction` agar mampu mengekstrak nama entitas/transaksi secara presisi di seluruh jenis modul (Vendor `name`/`vendorName`, Customer `name`/`customerName`, Item `name`/`itemName`, GL Account `name`, Journal Voucher `description`/`memo`, Cash `payTo`/`receivedFrom`, dsb.).
-  - Menambahkan kolom `'data'` ke dalam kueri `->select([...])` pada `DataMigrateController.php` (method `index`) agar payload JSON dimuat oleh Eloquent, serta membersihkan cache view Blade.
+  - Mengoptimalkan kueri pagination pada `DataMigrateController.php` dengan mengekstrak `entity_name_raw` secara langsung menggunakan `selectRaw` MySQL `COALESCE(...)` tanpa memuat seluruh kolom teks JSON `data` yang sangat besar (100KB+ per record) ke dalam memori Eloquent, sehingga pemakaian memori PHP turun dari >120MB menjadi <1MB. Detail data JSON tetap dimuat secara terpisah saat tombol Edit diklik melalui endpoint AJAX (`/migrate/{id}/data`).
+  - Menambahkan `DISTINCT` dan batas `limit` pada kueri opsi filter dropdown untuk menghindari penarikan puluhan ribu baris data sekaligus ke PHP.
+  - Menyetel `@ini_set('memory_limit', '512M')` pada method `index()` halaman migrasi.
   - Menampilkan kolom **Nama** di antara kolom *Nomor Lama* dan *Nomor Baru* pada tabel di halaman `resources/views/migrate/index.blade.php`.
 - **Dokumentasi Teknis:** Dibuat berkas pendukung `technical_documentation.md`.
 
