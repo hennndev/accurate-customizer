@@ -225,10 +225,7 @@ class CaptureTransactionNumberMappingJob implements ShouldQueue
 
     private function isCancelled(): bool
     {
-        if (!$this->cancelToken) {
-            return false;
-        }
-
-        return (bool) cache()->get($this->cancelToken, false);
+        $log = SystemLog::find($this->trackerLogId);
+        return $log && ($log->status === 'failed' || ($log->payload['cancelled'] ?? false));
     }
 }

@@ -53,6 +53,7 @@ class DataMigrateController extends Controller
         'transaction_no',
         'accurate_database_id',
         'module_id',
+        'data',
         'description',
         'status',
         'error_message',
@@ -410,6 +411,7 @@ class DataMigrateController extends Controller
       'force_create' => 'nullable|boolean',
       'add_ju_suffix' => 'nullable|boolean',
       'target_numbers' => 'nullable|array',
+      'numbering_mode' => 'nullable|string|in:accurate,original,custom',
     ]);
 
     $targetDbId = $request->input('target_database_id');
@@ -450,9 +452,10 @@ class DataMigrateController extends Controller
     $forceCreate = $request->boolean('force_create', false);
     $addJuSuffix = $request->boolean('add_ju_suffix', false);
     $targetNumbers = $request->input('target_numbers', []);
+    $numberingMode = $request->input('numbering_mode', 'accurate');
 
     $tracker = SystemLog::create([
-      'event_type' => 'migrate',
+      'event_type' => 'migrate_queue',
       'module' => 'System',
       'status' => 'queued',
       'payload' => [
@@ -462,6 +465,7 @@ class DataMigrateController extends Controller
         'force_create' => $forceCreate,
         'add_ju_suffix' => $addJuSuffix,
         'target_numbers' => $targetNumbers,
+        'numbering_mode' => $numberingMode,
         'total_selected' => count($ids),
         'progress' => 0,
       ],
@@ -476,6 +480,7 @@ class DataMigrateController extends Controller
       'force_create' => $forceCreate,
       'add_ju_suffix' => $addJuSuffix,
       'target_numbers' => $targetNumbers,
+      'numbering_mode' => $numberingMode,
       'tracker_id' => $tracker->id,
       'user_id' => Auth::id(),
     ]);
@@ -490,7 +495,8 @@ class DataMigrateController extends Controller
       accessToken: session('accurate_access_token'),
       forceCreate: $forceCreate,
       addJuSuffix: $addJuSuffix,
-      targetNumbers: $targetNumbers
+      targetNumbers: $targetNumbers,
+      numberingMode: $numberingMode
     )->onQueue('migrate');
 
     if ($request->expectsJson() || $request->ajax()) {
@@ -606,16 +612,26 @@ class DataMigrateController extends Controller
         $data = is_string($t->data) ? json_decode($t->data, true) : (array) $t->data;
         $generated = '';
 
-        if ($existingMapping && $existingMapping->new_number) {
+        $isMaster = ($t->module?->type === 'master') || in_array($moduleSlug, [
+          'customer', 'vendor', 'item', 'branch', 'department', 'employee', 'warehouse', 'project',
+          'customer-category', 'vendor-category', 'item-category', 'price-category', 'data-classification',
+          'vendor-price', 'glaccount', 'currency', 'tax', 'unit', 'fob', 'bill-of-material'
+        ], true);
+
+        if ($isMaster) {
+          $generated = $data['no'] ?? $data['vendorNo'] ?? $data['customerNo'] ?? $t->transaction_no;
+        } elseif ($existingMapping && $existingMapping->new_number) {
           $generated = $existingMapping->new_number;
         } else {
           $currentSequence++;
           $generated = $baseFormat . str_pad($currentSequence, 3, '0', STR_PAD_LEFT);
         }
 
+        $oldNumberDisplay = ($moduleSlug === 'glaccount' && !empty($data['no'])) ? $data['no'] : $t->transaction_no;
+
         $previewData[] = [
           'id' => $t->id,
-          'old_number' => $t->transaction_no,
+          'old_number' => $oldNumberDisplay,
           'module_name' => $t->module->name ?? 'Unknown',
           'trans_date' => $data['transDate'] ?? '-',
           'generated_number' => $generated

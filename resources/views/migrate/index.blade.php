@@ -58,7 +58,7 @@
            modalSelectedDbId: '',
            modalForceCreate: true,
            modalTargetIds: [],
-           modalUseCustomNumbering: false,
+           modalNumberingMode: 'original',
            modalPreviewData: [],
            modalTargetNumbers: {},
            modalPreviewLoading: false,
@@ -92,7 +92,7 @@
                this.modalSelectedDbId = document.getElementById('targetDatabaseSelect')?.value || '';
                this.modalForceCreate = true;
                this.modalAddJuSuffix = false;
-               this.modalUseCustomNumbering = false;
+               this.modalNumberingMode = 'original';
                this.modalPreviewData = [];
                this.modalTargetNumbers = {};
                
@@ -120,9 +120,7 @@
                    const data = await response.json();
                    if (data.success) {
                        this.modalPreviewData = data.data;
-                       data.data.forEach(item => {
-                           this.modalTargetNumbers[item.id] = '';
-                       });
+                       this.handleNumberingModeChange();
                    }
                } catch (e) {
                    console.error('Failed to fetch preview data', e);
@@ -131,10 +129,14 @@
                }
            },
 
-           toggleCustomNumbering() {
-               if (this.modalUseCustomNumbering) {
+           handleNumberingModeChange() {
+               if (this.modalNumberingMode === 'custom') {
                    this.modalPreviewData.forEach(item => {
                        this.modalTargetNumbers[item.id] = item.generated_number;
+                   });
+               } else if (this.modalNumberingMode === 'original') {
+                   this.modalPreviewData.forEach(item => {
+                       this.modalTargetNumbers[item.id] = item.old_number;
                    });
                } else {
                    this.modalPreviewData.forEach(item => {
@@ -492,7 +494,7 @@
                const payloadIds = [...this.modalTargetIds];
                const forceCreate = this.modalForceCreate;
                const addJuSuffix = this.modalAddJuSuffix;
-               const useCustomNumbering = this.modalUseCustomNumbering;
+               const numberingMode = this.modalNumberingMode;
 
                this.closeMigrateModal();
                this.migrating = true;
@@ -519,6 +521,7 @@
                            ids: payloadIds,
                            force_create: forceCreate,
                            add_ju_suffix: addJuSuffix,
+                           numbering_mode: numberingMode,
                            target_numbers: this.modalTargetNumbers
                        })
                    });
@@ -602,15 +605,15 @@
                   d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
           </svg>
           <div class="flex flex-col">
-            <p class="text-white font-normal text-xs md:text-sm tracking-wide">Target Database</p>
-            <p class="text-white text-sm md:text-base lg:text-lg font-semibold">Select database to migrate to</p>
+            <p class="text-white font-normal text-xs md:text-sm tracking-wide">Database Target</p>
+            <p class="text-white text-sm md:text-base lg:text-lg font-semibold">Pilih database tujuan migrasi</p>
           </div>
         </div>
 
         <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
           <div x-data="{
               open: false,
-              selected: 'Select Target Database',
+              selected: 'Pilih Database Target',
               selectedId: null
           }"
                class="relative w-full">
@@ -724,11 +727,11 @@
                 clip-rule="evenodd" />
         </svg>
         <div class="flex flex-col gap-1">
-          <p class="text-base text-green-800 font-medium">Target Database Selected</p>
+          <p class="text-base text-green-800 font-medium">Database Tujuan Terpilih</p>
           <p class="text-lg text-green-900 font-bold"
              x-text="targetDbName"></p>
           <p class="text-green-700 font-normal text-sm">
-            Transactions will be migrated to this database.
+            Transaksi akan dimigrasikan ke database ini.
           </p>
         </div>
       </div>
@@ -759,11 +762,11 @@
                 $failed = $matches[2] ?? 0;
               @endphp
 
-              <p class="font-semibold text-base">Migration Completed</p>
+              <p class="font-semibold text-base">Migrasi Selesai</p>
               <div class="mt-2 space-y-1">
-                <p class="text-sm"><span class="font-semibold text-green-700">{{ $succeeded }}</span> transactions migrated successfully</p>
+                <p class="text-sm"><span class="font-semibold text-green-700">{{ $succeeded }}</span> transaksi berhasil dimigrasikan</p>
                 @if ($failed > 0)
-                  <p class="text-sm"><span class="font-semibold text-red-600">{{ $failed }}</span> transactions failed</p>
+                  <p class="text-sm"><span class="font-semibold text-red-600">{{ $failed }}</span> transaksi gagal</p>
                 @endif
               </div>
             </div>
@@ -902,19 +905,19 @@
                 }
               @endphp
 
-              <p class="font-semibold text-base">Migration Completed with Errors</p>
+              <p class="font-semibold text-base">Migrasi Selesai dengan Error</p>
               <div class="mt-2 space-y-1">
                 @if ($succeeded > 0)
-                  <p class="text-sm"><span class="font-semibold text-green-700">{{ $succeeded }}</span> transactions migrated successfully</p>
+                  <p class="text-sm"><span class="font-semibold text-green-700">{{ $succeeded }}</span> transaksi berhasil dimigrasikan</p>
                 @endif
                 @if ($failed > 0)
-                  <p class="text-sm"><span class="font-semibold text-red-600">{{ $failed }}</span> transactions failed</p>
+                  <p class="text-sm"><span class="font-semibold text-red-600">{{ $failed }}</span> transaksi gagal</p>
                 @endif
               </div>
 
               @if (!empty($parsedModules))
                 <div class="mt-3 space-y-2">
-                  <p class="text-sm font-medium">Module Details:</p>
+                  <p class="text-sm font-medium">Rincian Modul:</p>
                   @foreach ($parsedModules as $moduleInfo)
                     <div class="bg-red-100/50 rounded-lg p-3 border border-red-300">
                       <div class="flex items-start justify-between gap-2 mb-2">
@@ -1061,10 +1064,9 @@
                     stroke-linejoin="round"
                     d="M2.25 18 9 11.25l4.306 4.306a11.95 11.95 0 0 1 5.814-5.518l2.74-1.22m0 0-5.94-2.281m5.94 2.28-2.28 5.941" />
             </svg>
-            <p class="text-sm md:text-base text-black font-medium">Transaction Manager</p>
+            <p class="text-sm md:text-base text-black font-medium">Manajer Transaksi</p>
           </div>
-          <p class="text-xs md:text-sm lg:text-base text-gray-500 font-normal">Select and migrate
-            transactions to the selected target database
+          <p class="text-xs md:text-sm lg:text-base text-gray-500 font-normal">Pilih dan migrasikan transaksi ke database tujuan yang dipilih
           </p>
         </div>
 
@@ -1084,7 +1086,7 @@
                     stroke-linejoin="round"
                     d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
             </svg>
-            <span>Remove <span x-text="selected.length"></span> Selected</span>
+            <span>Hapus <span x-text="selected.length"></span> Terpilih</span>
           </button>
           <button @click.prevent="openMigrateModal()"
                   type="button"
@@ -1238,13 +1240,12 @@
                   <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
                     <h3 class="text-lg leading-6 font-medium text-gray-900"
                         id="modal-title">
-                      Delete Transactions
+                      Hapus Transaksi
                     </h3>
                     <div class="mt-2">
                       <p class="text-sm text-gray-500">
-                        Are you sure you want to delete <span class="font-semibold"
-                              x-text="selected.length"></span> selected transaction(s)? This
-                        action cannot be undone.
+                        Apakah Anda yakin ingin menghapus <span class="font-semibold"
+                              x-text="selected.length"></span> transaksi terpilih? Tindakan ini tidak dapat dibatalkan.
                       </p>
                     </div>
                   </div>
@@ -1254,12 +1255,12 @@
                 <button type="button"
                         @click="deleteSelected()"
                         class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm">
-                  Delete
+                  Hapus
                 </button>
                 <button type="button"
                         @click="showDeleteModal = false"
                         class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
-                  Cancel
+                  Batal
                 </button>
               </div>
             </div>
@@ -1275,7 +1276,7 @@
             class="w-full rounded-xl bg-gray-50 p-3 md:p-4 border border-gray-200 flex flex-wrap items-stretch md:items-end gap-2 md:gap-3">
         <input type="text"
                name="search"
-               placeholder="Search transactions..."
+               placeholder="Cari nomor transaksi..."
                value="{{ request('search') }}"
                class="bg-white rounded-md py-2 px-3 md:px-4 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs md:text-sm w-full md:w-[250px] lg:w-[300px] font-medium">
 
@@ -1557,7 +1558,7 @@
           <select name="customer_name"
                   class="bg-white w-full md:min-w-[200px] border border-gray-200 text-gray-700 text-xs md:text-sm rounded-md py-2 px-3 md:px-4 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium">
             <option value=""
-                    {{ $selectedCustomerName === '' ? 'selected' : '' }}>All Customer</option>
+                    {{ $selectedCustomerName === '' ? 'selected' : '' }}>Semua Pelanggan</option>
             @foreach ($customerNames ?? [] as $customerName)
               <option value="{{ $customerName }}"
                       {{ (string) $customerName === $selectedCustomerName ? 'selected' : '' }}>
@@ -1571,21 +1572,21 @@
                name="trans_date_start"
                value="{{ request('trans_date_start') }}"
                class="bg-white rounded-md py-2 px-3 md:px-4 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs md:text-sm w-full md:w-auto font-medium"
-               title="Trans Date Start">
+               title="Tgl Mulai Transaksi">
 
         <input type="date"
                name="trans_date_end"
                value="{{ request('trans_date_end') }}"
                class="bg-white rounded-md py-2 px-3 md:px-4 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs md:text-sm w-full md:w-auto font-medium"
-               title="Trans Date End">
+               title="Tgl Selesai Transaksi">
 
         <div class="relative w-full md:w-auto">
           <select name="sort_date"
                   class="bg-white w-full md:min-w-[150px] border border-gray-200 text-gray-700 text-xs md:text-sm rounded-md py-2 px-3 md:px-4 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium">
             <option value="desc"
-                    {{ request('sort_date', 'desc') === 'desc' ? 'selected' : '' }}>Date: Newest</option>
+                    {{ request('sort_date', 'desc') === 'desc' ? 'selected' : '' }}>Tanggal: Terbaru</option>
             <option value="asc"
-                    {{ request('sort_date') === 'asc' ? 'selected' : '' }}>Date: Oldest</option>
+                    {{ request('sort_date') === 'asc' ? 'selected' : '' }}>Tanggal: Terlama</option>
           </select>
         </div>
 
@@ -1670,24 +1671,20 @@
                          class="w-5 h-5 rounded border-2 border-gray-400 text-blue-600 bg-white accent-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 cursor-pointer">
                 </th>
                 <th class="p-2 md:p-4 text-left text-xs md:text-sm font-semibold text-gray-700">
-                  Old Number</th>
+                  Nomor Lama</th>
                 <th class="p-2 md:p-4 text-left text-xs md:text-sm font-semibold text-gray-700">
-                  New Number</th>
-                <th class="p-2 md:p-4 text-left text-xs md:text-sm font-semibold text-gray-700">Accurate ID</th>
-                <th class="p-2 md:p-4 text-left text-xs md:text-sm font-semibold text-gray-700">Source
-                  DB</th>
-                <th class="p-2 md:p-4 text-left text-xs md:text-sm font-semibold text-gray-700">Module
-                </th>
+                  Nama</th>
                 <th class="p-2 md:p-4 text-left text-xs md:text-sm font-semibold text-gray-700">
-                  Description</th>
-                <th class="p-2 md:p-4 text-left text-xs md:text-sm font-semibold text-gray-700">Trans Date
-                </th>
+                  Nomor Baru</th>
+                <th class="p-2 md:p-4 text-left text-xs md:text-sm font-semibold text-gray-700">DB Sumber</th>
+                <th class="p-2 md:p-4 text-left text-xs md:text-sm font-semibold text-gray-700">Modul</th>
+                <th class="p-2 md:p-4 text-left text-xs md:text-sm font-semibold text-gray-700">Tgl Transaksi</th>
                 <th class="p-2 md:p-4 text-center text-xs md:text-sm font-semibold text-gray-700">
                   Status</th>
                 <th class="p-2 md:p-4 text-left text-xs md:text-sm font-semibold text-gray-700">
-                  Error Details</th>
+                  Detail Error</th>
                 <th class="p-2 md:p-4 text-center text-xs md:text-sm font-semibold text-gray-700">
-                  Action</th>
+                  Aksi</th>
               </tr>
             </thead>
             <tbody class="bg-white">
@@ -1710,18 +1707,16 @@
                       @endif
                     </div>
                   </td>
+                  <td class="p-2 md:p-4 text-xs md:text-sm text-gray-800 font-medium">
+                    {{ $transaction->entity_name ?? '-' }}
+                  </td>
                   <td class="p-2 md:p-4 text-xs md:text-sm text-green-700 font-medium">
                     {{ $transaction->new_number ?? '-' }}
-                  </td>
-                  <td class="p-2 md:p-4 text-xs md:text-sm text-gray-600 font-mono bg-gray-50/50">
-                    {{ $transaction->accurate_id_raw ?? '-' }}
                   </td>
                   <td class="p-2 md:p-4 text-xs md:text-sm text-gray-600">
                     {{ $transaction->accurateDatabase?->db_name ?? 'N/A' }}</td>
                   <td class="p-2 md:p-4 text-xs md:text-sm text-gray-600">
                     {{ $transaction->module?->name ?? 'N/A' }}</td>
-                  <td class="p-2 md:p-4 text-xs md:text-sm text-gray-600 max-w-xs truncate">
-                    {{ $transaction->description }}</td>
                   <td class="p-2 md:p-4 text-xs md:text-sm text-gray-600">
                     @php
                       $transDate = $transaction->trans_date_raw ?? null;
@@ -1936,7 +1931,7 @@
                 </tr>
               @empty
                 <tr>
-                  <td colspan="11"
+                  <td colspan="10"
                       class="p-8 text-center text-gray-500">
                     <div class="flex flex-col items-center gap-2">
                       <svg xmlns="http://www.w3.org/2000/svg"
@@ -1949,7 +1944,7 @@
                               stroke-linejoin="round"
                               d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
                       </svg>
-                      <p class="text-sm font-medium">No transactions found</p>
+                      <p class="text-sm font-medium">Tidak ada transaksi ditemukan</p>
                     </div>
                   </td>
                 </tr>
@@ -2009,11 +2004,11 @@
                 <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
                   <h3 class="text-lg leading-6 font-medium text-gray-900"
                       id="modal-title">
-                    Delete Transaction
+                    Hapus Transaksi
                   </h3>
                   <div class="mt-2">
                     <p class="text-sm text-gray-500">
-                      Are you sure you want to delete this transaction? This action cannot be undone.
+                      Apakah Anda yakin ingin menghapus transaksi ini? Tindakan ini tidak dapat dibatalkan.
                     </p>
                   </div>
                 </div>
@@ -2028,13 +2023,13 @@
                 @method('DELETE')
                 <button type="submit"
                         class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm">
-                  Delete
+                  Hapus
                 </button>
               </form>
               <button type="button"
                       @click="showSingleDeleteModal = false; deleteTarget = null"
                       class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
-                Cancel
+                Batal
               </button>
             </div>
           </div>
@@ -2448,10 +2443,10 @@
                     <table class="min-w-full divide-y divide-gray-200">
                       <thead class="bg-white sticky top-0 z-10 shadow-sm">
                         <tr>
-                          <th class="px-4 py-2 text-left text-xs font-semibold text-gray-600 bg-white">Old Number</th>
-                          <th class="px-4 py-2 text-left text-xs font-semibold text-gray-600 bg-white">Module</th>
-                          <th class="px-4 py-2 text-left text-xs font-semibold text-gray-600 bg-white">Date</th>
-                          <th class="px-4 py-2 text-left text-xs font-semibold text-gray-600 bg-white w-48">New Number (Target)</th>
+                          <th class="px-4 py-2 text-left text-xs font-semibold text-gray-600 bg-white">Nomor Lama</th>
+                          <th class="px-4 py-2 text-left text-xs font-semibold text-gray-600 bg-white">Modul</th>
+                          <th class="px-4 py-2 text-left text-xs font-semibold text-gray-600 bg-white">Tanggal</th>
+                          <th class="px-4 py-2 text-left text-xs font-semibold text-gray-600 bg-white w-48">Nomor Baru (Target)</th>
                         </tr>
                       </thead>
                       <tbody class="divide-y divide-gray-100 bg-white">
@@ -2461,7 +2456,7 @@
                             <td class="px-4 py-2 text-xs text-gray-600" x-text="item.module_name"></td>
                             <td class="px-4 py-2 text-xs text-gray-600 whitespace-nowrap" x-text="item.trans_date"></td>
                             <td class="px-4 py-1.5">
-                              <input type="text" x-model="modalTargetNumbers[item.id]" class="w-full text-xs font-mono border-gray-300 rounded shadow-sm focus:ring-indigo-500 focus:border-indigo-500 py-1.5 px-2" placeholder="Auto">
+                              <input type="text" :disabled="modalNumberingMode !== 'custom'" x-model="modalTargetNumbers[item.id]" class="w-full text-xs font-mono border-gray-300 rounded shadow-sm focus:ring-indigo-500 focus:border-indigo-500 py-1.5 px-2 disabled:bg-gray-50 disabled:text-gray-500" :placeholder="modalNumberingMode === 'original' ? item.old_number : 'Auto'">
                             </td>
                           </tr>
                         </template>
@@ -2473,27 +2468,35 @@
                   </div>
                 </div>
 
-                <!-- Force Create Option -->
-                <label for="force_create" class="flex items-start bg-white hover:bg-amber-50/30 p-4 rounded-xl border border-gray-200 cursor-pointer transition-colors shadow-sm">
-                  <div class="flex items-center h-5 mt-0.5">
-                    <input id="force_create" type="checkbox" x-model="modalForceCreate" class="w-4 h-4 text-amber-500 bg-white border-gray-300 rounded focus:ring-amber-500">
-                  </div>
-                  <div class="ml-3">
-                    <span class="block text-sm font-bold text-gray-900">Force Create if Exists</span>
-                    <span class="block text-xs text-gray-500 mt-1 leading-relaxed">Sistem akan memaksa membuat data baru di Accurate meskipun nomor transaksi sudah ada atau terjadi duplikasi data.</span>
-                  </div>
-                </label>
 
-                <!-- Custom Auto-Numbering Option -->
-                <label for="use_custom_numbering" class="flex items-start bg-white hover:bg-indigo-50/30 p-4 rounded-xl border border-gray-200 cursor-pointer transition-colors shadow-sm">
-                  <div class="flex items-center h-5 mt-0.5">
-                    <input id="use_custom_numbering" type="checkbox" x-model="modalUseCustomNumbering" @change="toggleCustomNumbering()" class="w-4 h-4 text-indigo-500 bg-white border-gray-300 rounded focus:ring-indigo-500">
+                <!-- Numbering Mode Options -->
+                <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm space-y-3">
+                  <span class="block text-sm font-bold text-gray-900">Opsi Penomoran Transaksi</span>
+                  
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <!-- Option 1: Gunakan Nomor Lama -->
+                    <label class="flex items-start p-3 border border-gray-200 rounded-lg hover:bg-gray-50/50 cursor-pointer transition-colors" :class="modalNumberingMode === 'original' ? 'border-blue-500 bg-blue-50/10' : ''">
+                      <div class="flex items-center h-5 mt-0.5">
+                        <input type="radio" name="numbering_mode" value="original" x-model="modalNumberingMode" @change="handleNumberingModeChange()" class="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500 bg-white">
+                      </div>
+                      <div class="ml-2.5">
+                        <span class="block text-xs font-bold text-gray-900">Nomor Asli (Lama)</span>
+                        <span class="block text-[10px] text-gray-500 mt-0.5 leading-normal">Menggunakan nomor asli dari transaksi sumber (nomor lama).</span>
+                      </div>
+                    </label>
+
+                    <!-- Option 2: Custom Auto-Numbering -->
+                    <label class="flex items-start p-3 border border-gray-200 rounded-lg hover:bg-gray-50/50 cursor-pointer transition-colors" :class="modalNumberingMode === 'custom' ? 'border-blue-500 bg-blue-50/10' : ''">
+                      <div class="flex items-center h-5 mt-0.5">
+                        <input type="radio" name="numbering_mode" value="custom" x-model="modalNumberingMode" @change="handleNumberingModeChange()" class="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500 bg-white">
+                      </div>
+                      <div class="ml-2.5">
+                        <span class="block text-xs font-bold text-gray-900">Nomor Kustom (Custom)</span>
+                        <span class="block text-[10px] text-gray-500 mt-0.5 leading-normal">Nomor custom kronologis (SI.2026.07.12.001).</span>
+                      </div>
+                    </label>
                   </div>
-                  <div class="ml-3">
-                    <span class="block text-sm font-bold text-gray-900">Custom Auto-Numbering (Urut Berdasarkan Tanggal)</span>
-                    <span class="block text-xs text-gray-500 mt-1 leading-relaxed">Menggantikan Auto-Numbering Accurate dengan custom format (Contoh: SI.2026.07.11-1). Data diurutkan kronologis.</span>
-                  </div>
-                </label>
+                </div>
 
                 <!-- JU Suffix Option (Only shown if module is Journal Voucher) -->
                 <label x-show="!filterModuleSelected || filterModuleSelected === 'All Modules' || filterModuleSelected === 'Journal Voucher'" for="add_ju_suffix" class="flex items-start bg-white hover:bg-blue-50/30 p-4 rounded-xl border border-gray-200 cursor-pointer transition-colors shadow-sm">

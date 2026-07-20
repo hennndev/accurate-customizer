@@ -148,7 +148,11 @@ class CaptureModuleJob implements ShouldQueue
 
             if (!empty($candidateRows)) {
                 try {
-                    $insertedCount = Transaction::query()->insertOrIgnore($candidateRows);
+                    $insertedCount = Transaction::query()->upsert(
+                        $candidateRows,
+                        ['accurate_database_id', 'module_id', 'transaction_no'],
+                        ['data', 'capture_log_id', 'description', 'captured_at', 'status', 'error_message', 'updated_at']
+                    );
                 } catch (QueryException $exception) {
                     if (!$isGoneAwayError($exception)) {
                         throw $exception;
@@ -156,7 +160,11 @@ class CaptureModuleJob implements ShouldQueue
 
                     DB::purge();
                     DB::reconnect();
-                    $insertedCount = Transaction::query()->insertOrIgnore($candidateRows);
+                    $insertedCount = Transaction::query()->upsert(
+                        $candidateRows,
+                        ['accurate_database_id', 'module_id', 'transaction_no'],
+                        ['data', 'capture_log_id', 'description', 'captured_at', 'status', 'error_message', 'updated_at']
+                    );
                 }
 
                 $savedCount += (int) $insertedCount;
@@ -181,9 +189,17 @@ class CaptureModuleJob implements ShouldQueue
             $listParams['filter.invoiceDp'] = true;
         }
 
+        $identifierField = $this->moduleInfo['identifier_field'] ?? 'number';
+
         if ($shouldRunDetailCapture) {
-            $listParams['fields'] = 'id,number';
-            $listParams['sp.fields'] = 'id,number';
+            $fieldsToRequest = ['id', 'number', 'no', 'vendorNo', 'customerNo'];
+            if (!in_array($identifierField, $fieldsToRequest, true)) {
+                $fieldsToRequest[] = $identifierField;
+            }
+            $fieldsStr = implode(',', $fieldsToRequest);
+
+            $listParams['fields'] = $fieldsStr;
+            $listParams['sp.fields'] = $fieldsStr;
         }
 
         $globalUseListIdCache = filter_var(
@@ -357,9 +373,10 @@ class CaptureModuleJob implements ShouldQueue
                 }
 
                 $identifierField = $this->moduleInfo['identifier_field'] ?? 'number';
+                $fallbackNum = $item['vendorNo'] ?? $item['customerNo'] ?? $item['no'] ?? $item['number'] ?? $item[$identifierField] ?? null;
                 $detailCandidates[] = [
                     'id' => $itemId,
-                    'fallback_number' => $item['number'] ?? $item[$identifierField] ?? null,
+                    'fallback_number' => $fallbackNum,
                 ];
 
                 if ($shouldPersistListIds && $listParamsHash) {
@@ -404,6 +421,25 @@ class CaptureModuleJob implements ShouldQueue
 
         $flushListIdCacheBatch();
 
+        // Reload all candidates from cache if enabled, to ensure we don't lose items on job resume
+        if ($shouldRunDetailCapture && $shouldPersistListIds && $listParamsHash) {
+            $cachedRows = CaptureListItemId::query()
+                ->where('accurate_database_id', $this->databaseId)
+                ->where('module_slug', $this->module)
+                ->where('params_hash', $listParamsHash)
+                ->orderBy('id')
+                ->get(['list_item_id', 'fallback_number']);
+
+            if ($cachedRows->isNotEmpty()) {
+                $detailCandidates = $cachedRows
+                    ->map(static fn (CaptureListItemId $item): array => [
+                        'id' => $item->list_item_id,
+                        'fallback_number' => $item->fallback_number,
+                    ])
+                    ->all();
+            }
+        }
+
         if ($shouldRunDetailCapture && !empty($detailCandidates)) {
             $candidateNumbers = collect($detailCandidates)
                 ->pluck('fallback_number')
@@ -413,10 +449,18 @@ class CaptureModuleJob implements ShouldQueue
                 ->all();
 
             if (!empty($candidateNumbers)) {
-                $existingNumbers = Transaction::query()
-                    ->whereIn('transaction_no', $candidateNumbers)
-                    ->pluck('transaction_no')
-                    ->all();
+                $existingNumbers = [];
+                foreach (array_chunk($candidateNumbers, 1000) as $chunk) {
+                    $existingNumbers = array_merge(
+                        $existingNumbers,
+                        Transaction::query()
+                            ->where('accurate_database_id', $this->databaseId)
+                            ->where('module_id', $moduleRecord->id)
+                            ->whereIn('transaction_no', $chunk)
+                            ->pluck('transaction_no')
+                            ->all()
+                    );
+                }
 
                 $existingNumberMap = array_flip($existingNumbers);
                 $filteredCandidates = [];
@@ -543,6 +587,8 @@ class CaptureModuleJob implements ShouldQueue
                         'data' => json_encode($detailData),
                         'description' => $this->moduleInfo['name'],
                         'captured_at' => now(),
+                        'status' => 'pending',
+                        'error_message' => null,
                         'created_at' => now(),
                         'updated_at' => now(),
                     ];
@@ -695,11 +741,8 @@ class CaptureModuleJob implements ShouldQueue
 
     private function isCancelled(): bool
     {
-        if (!$this->cancelToken) {
-            return $this->cancelToken ? cache()->has($this->cancelToken) : false;
-        }
-
-        return cache()->has($this->cancelToken);
+        $log = SystemLog::find($this->trackerLogId);
+        return $log && ($log->status === 'failed' || ($log->payload['cancelled'] ?? false));
     }
 
     private function isAccurateTokenInvalid(\Throwable $exception): bool
