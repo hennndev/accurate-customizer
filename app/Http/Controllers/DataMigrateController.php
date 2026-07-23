@@ -108,6 +108,15 @@ class DataMigrateController extends Controller
       $query->whereRaw("{$customerNameExpression} = ?", [$request->input('customer_name')]);
     }
 
+    if ($request->filled('vendor_name')) {
+      $vendorNameExpression = "COALESCE(
+        NULLIF(JSON_UNQUOTE(JSON_EXTRACT(data, '$.vendor.name')), ''),
+        NULLIF(JSON_UNQUOTE(JSON_EXTRACT(data, '$.vendorName')), ''),
+        CASE WHEN module_id IN (SELECT id FROM modules WHERE slug = 'vendor') THEN NULLIF(JSON_UNQUOTE(JSON_EXTRACT(data, '$.name')), '') ELSE NULL END
+      )";
+      $query->whereRaw("{$vendorNameExpression} = ?", [$request->input('vendor_name')]);
+    }
+
     if ($request->filled('program_value')) {
       $programValue = $request->input('program_value');
       $query->where(function ($q) use ($programInjekExpression, $customerProgramExpression, $programValue) {
@@ -240,6 +249,19 @@ class DataMigrateController extends Controller
         ->pluck('value');
     });
 
+    $vendorNames = Cache::remember('migrate:vendor_names:v1', now()->addMinutes(5), function () {
+      return Transaction::query()
+        ->selectRaw("DISTINCT COALESCE(
+            NULLIF(JSON_UNQUOTE(JSON_EXTRACT(data, '$.vendor.name')), ''),
+            NULLIF(JSON_UNQUOTE(JSON_EXTRACT(data, '$.vendorName')), ''),
+            CASE WHEN module_id IN (SELECT id FROM modules WHERE slug = 'vendor') THEN NULLIF(JSON_UNQUOTE(JSON_EXTRACT(data, '$.name')), '') ELSE NULL END
+        ) AS value")
+        ->havingRaw("value IS NOT NULL AND value != '' AND value != 'null'")
+        ->orderBy('value')
+        ->limit(1000)
+        ->pluck('value');
+    });
+
     $programOptions = Cache::remember('migrate:program_options:v1', now()->addMinutes(5), function () use ($programInjekExpression, $customerProgramExpression) {
       $programInjekOptions = Transaction::query()
         ->selectRaw("DISTINCT {$programInjekExpression} AS value")
@@ -285,6 +307,7 @@ class DataMigrateController extends Controller
       'filter_databases',
       'modules',
       'customerNames',
+      'vendorNames',
       'programOptions',
       'transactionTypeOptions',
       'current_database_name',
