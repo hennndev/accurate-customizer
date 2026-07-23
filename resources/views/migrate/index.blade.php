@@ -1552,6 +1552,7 @@
 
         @php
           $selectedCustomerName = (string) request('customer_name', '');
+          $selectedVendorName = (string) request('vendor_name', '');
         @endphp
 
         <div class="relative w-full md:w-auto">
@@ -1563,6 +1564,20 @@
               <option value="{{ $customerName }}"
                       {{ (string) $customerName === $selectedCustomerName ? 'selected' : '' }}>
                 {{ $customerName }}
+              </option>
+            @endforeach
+          </select>
+        </div>
+
+        <div class="relative w-full md:w-auto">
+          <select name="vendor_name"
+                  class="bg-white w-full md:min-w-[200px] border border-gray-200 text-gray-700 text-xs md:text-sm rounded-md py-2 px-3 md:px-4 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium">
+            <option value=""
+                    {{ $selectedVendorName === '' ? 'selected' : '' }}>Semua Pemasok / Vendor</option>
+            @foreach ($vendorNames ?? [] as $vendorName)
+              <option value="{{ $vendorName }}"
+                      {{ (string) $vendorName === $selectedVendorName ? 'selected' : '' }}>
+                {{ $vendorName }}
               </option>
             @endforeach
           </select>

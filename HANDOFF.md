@@ -88,6 +88,10 @@ Capture Data Job            Preview Custom Numbering               MigrateTransa
   - Menambahkan `DISTINCT` dan batas `limit` pada kueri opsi filter dropdown untuk menghindari penarikan puluhan ribu baris data sekaligus ke PHP.
   - Menyetel `@ini_set('memory_limit', '512M')` pada method `index()` halaman migrasi.
   - Menampilkan kolom **Nama** di antara kolom *Nomor Lama* dan *Nomor Baru* pada tabel di halaman `resources/views/migrate/index.blade.php`.
+- **Penambahan Filter Pemasok / Vendor pada Halaman Migrasi:** 
+  - Menambahkan kueri penyaringan `vendor_name` di `DataMigrateController.php` (method `index()`) yang mengekstrak nama vendor dari `$.vendor.name`, `$.vendorName`, dan `$.name` (modul Vendor).
+  - Menambahkan cache query `$vendorNames` di `DataMigrateController.php` untuk mengisi opsi dropdown secara cepat.
+  - Menambahkan dropdown filter **Semua Pemasok / Vendor** di halaman `resources/views/migrate/index.blade.php` bersebelahan dengan filter Pelanggan. Dapat digunakan untuk memfilter modul `purchase-invoice`, `purchase-payment`, `vendor`, `receive-item`, `down-payment-purchase-invoice`, dsb.
 - **Dokumentasi Teknis:** Dibuat berkas pendukung `technical_documentation.md`.
 
 ---
