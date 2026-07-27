@@ -457,6 +457,14 @@ class CaptureModuleJob implements ShouldQueue
                             ->where('accurate_database_id', $this->databaseId)
                             ->where('module_id', $moduleRecord->id)
                             ->whereIn('transaction_no', $chunk)
+                            ->where(function ($q) {
+                                $q->whereRaw("JSON_EXTRACT(data, '$.detailItem') IS NOT NULL")
+                                  ->orWhereRaw("JSON_EXTRACT(data, '$.detailAccount') IS NOT NULL")
+                                  ->orWhereRaw("JSON_EXTRACT(data, '$.detailInvoice') IS NOT NULL")
+                                  ->orWhereRaw("JSON_EXTRACT(data, '$.detailJournalVoucher') IS NOT NULL")
+                                  ->orWhereRaw("JSON_EXTRACT(data, '$.detailExpense') IS NOT NULL")
+                                  ->orWhereRaw("JSON_EXTRACT(data, '$.detailMaterial') IS NOT NULL");
+                            })
                             ->pluck('transaction_no')
                             ->all()
                     );

@@ -198,6 +198,20 @@ class DataCleaner
                 }
                 continue;
             }
+            if (str_contains($endpoint, 'glaccount')) {
+                if ($key === 'parent' && is_array($value)) {
+                    if (isset($value['no'])) {
+                        $cleaned['parentNo'] = $value['no'];
+                    }
+                    continue;
+                }
+                if ($key === 'currency' && is_array($value)) {
+                    if (isset($value['code'])) {
+                        $cleaned['currencyCode'] = $value['code'];
+                    }
+                    continue;
+                }
+            }
             if (str_contains($endpoint, 'bank-transfer')) {
                 if ($key === 'fromBank' && is_array($value)) {
                     if (isset($value['no'])) {
@@ -435,10 +449,18 @@ class DataCleaner
                                 }
                             }
 
-                            if ($key === 'detailAccount' && str_contains($endpoint, 'expense')) {
+                            if ($key === 'detailAccount' && (str_contains($endpoint, 'expense') || str_contains($endpoint, 'other-payment') || str_contains($endpoint, 'other-deposit'))) {
                                 if (isset($cleanedSubItem['account']['no'])) {
                                     $cleanedSubItem['accountNo'] = $cleanedSubItem['account']['no'];
                                     unset($cleanedSubItem['account']);
+                                }
+                                if (isset($cleanedSubItem['department']['name'])) {
+                                    $cleanedSubItem['departmentName'] = $cleanedSubItem['department']['name'];
+                                    unset($cleanedSubItem['department']);
+                                }
+                                if (isset($cleanedSubItem['project']['no'])) {
+                                    $cleanedSubItem['projectNo'] = $cleanedSubItem['project']['no'];
+                                    unset($cleanedSubItem['project']);
                                 }
                             }
 
