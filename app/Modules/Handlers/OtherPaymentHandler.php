@@ -51,12 +51,15 @@ class OtherPaymentHandler extends BaseHandler
       $branchId = $detailData['branchId'];
       if (isset($branchList[$branchId]['name'])) {
         $detailData['branchName'] = $branchList[$branchId]['name'];
-      } else {
         Log::warning('OTHER_PAYMENT_BRANCH_NOT_FOUND', [
           'item_id'   => $meta['itemId'] ?? null,
           'branch_id' => $branchId,
         ]);
       }
+    }
+
+    if (isset($detailData['bank']['no']) && empty($detailData['bankNo'])) {
+      $detailData['bankNo'] = $detailData['bank']['no'];
     }
 
     // Filter to allowed fields only
