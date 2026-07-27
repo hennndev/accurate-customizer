@@ -92,6 +92,9 @@ Capture Data Job            Preview Custom Numbering               MigrateTransa
   - Menambahkan kueri penyaringan `vendor_name` di `DataMigrateController.php` (method `index()`) yang mengekstrak nama vendor dari `$.vendor.name`, `$.vendorName`, dan `$.name` (modul Vendor).
   - Menambahkan cache query `$vendorNames` di `DataMigrateController.php` untuk mengisi opsi dropdown secara cepat.
   - Menambahkan dropdown filter **Semua Pemasok / Vendor** di halaman `resources/views/migrate/index.blade.php` bersebelahan dengan filter Pelanggan. Dapat digunakan untuk memfilter modul `purchase-invoice`, `purchase-payment`, `vendor`, `receive-item`, `down-payment-purchase-invoice`, dsb.
+- **Bugfix Error Parameter `bankNo` pada Modul Pembayaran Kas / Bank:** 
+  - **Penyebab:** API Detail Accurate mengembalikan akun kas/bank sebagai Objek JSON (`"bank": {"no": "1000", ...}`), sedangkan API `bulk-save.do` Accurate mewajibkan parameter string **`bankNo`**. Sebelumnya, logika pengubahan `bank.no` → `bankNo` pada `DataCleaner.php` hanya berjalan untuk modul `sales-receipt` & `purchase-payment`, sehingga modul **`other-payment`** (*Cash Pembayaran*) dan **`other-deposit`** (*Cash Penerimaan*) gagal dimigrasikan dengan error `"bankNo tidak ada"`.
+  - **Solusi:** Diperbarui pada `DataCleaner.php`, `OtherPaymentHandler.php`, dan `OtherDepositHandler.php` untuk otomatis menguraikan dan menyertakan field `bankNo` dari objek `bank` saat penarikan maupun pengiriman ke Accurate target.
 - **Dokumentasi Teknis:** Dibuat berkas pendukung `technical_documentation.md`.
 
 ---

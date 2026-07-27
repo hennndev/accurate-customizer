@@ -218,9 +218,11 @@ class DataCleaner
                 }
                 continue;
             }
-            if ($key === 'bank' && is_array($value) && (str_contains($endpoint, 'sales-receipt') || str_contains($endpoint, 'purchase-payment'))) {
-                if (isset($value['no'])) {
+            if ($key === 'bank' && (str_contains($endpoint, 'sales-receipt') || str_contains($endpoint, 'purchase-payment') || str_contains($endpoint, 'other-payment') || str_contains($endpoint, 'other-deposit'))) {
+                if (is_array($value) && isset($value['no'])) {
                     $cleaned['bankNo'] = $value['no'];
+                } elseif (is_string($value) && !empty($value)) {
+                    $cleaned['bankNo'] = $value;
                 }
                 continue;
             }
