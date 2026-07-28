@@ -82,7 +82,21 @@ class DataMigrateController extends Controller
       $search = $request->search;
       $query->where(function ($q) use ($search) {
         $q->where('transaction_no', 'like', "%{$search}%")
-          ->orWhere('description', 'like', "%{$search}%");
+          ->orWhere('description', 'like', "%{$search}%")
+          ->orWhereIn('transaction_no', function ($sub) use ($search) {
+            $sub->select('old_number')
+              ->from('transaction_number_mappings')
+              ->where('new_number', 'like', "%{$search}%");
+          });
+      });
+    }
+
+    if ($request->filled('new_number')) {
+      $newNumber = $request->input('new_number');
+      $query->whereIn('transaction_no', function ($sub) use ($newNumber) {
+        $sub->select('old_number')
+          ->from('transaction_number_mappings')
+          ->where('new_number', 'like', "%{$newNumber}%");
       });
     }
 
@@ -115,6 +129,16 @@ class DataMigrateController extends Controller
         CASE WHEN module_id IN (SELECT id FROM modules WHERE slug = 'vendor') THEN NULLIF(JSON_UNQUOTE(JSON_EXTRACT(data, '$.name')), '') ELSE NULL END
       )";
       $query->whereRaw("{$vendorNameExpression} = ?", [$request->input('vendor_name')]);
+    }
+
+    if ($request->filled('bank_name')) {
+      $bankName = $request->input('bank_name');
+      $bankNameExpression = "COALESCE(
+        NULLIF(JSON_UNQUOTE(JSON_EXTRACT(data, '$.bank.name')), ''),
+        NULLIF(JSON_UNQUOTE(JSON_EXTRACT(data, '$.bankName')), ''),
+        CASE WHEN module_id IN (SELECT id FROM modules WHERE slug = 'glaccount') THEN NULLIF(JSON_UNQUOTE(JSON_EXTRACT(data, '$.name')), '') ELSE NULL END
+      )";
+      $query->whereRaw("{$bankNameExpression} LIKE ?", ["%{$bankName}%"]);
     }
 
     if ($request->filled('program_value')) {
@@ -301,6 +325,33 @@ class DataMigrateController extends Controller
       return $options->isEmpty() ? collect(['Jurnal Umum']) : $options;
     });
 
+    $bankNames = Cache::remember('migrate:bank_names:v1', now()->addMinutes(5), function () {
+      $glBankNames = Transaction::query()
+        ->whereHas('module', function ($q) {
+          $q->where('slug', 'glaccount');
+        })
+        ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(data, '$.accountType')) = 'CASH_BANK'")
+        ->selectRaw("DISTINCT COALESCE(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(data, '$.name')), ''), transaction_no) as bank_name")
+        ->limit(500)
+        ->pluck('bank_name')
+        ->filter(fn($v) => filled($v) && strtolower($v) !== 'null')
+        ->toArray();
+
+      $transBankNames = Transaction::query()
+        ->whereHas('module', function ($q) {
+          $q->whereIn('slug', ['other-payment', 'sales-receipt', 'purchase-payment', 'other-deposit', 'bank-transfer']);
+        })
+        ->selectRaw("DISTINCT COALESCE(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(data, '$.bank.name')), ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(data, '$.bankName')), '')) as bank_name")
+        ->limit(500)
+        ->pluck('bank_name')
+        ->filter(fn($v) => filled($v) && strtolower($v) !== 'null')
+        ->toArray();
+
+      $merged = array_values(array_unique(array_filter(array_merge($glBankNames, $transBankNames))));
+      sort($merged);
+      return $merged;
+    });
+
     return view('migrate.index', compact(
       'transactions',
       'databases',
@@ -308,6 +359,7 @@ class DataMigrateController extends Controller
       'modules',
       'customerNames',
       'vendorNames',
+      'bankNames',
       'programOptions',
       'transactionTypeOptions',
       'current_database_name',

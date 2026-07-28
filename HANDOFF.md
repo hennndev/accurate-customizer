@@ -95,6 +95,13 @@ Capture Data Job            Preview Custom Numbering               MigrateTransa
 - **Bugfix Error `"Akun Perkiraan 1000-003 tidak ditemukan atau sudah dihapus"` pada Migrasi Transaksi:** 
   - **Penyebab:** Transaksi pembayaran/penerimaan kas (`other-payment`, `other-deposit`, dll.) bergantung pada keberadaan Akun Perkiraan (GL Account) di Database Accurate Target. Pada saat migrasi modul master `glaccount` sebelumnya, objek `parent` tidak terkonversi ke `parentNo` dan `currency` tidak terkonversi ke `currencyCode` di `DataCleaner.php`, sehingga pembuatan sub-akun kas/bank (seperti `1000-003`) di Accurate Target gagal/terlewat. Akibatnya saat migrasi `other-payment` dikirim dengan `bankNo: "1000-003"`, Accurate target menolak karena akun `1000-003` belum terbentuk di database target.
   - **Solusi:** Menambahkan penanganan `parent` → `parentNo` dan `currency` → `currencyCode` pada `DataCleaner.php` untuk modul `glaccount`. Pengguna hanya perlu melakukan **Migrate ulang modul GL Account** ke database target agar seluruh akun kas/bank terbentuk sempurna di Accurate target sebelum migrasi transaksi kas dilakukan.
+- **Penambahan Filter Pencarian Nomor Baru (New Number) pada Halaman Migrasi:** 
+  - **Fitur Baru:** Menambahkan input pencarian khusus **`Cari nomor baru...`** (`new_number`) serta mengintegrasikan pencarian nomor baru ke dalam baris pencarian utama (`search`) pada halaman `/migrate`.
+  - **Implementasi:** Diperbarui pada `DataMigrateController.php` (kueri sub-select `whereIn('transaction_no', ...)` dari tabel `transaction_number_mappings.new_number`) dan ditambahkan field input `new_number` pada form filter di `resources/views/migrate/index.blade.php`.
+- **Penambahan Filter Nama Kas / Bank (Dropdown & Manual Input):** 
+  - **Fitur Baru:** Menambahkan filter combo-box **`Semua Kas / Bank...`** (`bank_name`) pada halaman `/migrate`. Opsi daftar bank diambil dari transaksi `glaccount` (terutama akun bertipe `CASH_BANK`) dan digabungkan dengan nama bank dari transaksi pembayaran/penerimaan.
+  - **Dukungan Modul:** Dapat digunakan untuk memfilter transaksi `other-payment` (Cash Pembayaran), `sales-receipt` (Penerimaan Penjualan), `purchase-payment` (Pembayaran Pembelian), `other-deposit` (Cash Penerimaan), dan `bank-transfer`.
+  - **Implementasi:** Menggunakan HTML5 `<datalist>` pada `resources/views/migrate/index.blade.php` agar pengguna dapat memilih dari dropdown sekaligus mengetik manual secara bebas. Di `DataMigrateController.php`, kueri memfilter `$.bank.name` dan `$.bankName` menggunakan `LIKE %...%`.
 - **Dokumentasi Teknis:** Dibuat berkas pendukung `technical_documentation.md`.
 
 ---

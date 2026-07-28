@@ -1276,9 +1276,15 @@
             class="w-full rounded-xl bg-gray-50 p-3 md:p-4 border border-gray-200 flex flex-wrap items-stretch md:items-end gap-2 md:gap-3">
         <input type="text"
                name="search"
-               placeholder="Cari nomor transaksi..."
+               placeholder="Cari nomor transaksi / lama..."
                value="{{ request('search') }}"
-               class="bg-white rounded-md py-2 px-3 md:px-4 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs md:text-sm w-full md:w-[250px] lg:w-[300px] font-medium">
+               class="bg-white rounded-md py-2 px-3 md:px-4 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs md:text-sm w-full md:w-[220px] lg:w-[260px] font-medium">
+
+        <input type="text"
+               name="new_number"
+               placeholder="Cari nomor baru..."
+               value="{{ request('new_number') }}"
+               class="bg-white rounded-md py-2 px-3 md:px-4 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs md:text-sm w-full md:w-[220px] lg:w-[260px] font-medium">
 
         <!-- All Database Dropdown -->
         <div x-data="{ open: false, selected: '{{ request('source_db', 'All Database') }}' }"
@@ -1581,6 +1587,21 @@
               </option>
             @endforeach
           </select>
+        </div>
+
+        <div class="relative w-full md:w-auto">
+          <input type="text"
+                 name="bank_name"
+                 list="bank_names_list"
+                 placeholder="Semua Kas / Bank..."
+                 value="{{ request('bank_name') }}"
+                 class="bg-white rounded-md py-2 px-3 md:px-4 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs md:text-sm w-full md:w-[200px] font-medium"
+                 title="Filter Nama Kas / Bank">
+          <datalist id="bank_names_list">
+            @foreach ($bankNames ?? [] as $bName)
+              <option value="{{ $bName }}">
+            @endforeach
+          </datalist>
         </div>
 
         <input type="date"
