@@ -2488,60 +2488,57 @@
                     </div>
                   </div>
                   <div class="max-h-72 overflow-y-auto w-full">
-                    <table class="w-full min-w-full divide-y divide-gray-200 border-collapse">
-                      <thead class="bg-gray-50 sticky top-0 z-10 shadow-xs">
+                    <table class="w-full min-w-full divide-y divide-gray-200 border-collapse table-fixed">
+                      <thead class="bg-gray-50 sticky top-0 z-10 shadow-2xs">
                         <tr>
-                          <th class="px-4 py-2.5 text-left text-xs font-semibold text-gray-600 bg-gray-50 w-1/3">Nomor Lama</th>
-                          <th class="px-4 py-2.5 text-left text-xs font-semibold text-gray-600 bg-gray-50 w-1/6">Modul</th>
-                          <th class="px-4 py-2.5 text-left text-xs font-semibold text-gray-600 bg-gray-50 w-1/6">Tanggal</th>
-                          <th class="px-4 py-2.5 text-left text-xs font-semibold text-gray-600 bg-gray-50 w-1/3">Nomor Baru (Target)</th>
+                          <th class="px-4 py-2.5 text-left text-xs font-semibold text-gray-600 bg-gray-50 w-4/12">Nomor Lama</th>
+                          <th class="px-4 py-2.5 text-left text-xs font-semibold text-gray-600 bg-gray-50 w-2/12">Modul</th>
+                          <th class="px-4 py-2.5 text-left text-xs font-semibold text-gray-600 bg-gray-50 w-2/12">Tanggal</th>
+                          <th class="px-4 py-2.5 text-left text-xs font-semibold text-gray-600 bg-gray-50 w-4/12">Nomor Baru (Target)</th>
                         </tr>
                       </thead>
                       <tbody class="divide-y divide-gray-100 bg-white">
                         <template x-for="item in modalPreviewData" :key="item.id">
-                          <tbody class="border-b border-gray-100">
-                            <tr class="hover:bg-gray-50/80 transition-colors">
-                              <td class="px-4 py-2.5 text-xs font-mono font-bold text-gray-900 w-1/3" x-text="item.old_number"></td>
-                              <td class="px-4 py-2.5 text-xs text-gray-600 w-1/6" x-text="item.module_name"></td>
-                              <td class="px-4 py-2.5 text-xs text-gray-600 whitespace-nowrap w-1/6" x-text="item.trans_date"></td>
-                              <td class="px-4 py-1.5 w-1/3">
-                                <input type="text" :disabled="modalNumberingMode !== 'custom'" x-model="modalTargetNumbers[item.id]" class="w-full text-xs font-mono border-gray-300 rounded shadow-2xs focus:ring-blue-500 focus:border-blue-500 py-1.5 px-3 disabled:bg-gray-50 disabled:text-gray-500" :placeholder="modalNumberingMode === 'original' ? item.old_number : 'Auto'">
-                              </td>
-                            </tr>
-                            <!-- Sub-row untuk mapping manual Faktur terkait jika ada detail_invoices (seperti Sales Receipt / Purchase Payment) -->
-                            <tr x-show="item.detail_invoices && item.detail_invoices.length > 0" class="bg-blue-50/30">
-                              <td colspan="4" class="px-4 py-3 text-xs w-full">
-                                <div class="border border-blue-200 rounded-xl p-3 bg-blue-50/80 space-y-2.5 shadow-2xs w-full">
-                                  <div class="flex items-center justify-between font-bold text-blue-950 text-xs">
-                                    <span class="flex items-center gap-1.5">
-                                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4 text-blue-600">
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-                                      </svg>
-                                      Mapping Manual Faktur Terkait (Detail Invoice)
-                                    </span>
-                                    <span class="text-xs text-blue-700 font-medium">Edit jika nomor faktur di target berbeda</span>
-                                  </div>
-                                  <div class="space-y-2 w-full">
-                                    <template x-for="inv in item.detail_invoices" :key="inv.old_number">
-                                      <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 bg-white p-2.5 rounded-lg border border-blue-200 shadow-2xs w-full">
-                                        <div class="sm:w-1/2 flex items-center justify-between text-xs px-1">
-                                          <span class="text-gray-500 font-medium">Faktur Sumber:</span>
-                                          <span class="font-mono font-bold text-gray-900 text-xs" x-text="inv.old_number"></span>
-                                        </div>
-                                        <span class="hidden sm:inline text-blue-500 font-bold text-sm px-1">➔</span>
-                                        <div class="sm:w-1/2 w-full">
-                                          <input type="text"
-                                                 x-model="modalCustomInvoiceMappings[item.id][inv.old_number]"
-                                                 class="w-full text-xs font-mono border-blue-300 rounded-md shadow-2xs focus:ring-blue-500 focus:border-blue-500 py-1.5 px-3 bg-white text-blue-900 font-bold"
-                                                 placeholder="Nomor Faktur Target">
-                                        </div>
-                                      </div>
-                                    </template>
-                                  </div>
+                          <tr class="hover:bg-gray-50/80 transition-colors border-t border-gray-100">
+                            <td class="px-4 py-2.5 text-xs font-mono font-bold text-gray-900 break-all w-4/12" x-text="item.old_number"></td>
+                            <td class="px-4 py-2.5 text-xs text-gray-600 w-2/12" x-text="item.module_name"></td>
+                            <td class="px-4 py-2.5 text-xs text-gray-600 whitespace-nowrap w-2/12" x-text="item.trans_date"></td>
+                            <td class="px-4 py-1.5 w-4/12">
+                              <input type="text" :disabled="modalNumberingMode !== 'custom'" x-model="modalTargetNumbers[item.id]" class="w-full text-xs font-mono border-gray-300 rounded shadow-2xs focus:ring-blue-500 focus:border-blue-500 py-1.5 px-3 disabled:bg-gray-50 disabled:text-gray-500" :placeholder="modalNumberingMode === 'original' ? item.old_number : 'Auto'">
+                            </td>
+                          </tr>
+                          <tr x-show="item.detail_invoices && item.detail_invoices.length > 0" class="bg-blue-50/30">
+                            <td colspan="4" class="px-4 py-3 text-xs w-full">
+                              <div class="border border-blue-200 rounded-xl p-3.5 bg-blue-50/80 space-y-2.5 shadow-2xs w-full">
+                                <div class="flex items-center justify-between font-bold text-blue-950 text-xs">
+                                  <span class="flex items-center gap-1.5">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4 text-blue-600">
+                                      <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                                    </svg>
+                                    Mapping Manual Faktur Terkait (Detail Invoice)
+                                  </span>
+                                  <span class="text-xs text-blue-700 font-medium">Edit jika nomor faktur di target berbeda</span>
                                 </div>
-                              </td>
-                            </tr>
-                          </tbody>
+                                <div class="space-y-2 w-full">
+                                  <template x-for="inv in item.detail_invoices" :key="inv.old_number">
+                                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 bg-white p-2.5 rounded-lg border border-blue-200 shadow-2xs w-full">
+                                      <div class="sm:w-1/2 flex items-center justify-between text-xs px-1">
+                                        <span class="text-gray-500 font-medium">Faktur Sumber:</span>
+                                        <span class="font-mono font-bold text-gray-900 text-xs" x-text="inv.old_number"></span>
+                                      </div>
+                                      <span class="hidden sm:inline text-blue-500 font-bold text-sm px-1">➔</span>
+                                      <div class="sm:w-1/2 w-full">
+                                        <input type="text"
+                                               x-model="modalCustomInvoiceMappings[item.id][inv.old_number]"
+                                               class="w-full text-xs font-mono border-blue-300 rounded-md shadow-2xs focus:ring-blue-500 focus:border-blue-500 py-1.5 px-3 bg-white text-blue-900 font-bold"
+                                               placeholder="Nomor Faktur Target">
+                                      </div>
+                                    </div>
+                                  </template>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
                         </template>
                         <tr x-show="!modalPreviewLoading && modalPreviewData.length === 0">
                           <td colspan="4" class="px-4 py-6 text-center text-sm text-gray-500">Pilih database untuk melihat preview data.</td>
@@ -2549,7 +2546,7 @@
                       </tbody>
                     </table>
                   </div>
-                </div>        </div>
+                </div>
 
 
                 <!-- Numbering Mode Options -->
