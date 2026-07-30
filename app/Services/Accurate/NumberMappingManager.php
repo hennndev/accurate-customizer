@@ -152,20 +152,26 @@ class NumberMappingManager
         }
     }
 
-    public function getMappedNumber(string $moduleSlug, string $oldNumber): string
+    public function getMappedNumber(string $moduleSlug, string $oldNumber, ?int $targetDbId = null): string
     {
-        $accurateDatabaseId = $this->resolveLocalAccurateDatabaseId();
+        $accurateDatabaseId = $targetDbId ?? $this->resolveLocalAccurateDatabaseId();
 
-        if (!$accurateDatabaseId) {
-            return $oldNumber;
+        if ($accurateDatabaseId) {
+            $newNumber = \App\Models\TransactionNumberMapping::getNewNumber(
+                $accurateDatabaseId,
+                $moduleSlug,
+                $oldNumber
+            );
+            if ($newNumber) {
+                return $newNumber;
+            }
         }
 
-        $newNumber = \App\Models\TransactionNumberMapping::getNewNumber(
-            $accurateDatabaseId,
-            $moduleSlug,
-            $oldNumber
-        );
-        return $newNumber ?? $oldNumber;
+        $fallback = \App\Models\TransactionNumberMapping::where('old_number', $oldNumber)
+            ->when($accurateDatabaseId, fn($q) => $q->where('accurate_database_id', $accurateDatabaseId))
+            ->first();
+
+        return $fallback?->new_number ?? $oldNumber;
     }
 
     private function resolveLocalAccurateDatabaseId(): ?int

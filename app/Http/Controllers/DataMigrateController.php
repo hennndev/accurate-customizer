@@ -736,12 +736,12 @@ class DataMigrateController extends Controller
                 $invoiceDpRaw = $invItem['invoice']['invoiceDp'] ?? $invItem['invoice']['invoiceDP'] ?? false;
                 $isInvoiceDp = filter_var($invoiceDpRaw, FILTER_VALIDATE_BOOLEAN);
                 if ($isInvoiceDp) {
-                  $mappedNo = $numberMappingManager->getMappedNumber('down-payment-purchase-invoice', $invNo);
+                  $mappedNo = $numberMappingManager->getMappedNumber('down-payment-purchase-invoice', $invNo, $targetDbId);
                 } else {
-                  $mappedNo = $numberMappingManager->getMappedNumber('purchase-invoice', $invNo);
+                  $mappedNo = $numberMappingManager->getMappedNumber('purchase-invoice', $invNo, $targetDbId);
                 }
               } elseif ($moduleSlug === 'sales-receipt') {
-                $mappedNo = $numberMappingManager->getMappedNumber('sales-invoice', $invNo);
+                $mappedNo = $numberMappingManager->getMappedNumber('sales-invoice', $invNo, $targetDbId);
               }
               $detailInvoices[] = [
                 'old_number' => $invNo,
