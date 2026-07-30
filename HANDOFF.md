@@ -106,9 +106,10 @@ Capture Data Job            Preview Custom Numbering               MigrateTransa
   - **Fitur Baru:** Pada modal konfirmasi migrasi (`showTargetDbModal`), transaksi pelunasan seperti `sales-receipt` (*Penerimaan Penjualan*) dan `purchase-payment` (*Pembayaran Pembelian*) kini menampilkan panel rincian faktur terkait (**`Mapping Manual Faktur Terkait (Detail Invoice)`**).
   - **Fungsi:** Memungkinkan pengguna memeriksa serta **mengedit secara manual nomor faktur target (`invoiceNo`)** untuk setiap baris rincian pembayaran sebelum migrasi dikirimkan ke Accurate Target. Cocok untuk kasus di mana faktur di-migrate manual atau memiliki nomor kustom yang berbeda dari nomor sumber.
   - **Implementasi:** 
-    1. `DataMigrateController.php` (method `previewCustomNumbering`): Mengembalikan properti `detail_invoices` yang berisi `old_number` dan `mapped_number`.
+    1. `DataMigrateController.php` (method `previewCustomNumbering`): Mengirimkan `$targetDbId` ke `NumberMappingManager::getMappedNumber()`, mengembalikan properti `detail_invoices` yang berisi `old_number` dan `mapped_number`.
     2. `resources/views/migrate/index.blade.php`: Menambahkan state `modalCustomInvoiceMappings` dan tampilan input field interaktif untuk setiap faktur terkait pada tabel preview modal.
     3. `MigrateTransactionsJob.php` & `DataCleaner.php`: Menangkap `custom_invoice_mappings` dan menggantikan secara langsung `invoiceNo` pada payload `detailInvoice` sesuai nomor yang diinput manual oleh pengguna.
+  - **Fix Otomatisasi Mapping Database Target (`$targetDbId`):** Memperbarui `NumberMappingManager::getMappedNumber()` agar menerima parameter opsional `$targetDbId` dari modal dan menyertakan kueri *fallback* ke `transaction_number_mappings`, sehingga nomor faktur target yang sudah pernah di-migrate langsung otomatis terisi pada field input modal.
   - **Peningkatan Layout UI & Fix Full Width:** Memperbaiki bug tag HTML nested `<tbody>` pada `resources/views/migrate/index.blade.php` yang sebelumnya menyebabkan tabel terhimpit/tidak full width di browser. Sekarang modal (`sm:max-w-5xl lg:max-w-6xl w-full`) dan tabel pratinjau (`table-fixed w-full min-w-full`) tampil 100% melebar penuh dengan rapi di seluruh kolom.
 - **Dokumentasi Teknis:** Dibuat berkas pendukung `technical_documentation.md`.
 
