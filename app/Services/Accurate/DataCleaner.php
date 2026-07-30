@@ -548,12 +548,21 @@ class DataCleaner
                             }
 
                             if ($key === 'detailInvoice' && (str_contains($endpoint, 'purchase-payment') || str_contains($endpoint, 'sales-receipt'))) {
-                                if (isset($cleanedSubItem['invoice']['number'])) {
-                                    $oldInvNo = $cleanedSubItem['invoice']['number'];
-                                    $customInvoiceMappings = $item['_custom_invoice_mappings'] ?? [];
-                                    if (!empty($customInvoiceMappings[$oldInvNo])) {
-                                        $cleanedSubItem['invoiceNo'] = $customInvoiceMappings[$oldInvNo];
-                                    } else {
+                                $oldInvNo = $cleanedSubItem['invoice']['number']
+                                    ?? $cleanedSubItem['invoice']['no']
+                                    ?? $cleanedSubItem['invoiceNo']
+                                    ?? $subItem['invoice']['number']
+                                    ?? $subItem['invoiceNo']
+                                    ?? null;
+
+                                $customInvoiceMappings = $item['_custom_invoice_mappings'] ?? [];
+
+                                if ($oldInvNo && !empty($customInvoiceMappings[$oldInvNo])) {
+                                    $cleanedSubItem['invoiceNo'] = $customInvoiceMappings[$oldInvNo];
+                                } elseif (!empty($customInvoiceMappings) && is_array($customInvoiceMappings)) {
+                                    $cleanedSubItem['invoiceNo'] = reset($customInvoiceMappings);
+                                } else {
+                                    if ($oldInvNo) {
                                         if (str_contains($endpoint, 'purchase-payment')) {
                                             $invoiceDpRaw = $cleanedSubItem['invoice']['invoiceDp'] ?? $cleanedSubItem['invoice']['invoiceDP'] ?? false;
                                             $isInvoiceDp = filter_var($invoiceDpRaw, FILTER_VALIDATE_BOOLEAN);
@@ -566,9 +575,10 @@ class DataCleaner
                                             $cleanedSubItem['invoiceNo'] = $this->resolveSalesInvoiceNumber($oldInvNo);
                                         }
                                     }
-                                    unset($cleanedSubItem['invoiceId']);
-                                    unset($cleanedSubItem['invoice']);
                                 }
+                                unset($cleanedSubItem['invoiceId']);
+                                unset($cleanedSubItem['invoice']);
+                            }
 
                                 if (isset($cleanedSubItem['detailDiscount']) && is_array($cleanedSubItem['detailDiscount'])) {
                                     foreach ($cleanedSubItem['detailDiscount'] as $discountKey => $discount) {
@@ -578,7 +588,6 @@ class DataCleaner
                                         }
                                     }
                                 }
-                            }
                             $cleanedArray[] = $cleanedSubItem;
                         }
                     } else {

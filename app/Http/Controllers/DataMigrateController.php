@@ -671,12 +671,14 @@ class DataMigrateController extends Controller
       if (!$dateStr) {
         foreach ($groupTransactions as $t) {
           $data = is_string($t->data) ? json_decode($t->data, true) : (array) $t->data;
+          $detailInvoices = $this->extractDetailInvoices($data, $moduleSlug, $targetDbId, $numberMappingManager);
           $previewData[] = [
             'id' => $t->id,
             'old_number' => $t->transaction_no,
             'module_name' => $t->module->name ?? 'Unknown',
             'trans_date' => $data['transDate'] ?? '-',
-            'generated_number' => ''
+            'generated_number' => '',
+            'detail_invoices' => $detailInvoices,
           ];
         }
         continue;
@@ -724,33 +726,7 @@ class DataMigrateController extends Controller
         }
 
         $oldNumberDisplay = ($moduleSlug === 'glaccount' && !empty($data['no'])) ? $data['no'] : $t->transaction_no;
-
-        $detailInvoices = [];
-        if (!empty($data['detailInvoice']) && is_array($data['detailInvoice'])) {
-          foreach ($data['detailInvoice'] as $invItem) {
-            if (!is_array($invItem)) continue;
-            $invNo = $invItem['invoice']['number'] ?? $invItem['invoiceNo'] ?? null;
-            if ($invNo) {
-              $mappedNo = $invNo;
-              if ($moduleSlug === 'purchase-payment') {
-                $invoiceDpRaw = $invItem['invoice']['invoiceDp'] ?? $invItem['invoice']['invoiceDP'] ?? false;
-                $isInvoiceDp = filter_var($invoiceDpRaw, FILTER_VALIDATE_BOOLEAN);
-                if ($isInvoiceDp) {
-                  $mappedNo = $numberMappingManager->getMappedNumber('down-payment-purchase-invoice', $invNo, $targetDbId);
-                } else {
-                  $mappedNo = $numberMappingManager->getMappedNumber('purchase-invoice', $invNo, $targetDbId);
-                }
-              } elseif ($moduleSlug === 'sales-receipt') {
-                $mappedNo = $numberMappingManager->getMappedNumber('sales-invoice', $invNo, $targetDbId);
-              }
-              $detailInvoices[] = [
-                'old_number' => $invNo,
-                'mapped_number' => $mappedNo,
-                'amount' => $invItem['amount'] ?? $invItem['paymentAmount'] ?? 0,
-              ];
-            }
-          }
-        }
+        $detailInvoices = $this->extractDetailInvoices($data, $moduleSlug, $targetDbId, $numberMappingManager);
 
         $previewData[] = [
           'id' => $t->id,
@@ -790,5 +766,45 @@ class DataMigrateController extends Controller
         "message" => "Error deleting transactions: " . $e->getMessage()
       ], 500);
     }
+  }
+
+  private function extractDetailInvoices(array $data, string $moduleSlug, int $targetDbId, NumberMappingManager $numberMappingManager): array
+  {
+    $detailInvoices = [];
+    $invoiceItems = $data['detailInvoice'] ?? $data['detail_invoice'] ?? $data['invoices'] ?? [];
+
+    if (!empty($invoiceItems) && is_array($invoiceItems)) {
+      foreach ($invoiceItems as $invItem) {
+        if (!is_array($invItem)) continue;
+        $invNo = $invItem['invoice']['number']
+          ?? $invItem['invoice']['no']
+          ?? $invItem['invoiceNo']
+          ?? $invItem['number']
+          ?? $invItem['no']
+          ?? null;
+
+        if ($invNo) {
+          $mappedNo = $invNo;
+          if ($moduleSlug === 'purchase-payment') {
+            $invoiceDpRaw = $invItem['invoice']['invoiceDp'] ?? $invItem['invoice']['invoiceDP'] ?? $invItem['invoiceDp'] ?? false;
+            $isInvoiceDp = filter_var($invoiceDpRaw, FILTER_VALIDATE_BOOLEAN);
+            if ($isInvoiceDp) {
+              $mappedNo = $numberMappingManager->getMappedNumber('down-payment-purchase-invoice', $invNo, $targetDbId);
+            } else {
+              $mappedNo = $numberMappingManager->getMappedNumber('purchase-invoice', $invNo, $targetDbId);
+            }
+          } elseif ($moduleSlug === 'sales-receipt') {
+            $mappedNo = $numberMappingManager->getMappedNumber('sales-invoice', $invNo, $targetDbId);
+          }
+          $detailInvoices[] = [
+            'old_number' => $invNo,
+            'mapped_number' => $mappedNo,
+            'amount' => $invItem['amount'] ?? $invItem['paymentAmount'] ?? $invItem['invoicePayment'] ?? 0,
+          ];
+        }
+      }
+    }
+
+    return $detailInvoices;
   }
 }
