@@ -109,6 +109,7 @@ Capture Data Job            Preview Custom Numbering               MigrateTransa
     1. `DataMigrateController.php` (method `previewCustomNumbering`): Mengembalikan properti `detail_invoices` yang berisi `old_number` dan `mapped_number`.
     2. `resources/views/migrate/index.blade.php`: Menambahkan state `modalCustomInvoiceMappings` dan tampilan input field interaktif untuk setiap faktur terkait pada tabel preview modal.
     3. `MigrateTransactionsJob.php` & `DataCleaner.php`: Menangkap `custom_invoice_mappings` dan menggantikan secara langsung `invoiceNo` pada payload `detailInvoice` sesuai nomor yang diinput manual oleh pengguna.
+  - **Peningkatan Layout UI:** Modal konfirmasi dan tabel preview pratinjau transaksi kini dibuat melebar penuh (**Full Width** `sm:max-w-5xl lg:max-w-6xl w-full` dengan kelas `w-full min-w-full`) sehingga nomor faktur sumber dan input nomor faktur target terlihat luas, rapi, dan mudah diedit.
 - **Dokumentasi Teknis:** Dibuat berkas pendukung `technical_documentation.md`.
 
 ---
