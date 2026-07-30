@@ -2497,9 +2497,9 @@
                           <th class="px-4 py-2.5 text-left text-xs font-semibold text-gray-600 bg-gray-50 w-4/12">Nomor Baru (Target)</th>
                         </tr>
                       </thead>
-                      <tbody class="divide-y divide-gray-100 bg-white">
-                        <template x-for="item in modalPreviewData" :key="item.id">
-                          <tr class="hover:bg-gray-50/80 transition-colors border-t border-gray-100">
+                      <template x-for="item in modalPreviewData" :key="item.id">
+                        <tbody class="border-b border-gray-100 divide-y divide-gray-100 bg-white">
+                          <tr class="hover:bg-gray-50/80 transition-colors">
                             <td class="px-4 py-2.5 text-xs font-mono font-bold text-gray-900 break-all w-4/12" x-text="item.old_number"></td>
                             <td class="px-4 py-2.5 text-xs text-gray-600 w-2/12" x-text="item.module_name"></td>
                             <td class="px-4 py-2.5 text-xs text-gray-600 whitespace-nowrap w-2/12" x-text="item.trans_date"></td>
@@ -2507,6 +2507,7 @@
                               <input type="text" :disabled="modalNumberingMode !== 'custom'" x-model="modalTargetNumbers[item.id]" class="w-full text-xs font-mono border-gray-300 rounded shadow-2xs focus:ring-blue-500 focus:border-blue-500 py-1.5 px-3 disabled:bg-gray-50 disabled:text-gray-500" :placeholder="modalNumberingMode === 'original' ? item.old_number : 'Auto'">
                             </td>
                           </tr>
+                          <!-- Sub-row untuk mapping manual Faktur terkait jika ada detail_invoices -->
                           <tr x-show="item.detail_invoices && item.detail_invoices.length > 0" class="bg-blue-50/30">
                             <td colspan="4" class="px-4 py-3 text-xs w-full">
                               <div class="border border-blue-200 rounded-xl p-3.5 bg-blue-50/80 space-y-2.5 shadow-2xs w-full">
@@ -2539,8 +2540,10 @@
                               </div>
                             </td>
                           </tr>
-                        </template>
-                        <tr x-show="!modalPreviewLoading && modalPreviewData.length === 0">
+                        </tbody>
+                      </template>
+                      <tbody x-show="!modalPreviewLoading && modalPreviewData.length === 0">
+                        <tr>
                           <td colspan="4" class="px-4 py-6 text-center text-sm text-gray-500">Pilih database untuk melihat preview data.</td>
                         </tr>
                       </tbody>
