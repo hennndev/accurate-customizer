@@ -102,6 +102,13 @@ Capture Data Job            Preview Custom Numbering               MigrateTransa
   - **Fitur Baru:** Menambahkan filter combo-box **`Semua Kas / Bank...`** (`bank_name`) pada halaman `/migrate`. Opsi daftar bank diambil dari transaksi `glaccount` (terutama akun bertipe `CASH_BANK`) dan digabungkan dengan nama bank dari transaksi pembayaran/penerimaan.
   - **Dukungan Modul:** Dapat digunakan untuk memfilter transaksi `other-payment` (Cash Pembayaran), `sales-receipt` (Penerimaan Penjualan), `purchase-payment` (Pembayaran Pembelian), `other-deposit` (Cash Penerimaan), dan `bank-transfer`.
   - **Implementasi:** Menggunakan HTML5 `<datalist>` pada `resources/views/migrate/index.blade.php` agar pengguna dapat memilih dari dropdown sekaligus mengetik manual secara bebas. Di `DataMigrateController.php`, kueri memfilter `$.bank.name` dan `$.bankName` menggunakan `LIKE %...%`.
+- **Penambahan Opsi Mapping Manual Nomor Faktur (Detail Invoice) pada Modal Migrasi:** 
+  - **Fitur Baru:** Pada modal konfirmasi migrasi (`showTargetDbModal`), transaksi pelunasan seperti `sales-receipt` (*Penerimaan Penjualan*) dan `purchase-payment` (*Pembayaran Pembelian*) kini menampilkan panel rincian faktur terkait (**`Mapping Manual Faktur Terkait (Detail Invoice)`**).
+  - **Fungsi:** Memungkinkan pengguna memeriksa serta **mengedit secara manual nomor faktur target (`invoiceNo`)** untuk setiap baris rincian pembayaran sebelum migrasi dikirimkan ke Accurate Target. Cocok untuk kasus di mana faktur di-migrate manual atau memiliki nomor kustom yang berbeda dari nomor sumber.
+  - **Implementasi:** 
+    1. `DataMigrateController.php` (method `previewCustomNumbering`): Mengembalikan properti `detail_invoices` yang berisi `old_number` dan `mapped_number`.
+    2. `resources/views/migrate/index.blade.php`: Menambahkan state `modalCustomInvoiceMappings` dan tampilan input field interaktif untuk setiap faktur terkait pada tabel preview modal.
+    3. `MigrateTransactionsJob.php` & `DataCleaner.php`: Menangkap `custom_invoice_mappings` dan menggantikan secara langsung `invoiceNo` pada payload `detailInvoice` sesuai nomor yang diinput manual oleh pengguna.
 - **Dokumentasi Teknis:** Dibuat berkas pendukung `technical_documentation.md`.
 
 ---

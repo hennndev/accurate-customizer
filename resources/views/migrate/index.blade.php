@@ -61,6 +61,7 @@
            modalNumberingMode: 'original',
            modalPreviewData: [],
            modalTargetNumbers: {},
+           modalCustomInvoiceMappings: {},
            modalPreviewLoading: false,
            showWarningModal: false,
            pendingMigrateSingleId: null,
@@ -95,6 +96,7 @@
                this.modalNumberingMode = 'original';
                this.modalPreviewData = [];
                this.modalTargetNumbers = {};
+               this.modalCustomInvoiceMappings = {};
                
                if (this.modalSelectedDbId) {
                    this.fetchPreviewData();
@@ -120,6 +122,15 @@
                    const data = await response.json();
                    if (data.success) {
                        this.modalPreviewData = data.data;
+                       this.modalCustomInvoiceMappings = {};
+                       this.modalPreviewData.forEach(item => {
+                           if (item.detail_invoices && item.detail_invoices.length) {
+                               this.modalCustomInvoiceMappings[item.id] = {};
+                               item.detail_invoices.forEach(inv => {
+                                   this.modalCustomInvoiceMappings[item.id][inv.old_number] = inv.mapped_number || inv.old_number;
+                               });
+                           }
+                       });
                        this.handleNumberingModeChange();
                    }
                } catch (e) {
@@ -522,7 +533,8 @@
                            force_create: forceCreate,
                            add_ju_suffix: addJuSuffix,
                            numbering_mode: numberingMode,
-                           target_numbers: this.modalTargetNumbers
+                           target_numbers: this.modalTargetNumbers,
+                           custom_invoice_mappings: this.modalCustomInvoiceMappings
                        })
                    });
 
@@ -2487,14 +2499,49 @@
                       </thead>
                       <tbody class="divide-y divide-gray-100 bg-white">
                         <template x-for="item in modalPreviewData" :key="item.id">
-                          <tr class="hover:bg-gray-50 transition-colors">
-                            <td class="px-4 py-2 text-xs font-mono text-gray-900" x-text="item.old_number"></td>
-                            <td class="px-4 py-2 text-xs text-gray-600" x-text="item.module_name"></td>
-                            <td class="px-4 py-2 text-xs text-gray-600 whitespace-nowrap" x-text="item.trans_date"></td>
-                            <td class="px-4 py-1.5">
-                              <input type="text" :disabled="modalNumberingMode !== 'custom'" x-model="modalTargetNumbers[item.id]" class="w-full text-xs font-mono border-gray-300 rounded shadow-sm focus:ring-indigo-500 focus:border-indigo-500 py-1.5 px-2 disabled:bg-gray-50 disabled:text-gray-500" :placeholder="modalNumberingMode === 'original' ? item.old_number : 'Auto'">
-                            </td>
-                          </tr>
+                          <tbody class="border-b border-gray-100">
+                            <tr class="hover:bg-gray-50 transition-colors">
+                              <td class="px-4 py-2 text-xs font-mono text-gray-900" x-text="item.old_number"></td>
+                              <td class="px-4 py-2 text-xs text-gray-600" x-text="item.module_name"></td>
+                              <td class="px-4 py-2 text-xs text-gray-600 whitespace-nowrap" x-text="item.trans_date"></td>
+                              <td class="px-4 py-1.5">
+                                <input type="text" :disabled="modalNumberingMode !== 'custom'" x-model="modalTargetNumbers[item.id]" class="w-full text-xs font-mono border-gray-300 rounded shadow-sm focus:ring-indigo-500 focus:border-indigo-500 py-1.5 px-2 disabled:bg-gray-50 disabled:text-gray-500" :placeholder="modalNumberingMode === 'original' ? item.old_number : 'Auto'">
+                              </td>
+                            </tr>
+                            <!-- Sub-row untuk mapping manual Faktur terkait jika ada detail_invoices (seperti Sales Receipt / Purchase Payment) -->
+                            <tr x-show="item.detail_invoices && item.detail_invoices.length > 0" class="bg-blue-50/30">
+                              <td colspan="4" class="px-4 py-2 text-xs">
+                                <div class="border border-blue-200 rounded-lg p-2.5 bg-blue-50/70 space-y-2">
+                                  <div class="flex items-center justify-between font-semibold text-blue-900 text-[11px]">
+                                    <span class="flex items-center gap-1.5">
+                                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5 text-blue-600">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                                      </svg>
+                                      Mapping Manual Faktur Terkait (Detail Invoice)
+                                    </span>
+                                    <span class="text-[10px] text-blue-600 font-normal">Edit jika nomor faktur di target berbeda</span>
+                                  </div>
+                                  <div class="space-y-1.5">
+                                    <template x-for="inv in item.detail_invoices" :key="inv.old_number">
+                                      <div class="flex items-center gap-2 bg-white p-1.5 rounded border border-blue-200 shadow-2xs">
+                                        <div class="w-1/2 flex items-center justify-between text-[11px]">
+                                          <span class="text-gray-500">Faktur Sumber:</span>
+                                          <span class="font-mono font-bold text-gray-800" x-text="inv.old_number"></span>
+                                        </div>
+                                        <span class="text-gray-400 font-bold">➔</span>
+                                        <div class="w-1/2">
+                                          <input type="text"
+                                                 x-model="modalCustomInvoiceMappings[item.id][inv.old_number]"
+                                                 class="w-full text-xs font-mono border-blue-300 rounded shadow-2xs focus:ring-blue-500 focus:border-blue-500 py-1 px-2 bg-white text-blue-900 font-semibold"
+                                                 placeholder="Nomor Faktur Target">
+                                        </div>
+                                      </div>
+                                    </template>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          </tbody>
                         </template>
                         <tr x-show="!modalPreviewLoading && modalPreviewData.length === 0">
                           <td colspan="4" class="px-4 py-6 text-center text-sm text-gray-500">Pilih database untuk melihat preview data.</td>
