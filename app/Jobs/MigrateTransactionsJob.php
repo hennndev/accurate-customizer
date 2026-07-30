@@ -35,6 +35,7 @@ class MigrateTransactionsJob implements ShouldQueue
 		public bool $addJuSuffix = false,
 		public array $targetNumbers = [],
 		public string $numberingMode = 'accurate',
+		public array $customInvoiceMappings = [],
 	) {
 	}
 
@@ -209,6 +210,10 @@ class MigrateTransactionsJob implements ShouldQueue
 
 				if ($this->isDownPaymentModule($moduleSlug)) {
 					$data['invoiceDp'] = true;
+				}
+
+				if (!empty($this->customInvoiceMappings[$transaction->id]) && is_array($this->customInvoiceMappings[$transaction->id])) {
+					$data['_custom_invoice_mappings'] = $this->customInvoiceMappings[$transaction->id];
 				}
 
 				$bulkData[] = $data;

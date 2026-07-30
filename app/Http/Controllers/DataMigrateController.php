@@ -9,6 +9,7 @@ use App\Models\AccurateDatabase;
 use App\Models\Module;
 use App\Models\Setting;
 use App\Services\AccurateService;
+use App\Services\Accurate\NumberMappingManager;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
@@ -502,6 +503,7 @@ class DataMigrateController extends Controller
       'add_ju_suffix' => 'nullable|boolean',
       'target_numbers' => 'nullable|array',
       'numbering_mode' => 'nullable|string|in:accurate,original,custom',
+      'custom_invoice_mappings' => 'nullable|array',
     ]);
 
     $targetDbId = $request->input('target_database_id');
@@ -543,6 +545,7 @@ class DataMigrateController extends Controller
     $addJuSuffix = $request->boolean('add_ju_suffix', false);
     $targetNumbers = $request->input('target_numbers', []);
     $numberingMode = $request->input('numbering_mode', 'accurate');
+    $customInvoiceMappings = $request->input('custom_invoice_mappings', []);
 
     $tracker = SystemLog::create([
       'event_type' => 'migrate_queue',
@@ -556,6 +559,7 @@ class DataMigrateController extends Controller
         'add_ju_suffix' => $addJuSuffix,
         'target_numbers' => $targetNumbers,
         'numbering_mode' => $numberingMode,
+        'custom_invoice_mappings' => $customInvoiceMappings,
         'total_selected' => count($ids),
         'progress' => 0,
       ],
@@ -571,6 +575,7 @@ class DataMigrateController extends Controller
       'add_ju_suffix' => $addJuSuffix,
       'target_numbers' => $targetNumbers,
       'numbering_mode' => $numberingMode,
+      'custom_invoice_mappings' => $customInvoiceMappings,
       'tracker_id' => $tracker->id,
       'user_id' => Auth::id(),
     ]);
@@ -586,7 +591,8 @@ class DataMigrateController extends Controller
       forceCreate: $forceCreate,
       addJuSuffix: $addJuSuffix,
       targetNumbers: $targetNumbers,
-      numberingMode: $numberingMode
+      numberingMode: $numberingMode,
+      customInvoiceMappings: $customInvoiceMappings
     )->onQueue('migrate');
 
     if ($request->expectsJson() || $request->ajax()) {
@@ -603,7 +609,7 @@ class DataMigrateController extends Controller
       "Migration queued. Monitor ID: {$tracker->id}. Cek progress di System Logs."
     );
   }
-  public function previewCustomNumbering(Request $request)
+  public function previewCustomNumbering(Request $request, NumberMappingManager $numberMappingManager)
   {
     $request->validate([
       'ids' => 'required|array',
@@ -719,12 +725,40 @@ class DataMigrateController extends Controller
 
         $oldNumberDisplay = ($moduleSlug === 'glaccount' && !empty($data['no'])) ? $data['no'] : $t->transaction_no;
 
+        $detailInvoices = [];
+        if (!empty($data['detailInvoice']) && is_array($data['detailInvoice'])) {
+          foreach ($data['detailInvoice'] as $invItem) {
+            if (!is_array($invItem)) continue;
+            $invNo = $invItem['invoice']['number'] ?? $invItem['invoiceNo'] ?? null;
+            if ($invNo) {
+              $mappedNo = $invNo;
+              if ($moduleSlug === 'purchase-payment') {
+                $invoiceDpRaw = $invItem['invoice']['invoiceDp'] ?? $invItem['invoice']['invoiceDP'] ?? false;
+                $isInvoiceDp = filter_var($invoiceDpRaw, FILTER_VALIDATE_BOOLEAN);
+                if ($isInvoiceDp) {
+                  $mappedNo = $numberMappingManager->getMappedNumber('down-payment-purchase-invoice', $invNo);
+                } else {
+                  $mappedNo = $numberMappingManager->getMappedNumber('purchase-invoice', $invNo);
+                }
+              } elseif ($moduleSlug === 'sales-receipt') {
+                $mappedNo = $numberMappingManager->getMappedNumber('sales-invoice', $invNo);
+              }
+              $detailInvoices[] = [
+                'old_number' => $invNo,
+                'mapped_number' => $mappedNo,
+                'amount' => $invItem['amount'] ?? $invItem['paymentAmount'] ?? 0,
+              ];
+            }
+          }
+        }
+
         $previewData[] = [
           'id' => $t->id,
           'old_number' => $oldNumberDisplay,
           'module_name' => $t->module->name ?? 'Unknown',
           'trans_date' => $data['transDate'] ?? '-',
-          'generated_number' => $generated
+          'generated_number' => $generated,
+          'detail_invoices' => $detailInvoices,
         ];
       }
     }

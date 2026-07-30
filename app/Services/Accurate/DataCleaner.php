@@ -121,7 +121,7 @@ class DataCleaner
             if (str_contains($endpoint, '/tax/') && ($key === 'salesTaxGlAccountId' || $key === 'purchaseTaxGlAccountId')) {
                 continue;
             }
-            if ($key === '_custom_number') {
+            if ($key === '_custom_number' || $key === '_custom_invoice_mappings') {
                 continue;
             }
             if ($key === 'number' && empty($item['_custom_number']) && (
@@ -549,22 +549,22 @@ class DataCleaner
 
                             if ($key === 'detailInvoice' && (str_contains($endpoint, 'purchase-payment') || str_contains($endpoint, 'sales-receipt'))) {
                                 if (isset($cleanedSubItem['invoice']['number'])) {
-                                    if (str_contains($endpoint, 'purchase-payment')) {
-                                        $invoiceDpRaw = $cleanedSubItem['invoice']['invoiceDp'] ?? $cleanedSubItem['invoice']['invoiceDP'] ?? false;
-                                        $isInvoiceDp = filter_var($invoiceDpRaw, FILTER_VALIDATE_BOOLEAN);
-                                        if ($isInvoiceDp) {
-                                            $cleanedSubItem['invoiceNo'] = $this->resolveDownPaymentPurchaseInvoiceNumber(
-                                                $cleanedSubItem['invoice']['number']
-                                            );
-                                        } else {
-                                            $cleanedSubItem['invoiceNo'] = $this->resolvePurchaseInvoiceNumber(
-                                                $cleanedSubItem['invoice']['number']
-                                            );
-                                        }
+                                    $oldInvNo = $cleanedSubItem['invoice']['number'];
+                                    $customInvoiceMappings = $item['_custom_invoice_mappings'] ?? [];
+                                    if (!empty($customInvoiceMappings[$oldInvNo])) {
+                                        $cleanedSubItem['invoiceNo'] = $customInvoiceMappings[$oldInvNo];
                                     } else {
-                                        $cleanedSubItem['invoiceNo'] = $this->resolveSalesInvoiceNumber(
-                                            $cleanedSubItem['invoice']['number']
-                                        );
+                                        if (str_contains($endpoint, 'purchase-payment')) {
+                                            $invoiceDpRaw = $cleanedSubItem['invoice']['invoiceDp'] ?? $cleanedSubItem['invoice']['invoiceDP'] ?? false;
+                                            $isInvoiceDp = filter_var($invoiceDpRaw, FILTER_VALIDATE_BOOLEAN);
+                                            if ($isInvoiceDp) {
+                                                $cleanedSubItem['invoiceNo'] = $this->resolveDownPaymentPurchaseInvoiceNumber($oldInvNo);
+                                            } else {
+                                                $cleanedSubItem['invoiceNo'] = $this->resolvePurchaseInvoiceNumber($oldInvNo);
+                                            }
+                                        } else {
+                                            $cleanedSubItem['invoiceNo'] = $this->resolveSalesInvoiceNumber($oldInvNo);
+                                        }
                                     }
                                     unset($cleanedSubItem['invoiceId']);
                                     unset($cleanedSubItem['invoice']);
