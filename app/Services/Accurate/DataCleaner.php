@@ -31,6 +31,7 @@ class DataCleaner
             $injectedId = $item['id'] ?? null;
             $injectedCustomNumber = $item['_custom_number'] ?? null;
             $injectedSourceNumber = $item['_sourceNumber'] ?? null;
+            $injectedCustomInvoiceMappings = $item['_custom_invoice_mappings'] ?? null;
 
             $invoiceDpRaw = $item['invoiceDp'] ?? $item['invoiceDP'] ?? false;
             $isInvoiceDp = filter_var($invoiceDpRaw, FILTER_VALIDATE_BOOLEAN);
@@ -82,6 +83,7 @@ class DataCleaner
             // Restore after handler filtering so cleanDataItem can honour source id rules and custom flags.
             if ($injectedId !== null) { $item['id'] = $injectedId; }
             if ($injectedCustomNumber !== null) { $item['_custom_number'] = $injectedCustomNumber; }
+            if ($injectedCustomInvoiceMappings !== null) { $item['_custom_invoice_mappings'] = $injectedCustomInvoiceMappings; }
         }
 
         $cleaned = [];
@@ -551,8 +553,8 @@ class DataCleaner
                                 $oldInvNo = $cleanedSubItem['invoice']['number']
                                     ?? $cleanedSubItem['invoice']['no']
                                     ?? $cleanedSubItem['invoiceNo']
-                                    ?? $subItem['invoice']['number']
-                                    ?? $subItem['invoiceNo']
+                                    ?? $subValue['invoice']['number']
+                                    ?? $subValue['invoiceNo']
                                     ?? null;
 
                                 $customInvoiceMappings = $item['_custom_invoice_mappings'] ?? [];
