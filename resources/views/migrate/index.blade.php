@@ -127,7 +127,7 @@
                            if (item.detail_invoices && item.detail_invoices.length) {
                                this.modalCustomInvoiceMappings[item.id] = {};
                                item.detail_invoices.forEach(inv => {
-                                   this.modalCustomInvoiceMappings[item.id][inv.old_number] = inv.mapped_number || inv.old_number;
+                                   this.modalCustomInvoiceMappings[item.id][inv.old_number] = inv.suggested_number || inv.mapped_number || inv.old_number;
                                });
                            }
                        });

@@ -768,10 +768,115 @@ class DataMigrateController extends Controller
     }
   }
 
+  /**
+   * Resolve the target invoice number for a detail-invoice line.
+   *
+   * Returns an array keyed by old invoice number:
+   *   - 'mapped_number': existing old→new mapping, or the source number if none.
+   *   - 'suggested_number': next sequential number from migration history
+   *     (same format + date pattern as previewCustomNumbering) when no mapping
+   *     exists yet; null when there is already a mapping. This is a prefill
+   *     hint for the modal — it is never persisted here.
+   *
+   * ponytail: best-effort suggestion — the sequence is computed without a
+   * cross-user lock, so two parallel migrations to the same target DB could
+   * suggest (and later create) the same number. Accurate rejects real dupes
+   * at bulk-save, and mappings are only stored on migration success.
+   */
+  private function nextInvoiceSequence(array $data, string $moduleSlug, int $targetDbId, array $invoiceItems): array
+  {
+    // Only sales-receipt / purchase-payment show the manual-invoice panel.
+    if (!in_array($moduleSlug, ['sales-receipt', 'purchase-payment'], true)) {
+      return [];
+    }
+
+    // Prefix must follow the EFFECTIVE module the mapping is stored under
+    // (sales-invoice -> SI, purchase-invoice -> PI), not the payment parent
+    // (SR/PP). previewCustomNumbering groups by the same prefix map.
+    $prefixes = [
+      'sales-invoice' => 'SI',
+      'purchase-invoice' => 'PI',
+    ];
+    $transDate = $data['transDate'] ?? null;
+    if (!$transDate) {
+      return [];
+    }
+    try {
+      $date = \Carbon\Carbon::createFromFormat('d/m/Y', $transDate)->format('Y.m.d');
+    } catch (\Exception $e) {
+      try {
+        $date = \Carbon\Carbon::parse($transDate)->format('Y.m.d');
+      } catch (\Exception $e) {
+        return [];
+      }
+    }
+
+    $suggestions = [];
+    // One query per effective module for the whole batch — all invoices share
+    // the parent transDate, so increment one sequence counter per module.
+    $cursor = [];
+
+    foreach ($invoiceItems as $invItem) {
+      if (!is_array($invItem)) continue;
+      $invNo = $invItem['invoice']['number']
+        ?? $invItem['invoice']['no']
+        ?? $invItem['invoiceNo']
+        ?? $invItem['number']
+        ?? $invItem['no']
+        ?? null;
+      if (!$invNo) continue;
+
+      // Effective module mirrors extractDetailInvoices + NumberMappingManager::resolveEffectiveModuleSlug.
+      $effectiveModule = $moduleSlug;
+      if ($moduleSlug === 'purchase-payment') {
+        $invoiceDpRaw = $invItem['invoice']['invoiceDp'] ?? $invItem['invoice']['invoiceDP'] ?? $invItem['invoiceDp'] ?? false;
+        $effectiveModule = filter_var($invoiceDpRaw, FILTER_VALIDATE_BOOLEAN)
+          ? 'down-payment-purchase-invoice'
+          : 'purchase-invoice';
+      } elseif ($moduleSlug === 'sales-receipt') {
+        $effectiveModule = 'sales-invoice';
+      }
+
+      // Skip if a mapping already exists — the mapped number is authoritative.
+      if (\App\Models\TransactionNumberMapping::getNewNumber($targetDbId, $effectiveModule, $invNo)) {
+        continue;
+      }
+
+      // DP purchase invoices have no custom preview format; only continue a sequence
+      // when there is matching history for this module+base format.
+      $prefix = $prefixes[$effectiveModule] ?? null;
+      if ($prefix === null) {
+        continue;
+      }
+      $baseFormat = "{$prefix}.{$date}.";
+
+      if (!isset($cursor[$effectiveModule])) {
+        $maxMapping = \App\Models\TransactionNumberMapping::where('accurate_database_id', $targetDbId)
+          ->where('module_slug', $effectiveModule)
+          ->where('new_number', 'LIKE', $baseFormat . '%')
+          ->orderByRaw('CAST(SUBSTRING_INDEX(new_number, ".", -1) AS UNSIGNED) DESC')
+          ->first();
+
+        $currentSequence = 0;
+        if ($maxMapping && preg_match('/\.(\d+)$/', $maxMapping->new_number, $matches)) {
+          $currentSequence = (int) $matches[1];
+        }
+        $cursor[$effectiveModule] = $currentSequence;
+      }
+
+      $cursor[$effectiveModule]++;
+      $suggestions[$invNo] = $baseFormat . str_pad($cursor[$effectiveModule], 3, '0', STR_PAD_LEFT);
+    }
+
+    return $suggestions;
+  }
+
   private function extractDetailInvoices(array $data, string $moduleSlug, int $targetDbId, NumberMappingManager $numberMappingManager): array
   {
     $detailInvoices = [];
     $invoiceItems = $data['detailInvoice'] ?? $data['detail_invoice'] ?? $data['invoices'] ?? [];
+
+    $suggestions = $this->nextInvoiceSequence($data, $moduleSlug, $targetDbId, is_array($invoiceItems) ? $invoiceItems : []);
 
     if (!empty($invoiceItems) && is_array($invoiceItems)) {
       foreach ($invoiceItems as $invItem) {
@@ -799,6 +904,7 @@ class DataMigrateController extends Controller
           $detailInvoices[] = [
             'old_number' => $invNo,
             'mapped_number' => $mappedNo,
+            'suggested_number' => $suggestions[$invNo] ?? null,
             'amount' => $invItem['amount'] ?? $invItem['paymentAmount'] ?? $invItem['invoicePayment'] ?? 0,
           ];
         }
